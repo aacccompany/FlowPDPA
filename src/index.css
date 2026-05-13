@@ -1,0 +1,153 @@
+@import "tailwindcss";
+
+:root {
+  --green: #059669;
+  --green-dark: #047857;
+  --green-light: #d1fae5;
+  --blue: #1e40af;
+  --blue-dark: #1e3a8a;
+  --blue-mid: #2563eb;
+  --blue-light: #dbeafe;
+  --navy: #0f172a;
+  --navy-light: #1e293b;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: 'Sarabun', sans-serif;
+  color: #1e293b;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root { width: 100%; min-height: 100vh; }
+
+.btn-green {
+  background-color: var(--green);
+  color: white;
+  padding: 12px 32px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  transition: background-color 0.2s, box-shadow 0.2s, transform 0.15s;
+  box-shadow: 0 1px 3px rgba(5,150,105,0.3);
+}
+.btn-green:hover {
+  background-color: var(--green-dark);
+  box-shadow: 0 4px 14px rgba(5,150,105,0.4);
+  transform: translateY(-1px);
+}
+
+.btn-blue {
+  background-color: var(--blue);
+  color: white;
+  padding: 12px 32px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  transition: background-color 0.2s;
+}
+.btn-blue:hover { background-color: var(--blue-dark); }
+
+.btn-outline-white {
+  background-color: transparent;
+  color: white;
+  padding: 11px 32px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  border: 2px solid rgba(255,255,255,0.6);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+.btn-outline-white:hover { background-color: rgba(255,255,255,0.1); border-color: white; }
+
+.btn-outline-green {
+  background-color: transparent;
+  color: var(--green);
+  padding: 11px 32px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  border: 2px solid var(--green);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+.btn-outline-green:hover { background-color: var(--green-light); }
+
+.text-green { color: var(--green); }
+.text-blue { color: var(--blue); }
+.bg-navy { background-color: var(--navy); }
+.bg-blue-dark { background-color: var(--blue-dark); }
+
+/* ── Scroll reveal ───────────────────────────── */
+.fade-up {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.55s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+              transform 0.55s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+.fade-up.in-view {
+  opacity: 1;
+  transform: none;
+}
+
+/* Stagger children when grid container enters view */
+.stagger-grid > * {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 0.45s ease-out, transform 0.45s ease-out;
+}
+.stagger-grid.in-view > *:nth-child(1) { opacity: 1; transform: none; transition-delay: 0ms; }
+.stagger-grid.in-view > *:nth-child(2) { opacity: 1; transform: none; transition-delay: 70ms; }
+.stagger-grid.in-view > *:nth-child(3) { opacity: 1; transform: none; transition-delay: 140ms; }
+.stagger-grid.in-view > *:nth-child(4) { opacity: 1; transform: none; transition-delay: 210ms; }
+.stagger-grid.in-view > *:nth-child(5) { opacity: 1; transform: none; transition-delay: 280ms; }
+.stagger-grid.in-view > *:nth-child(6) { opacity: 1; transform: none; transition-delay: 350ms; }
+
+/* ── Page transitions ────────────────────────── */
+@keyframes pageFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+.page-enter {
+  animation: pageFadeIn 0.3s ease-out both;
+}
+
+.check-green {
+  width: 22px;
+  height: 22px;
+  background-color: var(--green);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.check-green::after {
+  content: '✓';
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+}

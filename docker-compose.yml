@@ -1,0 +1,7 @@
+services:
+  flowpdpa:
+    build: .
+    container_name: flowpdpa
+    ports:
+      - "8808:80"
+    restart: unless-stopped
