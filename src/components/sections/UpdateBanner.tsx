@@ -7,7 +7,7 @@ export default function UpdateBanner() {
         <p className="text-white text-sm">
           ตอนนี้คุณสามารถแก้ไขนโยบายเดิมได้ทุกส่วน พร้อมรองรับการเพิ่มเงื่อนไขพิเศษสำหรับธุรกิจของคุณ
         </p>
-        <a href="/pricing" className="text-white text-xs font-semibold underline underline-offset-2 whitespace-nowrap">
+        <a href="/create/policy" className="text-white text-xs font-semibold underline underline-offset-2 whitespace-nowrap">
           Learn more →
         </a>
       </div>

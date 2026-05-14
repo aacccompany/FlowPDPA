@@ -4,7 +4,6 @@ import { MapPin, Phone, Mail } from 'lucide-react'
 const navLinks = [
   { label: 'หน้าแรก', to: '/' },
   { label: 'ทำไมต้อง FlowPDPA', to: '/#why' },
-  { label: 'บริการและราคา', to: '/pricing' },
   { label: 'เกี่ยวกับเรา', to: '/about' },
   { label: 'โปรแกรมพาร์ทเนอร์', to: '/#contact' },
 ]
@@ -33,7 +32,7 @@ export default function Footer() {
             </p>
           </div>
           <Link
-            to="/pricing"
+            to="/create/policy"
             className="btn-green px-8 py-3 text-sm shrink-0"
           >
             เริ่มต้นฟรีวันนี้
@@ -55,11 +54,51 @@ export default function Footer() {
               แพลตฟอร์มสร้างนโยบาย PDPA สำหรับธุรกิจไทย ถูกต้อง รวดเร็ว และเข้าถึงได้ทุกธุรกิจ
             </p>
             <div
-              className="inline-flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-full"
+              className="inline-flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-full mb-5"
               style={{ backgroundColor: 'rgba(5,150,105,0.12)', color: 'var(--green)' }}
             >
               <span className="w-1.5 h-1.5 rounded-full bg-current" />
               ISO 29110 Certified
+            </div>
+
+            {/* Social links */}
+            <div className="flex items-center gap-2">
+              {[
+                {
+                  label: 'Facebook',
+                  href: 'https://facebook.com/flowpdpa',
+                  icon: (
+                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                      <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
+                    </svg>
+                  ),
+                },
+              ].map(({ label, href, icon }) => (
+                <a
+                  key={label}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={label}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: '#475569' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'white')}
+                  onMouseLeave={e => (e.currentTarget.style.color = '#475569')}
+                >
+                  {icon}
+                </a>
+              ))}
+              <a
+                href="https://lin.ee/flowpdpa"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="h-8 px-3 flex items-center justify-center rounded-lg text-xs font-bold transition-colors"
+                style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: '#475569' }}
+                onMouseEnter={e => (e.currentTarget.style.color = 'white')}
+                onMouseLeave={e => (e.currentTarget.style.color = '#475569')}
+              >
+                LINE
+              </a>
             </div>
           </div>
 

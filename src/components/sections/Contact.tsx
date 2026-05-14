@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { MapPin, Phone, Mail, Clock } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 const contactInfo = [
   { Icon: MapPin,  label: 'ที่อยู่',    value: '99/9 อาคารขอนแก่น บิซิเนส เซ็นเตอร์ ชั้น 5\nถนนศรีจันทร์ ตำบลในเมือง อำเภอเมืองขอนแก่น\nจังหวัดขอนแก่น 40000' },
@@ -100,9 +101,9 @@ export default function Contact() {
                   <input type="checkbox" required id="consent" className="mt-1" />
                   <label htmlFor="consent" className="text-xs text-gray-400 leading-relaxed">
                     ฉันยอมรับ{' '}
-                    <a href="/terms" style={{ color: 'var(--green)' }} className="underline">เงื่อนไขการใช้บริการ</a>
+                    <Link to="/terms" style={{ color: 'var(--green)' }} className="underline">เงื่อนไขการใช้บริการ</Link>
                     {' '}และ{' '}
-                    <a href="/privacy-policy" style={{ color: 'var(--green)' }} className="underline">นโยบายความเป็นส่วนตัว</a>
+                    <Link to="/privacy-policy" style={{ color: 'var(--green)' }} className="underline">นโยบายความเป็นส่วนตัว</Link>
                     {' '}ของ FlowPDPA
                   </label>
                 </div>

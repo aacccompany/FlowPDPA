@@ -21,16 +21,16 @@ const channels = [
   {
     Icon: MessageCircle,
     title: 'Live Chat',
-    value: 'แชทผ่านเว็บไซต์',
-    desc: 'พร้อมให้บริการในเวลาทำการ',
-    href: '#',
+    value: 'ส่งข้อความหาเรา',
+    desc: 'กรอกแบบฟอร์มด้านล่าง ตอบกลับภายใน 1 วัน',
+    href: '#support-contact-form',
   },
 ]
 
 const quickLinks = [
   { Icon: FileText, label: 'ดูคำถามที่พบบ่อย', to: '/faq' },
   { Icon: HelpCircle, label: 'วิธีนำ Policy ไปใช้บนเว็บไซต์', to: '/faq' },
-  { Icon: FileText, label: 'ดูแผนราคาและบริการ', to: '/pricing' },
+  { Icon: FileText, label: 'สร้าง Policy ของคุณ', to: '/create/policy' },
   { Icon: HelpCircle, label: 'ทำไมต้องมี Privacy Policy', to: '/why-us' },
 ]
 
@@ -84,7 +84,7 @@ export default function Support() {
       </div>
 
       {/* Form + info */}
-      <div className="bg-white">
+      <div id="support-contact-form" className="bg-white">
         <div className="grid grid-cols-1 lg:grid-cols-2" style={{ minHeight: '600px' }}>
 
           {/* Left — info */}

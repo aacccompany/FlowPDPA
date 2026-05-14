@@ -4,7 +4,6 @@ import { Link, useLocation } from 'react-router-dom'
 
 const navLinks = [
   { label: 'Why Us', href: '/why-us' },
-  { label: 'Pricing', href: '/pricing' },
   { label: 'About', href: '/about' },
   { label: 'FAQ', href: '/faq' },
   { label: 'Support', href: '/support' },
@@ -61,9 +60,28 @@ export default function Navbar() {
             ))}
           </nav>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <Link
-              to="/pricing"
+              to="/login"
+              className="hidden sm:inline-flex items-center text-sm font-semibold px-4 py-2 transition-all"
+              style={{
+                color: dark ? 'rgba(255,255,255,0.7)' : '#374151',
+                border: dark ? '1px solid rgba(255,255,255,0.2)' : '1px solid #d1d5db',
+                borderRadius: '6px',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.color = dark ? 'white' : '#111827'
+                e.currentTarget.style.borderColor = dark ? 'rgba(255,255,255,0.5)' : '#9ca3af'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.color = dark ? 'rgba(255,255,255,0.7)' : '#374151'
+                e.currentTarget.style.borderColor = dark ? 'rgba(255,255,255,0.2)' : '#d1d5db'
+              }}
+            >
+              เข้าสู่ระบบ
+            </Link>
+            <Link
+              to="/create/policy"
               className="hidden sm:inline-flex items-center text-sm font-bold text-white px-5 py-2 transition-opacity hover:opacity-90"
               style={{ backgroundColor: 'var(--green)', borderRadius: '6px' }}
             >
@@ -92,8 +110,16 @@ export default function Navbar() {
               {link.label}
             </Link>
           ))}
-          <div className="pt-2 mt-1 border-t border-gray-100">
-            <Link to="/pricing" className="btn-green text-sm py-2.5 w-full text-center block" style={{ borderRadius: '6px' }}>
+          <div className="pt-2 mt-1 border-t border-gray-100 flex flex-col gap-2">
+            <Link
+              to="/login"
+              className="text-sm font-semibold text-gray-700 py-2.5 w-full text-center block border border-gray-200 rounded"
+              style={{ borderRadius: '6px' }}
+              onClick={() => setOpen(false)}
+            >
+              เข้าสู่ระบบ
+            </Link>
+            <Link to="/create/policy" className="btn-green text-sm py-2.5 w-full text-center block" style={{ borderRadius: '6px' }} onClick={() => setOpen(false)}>
               Get Started
             </Link>
           </div>

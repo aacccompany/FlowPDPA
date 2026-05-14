@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 export default function Hero() {
   return (
     <section style={{ backgroundColor: 'var(--navy)', paddingTop: '61px', minHeight: '92vh' }}>
@@ -32,9 +34,9 @@ export default function Hero() {
             </p>
 
             <div className="flex flex-wrap gap-3 mb-12">
-              <a href="/create/policy" className="btn-green px-8 py-3.5 text-sm">
+              <Link to="/create/policy" className="btn-green px-8 py-3.5 text-sm">
                 สร้าง Policy เลย
-              </a>
+              </Link>
               <a href="#check-website" className="btn-outline-white px-8 py-3.5 text-sm">
                 ตรวจสอบฟรี
               </a>

@@ -2,15 +2,15 @@ import { ShieldCheck } from 'lucide-react'
 
 const quotes = [
   {
-    name: 'สมชาย วงศ์พานิช',
-    role: 'ผู้ก่อตั้ง, บริษัท ดิจิทัลเฟลม จำกัด',
-    initials: 'สว',
+    name: 'James Hartwell',
+    role: 'Founder, Digital Flame Co., Ltd.',
+    initials: 'JH',
     text: 'ก่อนใช้ FlowPDPA เราต้องรอนักกฎหมายนานหลายสัปดาห์ ตอนนี้สร้าง Privacy Policy ได้เองในไม่กี่นาที ได้ทั้งภาษาไทยและอังกฤษ และมั่นใจว่าถูกต้องตาม PDPA',
   },
   {
-    name: 'วรรณิดา ชัยสิทธิ์',
+    name: 'Sophia Langford',
     role: 'COO, TechFlow Co., Ltd.',
-    initials: 'วช',
+    initials: 'SL',
     text: 'Dashboard ใช้งานง่ายมาก จัดการนโยบายทุกเว็บไซต์ในบัญชีเดียว ทีมงานดูแลดีทุกครั้งที่ติดต่อ แนะนำให้ทุกธุรกิจที่ต้องการความสบายใจด้าน PDPA ลองใช้เลย',
   },
 ]

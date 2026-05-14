@@ -5,12 +5,15 @@ import CookieBanner from '@/components/layout/CookieBanner'
 import ScrollToTop from '@/components/layout/ScrollToTop'
 import Home from '@/pages/Home'
 import About from '@/pages/About'
-import Pricing from '@/pages/Pricing'
 import FAQPage from '@/pages/FAQPage'
 import PrivacyPolicy from '@/pages/PrivacyPolicy'
 import Terms from '@/pages/Terms'
 import WhyUs from '@/pages/WhyUs'
 import Support from '@/pages/Support'
+import Login from '@/pages/Login'
+import Register from '@/pages/Register'
+import Dashboard from '@/pages/Dashboard'
+import CreatePolicy from '@/pages/CreatePolicy'
 import NotFound from '@/pages/NotFound'
 
 function AnimatedRoutes() {
@@ -20,7 +23,6 @@ function AnimatedRoutes() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/about" element={<About />} />
-        <Route path="/pricing" element={<Pricing />} />
         <Route path="/faq" element={<FAQPage />} />
         <Route path="/why-us" element={<WhyUs />} />
         <Route path="/support" element={<Support />} />
@@ -36,12 +38,25 @@ export default function App() {
   return (
     <BrowserRouter>
       <ScrollToTop />
-      <Navbar />
-      <main>
-        <AnimatedRoutes />
-      </main>
-      <Footer />
-      <CookieBanner />
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/create/policy" element={<CreatePolicy />} />
+        <Route
+          path="*"
+          element={
+            <>
+              <Navbar />
+              <main>
+                <AnimatedRoutes />
+              </main>
+              <Footer />
+              <CookieBanner />
+            </>
+          }
+        />
+      </Routes>
     </BrowserRouter>
   )
 }
