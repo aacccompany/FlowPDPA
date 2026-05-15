@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Mail, Phone, Clock, MapPin, MessageCircle, FileText, HelpCircle } from 'lucide-react'
+import { Mail, Phone, Clock, MapPin, MessageCircle, FileText, HelpCircle, LifeBuoy, ChevronRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import FadeUp from '@/components/ui/FadeUp'
 
@@ -31,7 +31,7 @@ const quickLinks = [
   { Icon: FileText, label: 'ดูคำถามที่พบบ่อย', to: '/faq' },
   { Icon: HelpCircle, label: 'วิธีนำ Policy ไปใช้บนเว็บไซต์', to: '/faq' },
   { Icon: FileText, label: 'สร้าง Policy ของคุณ', to: '/create/policy' },
-  { Icon: HelpCircle, label: 'ทำไมต้องมี Privacy Policy', to: '/why-us' },
+  { Icon: HelpCircle, label: 'ส่งคำขอรับการสนับสนุน (Helpdesk)', to: '/helpdesk' },
 ]
 
 export default function Support() {
@@ -80,6 +80,40 @@ export default function Support() {
               </FadeUp>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* Helpdesk CTA */}
+      <div className="py-10 bg-white border-b border-gray-100">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <FadeUp>
+            <div
+              className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5 rounded-2xl px-8 py-7"
+              style={{ backgroundColor: 'var(--navy)' }}
+            >
+              <div className="flex items-start gap-4">
+                <div
+                  className="w-11 h-11 flex items-center justify-center rounded-xl shrink-0"
+                  style={{ backgroundColor: 'rgba(5,150,105,0.15)' }}
+                >
+                  <LifeBuoy className="w-5 h-5" style={{ color: 'var(--green)' }} />
+                </div>
+                <div>
+                  <p className="font-black text-white text-base mb-1">พบปัญหาหรือต้องการแจ้งเรื่องราว?</p>
+                  <p className="text-sm" style={{ color: '#64748b' }}>
+                    ส่ง Ticket ผ่านระบบ Helpdesk ของเรา ทีมงานจะติดต่อกลับภายใน 1 วันทำการ
+                  </p>
+                </div>
+              </div>
+              <Link
+                to="/helpdesk"
+                className="btn-green shrink-0 flex items-center gap-2 text-sm"
+              >
+                ส่งคำขอ Helpdesk
+                <ChevronRight className="w-4 h-4" />
+              </Link>
+            </div>
+          </FadeUp>
         </div>
       </div>
 

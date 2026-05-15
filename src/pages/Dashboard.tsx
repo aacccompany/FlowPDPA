@@ -4,10 +4,13 @@ import {
   LayoutDashboard, FileText, Plus, Settings, LogOut, Bell,
   ChevronRight, Download, Copy, Pencil,
   Trash2, CheckCircle, Clock, Globe, Lock, X, ShieldCheck,
+  LifeBuoy, ExternalLink, AlertCircle, Loader, XCircle,
 } from 'lucide-react'
+import { type TicketRecord } from '@/api/helpdesk'
+import { fetchContact, updateContact, defaultProfile, type ContactProfile } from '@/api/contact'
 
 // ── Auth helper ───────────────────────────────────────────────
-type AuthUser = { name: string; email: string; plan: string }
+type AuthUser = { name: string; email: string; plan: string; company?: string; phone?: string }
 
 function getCurrentUser(): AuthUser {
   try {
@@ -43,10 +46,11 @@ const policies = [
 
 // ── Sidebar nav items ─────────────────────────────────────────
 const navItems = [
-  { key: 'overview',  label: 'ภาพรวม',       Icon: LayoutDashboard },
-  { key: 'policies',  label: 'นโยบายของฉัน',  Icon: FileText },
-  { key: 'new',       label: 'สร้าง Policy ใหม่', Icon: Plus },
-  { key: 'settings',  label: 'ตั้งค่าบัญชี',  Icon: Settings },
+  { key: 'overview',  label: 'ภาพรวม',           Icon: LayoutDashboard },
+  { key: 'policies',  label: 'นโยบายของฉัน',      Icon: FileText },
+  { key: 'tickets',   label: 'Tickets',            Icon: LifeBuoy },
+  { key: 'new',       label: 'สร้าง Policy ใหม่',  Icon: Plus },
+  { key: 'settings',  label: 'ตั้งค่าบัญชี',      Icon: Settings },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -68,11 +72,14 @@ function StatusBadge({ status }: { status: string }) {
 
 // ── Sub-views ─────────────────────────────────────────────────
 function Overview({ setView, user }: { setView: (v: string) => void; user: AuthUser }) {
+  const userTickets   = getUserTickets(user.email)
+  const openTickets   = userTickets.filter(t => t.status === 'open' || t.status === 'in_progress').length
+
   const stats = [
-    { label: 'นโยบายทั้งหมด', value: '3', Icon: FileText, color: 'var(--blue)' },
-    { label: 'Active Policies', value: '2', Icon: CheckCircle, color: 'var(--green)' },
-    { label: 'PDPA Status', value: 'Compliant', Icon: ShieldCheck, color: 'var(--green)' },
-    { label: 'อัปเดตล่าสุด', value: '12 May 2025', Icon: Clock, color: '#f59e0b' },
+    { label: 'นโยบายทั้งหมด',  value: '3',           Icon: FileText,    color: 'var(--blue)' },
+    { label: 'Active Policies', value: '2',           Icon: CheckCircle, color: 'var(--green)' },
+    { label: 'PDPA Status',     value: 'Compliant',   Icon: ShieldCheck, color: 'var(--green)' },
+    { label: 'Tickets (เปิด)',  value: String(openTickets), Icon: LifeBuoy, color: '#f59e0b' },
   ]
 
   return (
@@ -137,6 +144,53 @@ function Overview({ setView, user }: { setView: (v: string) => void; user: AuthU
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Recent tickets */}
+      <div className="bg-white rounded-xl border border-gray-100 mb-6">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="font-bold text-gray-900 text-sm">Tickets ล่าสุด</h2>
+          <button
+            onClick={() => setView('tickets')}
+            className="text-xs font-semibold flex items-center gap-1 transition-colors"
+            style={{ color: 'var(--green)' }}
+          >
+            ดูทั้งหมด <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        {userTickets.length === 0 ? (
+          <div className="px-6 py-8 text-center">
+            <p className="text-xs text-gray-400 mb-3">ยังไม่มี Ticket</p>
+            <Link to="/helpdesk" className="text-xs font-semibold underline" style={{ color: 'var(--green)' }}>
+              ส่งคำขอแรก →
+            </Link>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {userTickets.slice(0, 3).map(t => (
+              <div key={t.id} className="flex items-center justify-between px-6 py-3.5">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: '#f1f5f9' }}>
+                    <LifeBuoy className="w-4 h-4 text-gray-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{t.name}</p>
+                    <p className="text-xs text-gray-400 font-mono">{t.id}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 shrink-0 ml-4">
+                  <TicketStatusBadge status={t.status} />
+                  <Link
+                    to={`/helpdesk/track?id=${t.id}`}
+                    className="text-gray-300 hover:text-green-500 transition-colors"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Quick actions */}
@@ -293,89 +347,386 @@ function PoliciesList() {
 }
 
 
+// ── Ticket helpers ────────────────────────────────────────────
+
+const ticketStatusMap = {
+  open:        { label: 'รับเรื่องแล้ว',    color: '#2563eb', bg: '#dbeafe', Icon: Clock },
+  in_progress: { label: 'กำลังดำเนินการ',  color: '#d97706', bg: '#fef3c7', Icon: Loader },
+  resolved:    { label: 'แก้ไขแล้ว',        color: '#059669', bg: '#d1fae5', Icon: CheckCircle },
+  closed:      { label: 'ปิดแล้ว',           color: '#64748b', bg: '#f1f5f9', Icon: XCircle },
+} satisfies Record<TicketRecord['status'], { label: string; color: string; bg: string; Icon: React.ElementType }>
+
+function TicketStatusBadge({ status }: { status: TicketRecord['status'] }) {
+  const s = ticketStatusMap[status]
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap"
+      style={{ backgroundColor: s.bg, color: s.color }}
+    >
+      <s.Icon className="w-3 h-3" />
+      {s.label}
+    </span>
+  )
+}
+
+function getUserTickets(email: string): TicketRecord[] {
+  try {
+    const all: TicketRecord[] = JSON.parse(localStorage.getItem('flowpdpa_tickets') ?? '[]')
+    return all.filter(t => t.partner_email?.toLowerCase() === email.toLowerCase())
+  } catch {
+    return []
+  }
+}
+
+function formatShortDate(iso: string) {
+  return new Date(iso).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function TicketsList({ user }: { user: AuthUser }) {
+  const tickets = getUserTickets(user.email)
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-xl font-black text-gray-900 mb-0.5">Tickets ของฉัน</h1>
+          <p className="text-sm text-gray-400">{tickets.length} คำขอในบัญชีของคุณ</p>
+        </div>
+        <Link
+          to="/helpdesk"
+          className="btn-green text-sm px-5 py-2.5 flex items-center gap-2"
+          style={{ borderRadius: '8px' }}
+        >
+          <Plus className="w-4 h-4" /> ส่งคำขอใหม่
+        </Link>
+      </div>
+
+      {tickets.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-100 p-14 text-center">
+          <div
+            className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4"
+            style={{ backgroundColor: '#f1f5f9' }}
+          >
+            <LifeBuoy className="w-6 h-6 text-gray-300" />
+          </div>
+          <p className="text-sm font-semibold text-gray-500 mb-1">ยังไม่มี Ticket</p>
+          <p className="text-xs text-gray-400 mb-5">พบปัญหาหรือต้องการความช่วยเหลือ? ส่งคำขอได้เลย</p>
+          <Link to="/helpdesk" className="btn-green text-sm px-6 py-2.5" style={{ borderRadius: '8px' }}>
+            ส่งคำขอแรก
+          </Link>
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+          {/* Table header */}
+          <div className="hidden md:grid grid-cols-12 gap-4 px-6 py-3 bg-gray-50 border-b border-gray-100 text-xs font-semibold uppercase tracking-wider text-gray-400">
+            <div className="col-span-1">Ticket</div>
+            <div className="col-span-4">หัวข้อ</div>
+            <div className="col-span-3">ประเภท</div>
+            <div className="col-span-2">สถานะ</div>
+            <div className="col-span-1">วันที่</div>
+            <div className="col-span-1 text-right">ดู</div>
+          </div>
+
+          {tickets.map((t, i) => (
+            <div
+              key={t.id}
+              className={`grid grid-cols-2 md:grid-cols-12 gap-4 px-6 py-4 items-center hover:bg-gray-50 transition-colors ${i < tickets.length - 1 ? 'border-b border-gray-50' : ''}`}
+            >
+              {/* Ticket ID */}
+              <div className="col-span-2 md:col-span-1">
+                <span className="text-xs font-mono font-bold text-gray-500">{t.id}</span>
+              </div>
+
+              {/* Subject */}
+              <div className="col-span-2 md:col-span-4">
+                <p className="text-sm font-semibold text-gray-900 truncate">{t.name}</p>
+                <p className="text-xs text-gray-400 md:hidden mt-0.5">{formatShortDate(t.createdAt)}</p>
+              </div>
+
+              {/* Type */}
+              <div className="hidden md:block md:col-span-3">
+                <p className="text-xs text-gray-500 truncate">
+                  {t.ticket_type_label || t.tag_ids.join(', ') || '—'}
+                </p>
+              </div>
+
+              {/* Status */}
+              <div className="col-span-1 md:col-span-2">
+                <TicketStatusBadge status={t.status} />
+              </div>
+
+              {/* Date */}
+              <div className="hidden md:block md:col-span-1 text-xs text-gray-400 whitespace-nowrap">
+                {formatShortDate(t.createdAt)}
+              </div>
+
+              {/* Action */}
+              <div className="col-span-1 flex justify-end">
+                <Link
+                  to={`/helpdesk/track?id=${t.id}`}
+                  className="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
+                  style={{ color: '#9ca3af' }}
+                  onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#f3f4f6'; e.currentTarget.style.color = 'var(--green)' }}
+                  onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#9ca3af' }}
+                  title="ดูรายละเอียด"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Notice */}
+      <div className="mt-4 flex items-start gap-3 px-4 py-3 rounded-xl border border-blue-100 bg-blue-50">
+        <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" style={{ color: 'var(--blue)' }} />
+        <p className="text-xs leading-relaxed" style={{ color: '#334155' }}>
+          สถานะ Ticket อัปเดตโดยทีมงาน FlowPDPA ·{' '}
+          <Link to="/helpdesk/track" className="font-bold underline" style={{ color: 'var(--blue)' }}>
+            ติดตาม Ticket ด้วย ID
+          </Link>
+        </p>
+      </div>
+    </div>
+  )
+}
+
 function AccountSettings({ user }: { user: AuthUser }) {
+  const [profile,  setProfile]  = useState<ContactProfile>({ ...defaultProfile(), name: user.name, email: user.email })
+  const [loading,  setLoading]  = useState(true)
+  const [saving,   setSaving]   = useState(false)
+  const [saved,    setSaved]    = useState(false)
+  const [pwCurrent, setPwCurrent] = useState('')
+  const [pwNew,     setPwNew]     = useState('')
+  const [pwConfirm, setPwConfirm] = useState('')
+  const [pwError,   setPwError]   = useState('')
+
+  useEffect(() => {
+    fetchContact(user.email).then(p => {
+      if (p) setProfile(p)
+      setLoading(false)
+    })
+  }, [user.email])
+
+  function set<K extends keyof ContactProfile>(key: K, value: ContactProfile[K]) {
+    setProfile(prev => ({ ...prev, [key]: value }))
+    setSaved(false)
+  }
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    await updateContact(user.email, profile)
+    setSaving(false)
+    setSaved(true)
+  }
+
+  function handlePasswordChange(e: React.FormEvent) {
+    e.preventDefault()
+    if (pwNew.length < 6) { setPwError('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร'); return }
+    if (pwNew !== pwConfirm) { setPwError('รหัสผ่านใหม่ไม่ตรงกัน'); return }
+    setPwError('')
+    setPwCurrent(''); setPwNew(''); setPwConfirm('')
+  }
+
+  const inputCls = 'w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-green-400 transition-colors bg-white'
+  const labelCls = 'block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5'
+
+  function Section({ title, children }: { title: string; children: React.ReactNode }) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-100 p-6">
+        <h2 className="text-sm font-bold text-gray-900 mb-5 pb-3 border-b border-gray-100">{title}</h2>
+        {children}
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader className="w-6 h-6 animate-spin text-gray-300" />
+      </div>
+    )
+  }
+
   return (
     <div>
       <div className="mb-6">
         <h1 className="text-xl font-black text-gray-900 mb-1">ตั้งค่าบัญชี</h1>
-        <p className="text-sm text-gray-400">จัดการข้อมูลบัญชีและแผนการใช้งานของคุณ</p>
+        <p className="text-sm text-gray-400">ข้อมูลของคุณจะถูกซิงค์กับระบบ Odoo เมื่อเชื่อมต่อแล้ว</p>
       </div>
 
-      <div className="space-y-4">
-        {/* Profile card */}
-        <div className="bg-white rounded-xl border border-gray-100 p-6">
-          <h2 className="text-sm font-bold text-gray-900 mb-4">ข้อมูลโปรไฟล์</h2>
+      <form onSubmit={handleSave} className="space-y-4">
+
+        {/* ── 1. Personal Info (res.partner: name, function, email, phone, mobile) ── */}
+        <Section title="ข้อมูลส่วนตัว">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {[
-              { label: 'ชื่อ-นามสกุล', value: user.name },
-              { label: 'อีเมล', value: user.email },
-              { label: 'บริษัท', value: 'Demo Company Co., Ltd.' },
-              { label: 'เบอร์โทรศัพท์', value: '081-234-5678' },
-            ].map(({ label, value }) => (
-              <div key={label}>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">{label}</label>
-                <input
-                  defaultValue={value}
-                  className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-green-400 transition-colors"
-                />
-              </div>
-            ))}
+            <div>
+              <label className={labelCls}>ชื่อ-นามสกุล (Name) <span className="text-red-400 normal-case">*</span></label>
+              <input required value={profile.name} onChange={e => set('name', e.target.value)}
+                placeholder="ชื่อ นามสกุล" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>ตำแหน่งงาน (Job Position)</label>
+              <input value={profile.function} onChange={e => set('function', e.target.value)}
+                placeholder="เช่น CEO, Developer" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>อีเมล (Email) <span className="text-red-400 normal-case">*</span></label>
+              <input required type="email" value={profile.email} onChange={e => set('email', e.target.value)}
+                placeholder="email@company.com" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>โทรศัพท์ (Phone)</label>
+              <input type="tel" value={profile.phone} onChange={e => set('phone', e.target.value)}
+                placeholder="02-xxx-xxxx" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>มือถือ (Mobile)</label>
+              <input type="tel" value={profile.mobile} onChange={e => set('mobile', e.target.value)}
+                placeholder="08x-xxx-xxxx" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>เว็บไซต์ (Website)</label>
+              <input type="url" value={profile.website} onChange={e => set('website', e.target.value)}
+                placeholder="https://yoursite.com" className={inputCls} />
+            </div>
           </div>
-          <button className="mt-5 btn-green text-sm px-6 py-2.5" style={{ borderRadius: '8px' }}>
-            บันทึกการเปลี่ยนแปลง
+        </Section>
+
+        {/* ── 2. Company Info (res.partner: company_name, vat) ── */}
+        <Section title="ข้อมูลบริษัท / องค์กร">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>ชื่อบริษัท / องค์กร (Company)</label>
+              <input value={profile.company_name} onChange={e => set('company_name', e.target.value)}
+                placeholder="บริษัท..." className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>เลขประจำตัวผู้เสียภาษี (Tax ID / VAT)</label>
+              <input value={profile.vat} onChange={e => set('vat', e.target.value)}
+                placeholder="0-0000-00000-00-0" className={inputCls} />
+            </div>
+          </div>
+        </Section>
+
+        {/* ── 3. Address (res.partner: street, street2, city, zip, state_id, country_id) ── */}
+        <Section title="ที่อยู่">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="sm:col-span-2">
+              <label className={labelCls}>ที่อยู่ (Street)</label>
+              <input value={profile.street} onChange={e => set('street', e.target.value)}
+                placeholder="บ้านเลขที่ / ถนน / ซอย" className={inputCls} />
+            </div>
+            <div className="sm:col-span-2">
+              <label className={labelCls}>ที่อยู่เพิ่มเติม (Street 2)</label>
+              <input value={profile.street2} onChange={e => set('street2', e.target.value)}
+                placeholder="อาคาร / ชั้น / หมู่บ้าน" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>เมือง / อำเภอ / เขต (City)</label>
+              <input value={profile.city} onChange={e => set('city', e.target.value)}
+                placeholder="เมืองขอนแก่น" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>จังหวัด (State)</label>
+              <input value={profile.state_name} onChange={e => set('state_name', e.target.value)}
+                placeholder="ขอนแก่น" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>รหัสไปรษณีย์ (ZIP)</label>
+              <input value={profile.zip} onChange={e => set('zip', e.target.value)}
+                placeholder="40000" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>ประเทศ (Country)</label>
+              <input value={profile.country_name} onChange={e => set('country_name', e.target.value)}
+                placeholder="ประเทศไทย" className={inputCls} />
+            </div>
+          </div>
+        </Section>
+
+        {/* ── 4. Preferences (res.partner: lang) ── */}
+        <Section title="การตั้งค่า">
+          <div className="max-w-xs">
+            <label className={labelCls}>ภาษา (Language)</label>
+            <select value={profile.lang} onChange={e => set('lang', e.target.value)} className={inputCls}>
+              <option value="th_TH">ภาษาไทย</option>
+              <option value="en_US">English</option>
+            </select>
+          </div>
+        </Section>
+
+        {/* Save button */}
+        <div className="flex items-center gap-3">
+          <button
+            type="submit" disabled={saving}
+            className="btn-green text-sm px-8 py-2.5 flex items-center gap-2"
+            style={{ borderRadius: '8px', opacity: saving ? 0.7 : 1 }}
+          >
+            {saving && <Loader className="w-3.5 h-3.5 animate-spin" />}
+            {saving ? 'กำลังบันทึก...' : 'บันทึกการเปลี่ยนแปลง'}
           </button>
+          {saved && (
+            <span className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: 'var(--green)' }}>
+              <CheckCircle className="w-4 h-4" /> บันทึกสำเร็จ
+            </span>
+          )}
         </div>
+      </form>
 
-        {/* Plan card */}
-        <div className="bg-white rounded-xl border border-gray-100 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-bold text-gray-900 mb-1">แผนปัจจุบัน</h2>
-              <div className="flex items-center gap-2">
-                <span
-                  className="text-xs font-bold px-2.5 py-1 rounded-full"
-                  style={{ backgroundColor: 'rgba(5,150,105,0.1)', color: 'var(--green)' }}
-                >
-                  {user.plan}
-                </span>
-                <span className="text-xs text-gray-400">ชำระครั้งเดียว ตลอดชีพ</span>
-              </div>
-            </div>
-            <Link
-              to="/#contact"
-              className="text-sm font-semibold transition-colors"
-              style={{ color: 'var(--blue)' }}
-            >
-              อัปเกรดแผน →
-            </Link>
-          </div>
-        </div>
-
-        {/* Security card */}
-        <div className="bg-white rounded-xl border border-gray-100 p-6">
-          <h2 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <Lock className="w-4 h-4 text-gray-400" /> ความปลอดภัย
-          </h2>
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">รหัสผ่านปัจจุบัน</label>
-              <input type="password" placeholder="••••••••" className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-green-400 transition-colors" />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">รหัสผ่านใหม่</label>
-                <input type="password" placeholder="••••••••" className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-green-400 transition-colors" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">ยืนยันรหัสผ่านใหม่</label>
-                <input type="password" placeholder="••••••••" className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-green-400 transition-colors" />
-              </div>
+      {/* ── 5. Plan ── */}
+      <div className="bg-white rounded-xl border border-gray-100 p-6 mt-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-bold text-gray-900 mb-1">แผนปัจจุบัน</h2>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold px-2.5 py-1 rounded-full"
+                style={{ backgroundColor: 'rgba(5,150,105,0.1)', color: 'var(--green)' }}>
+                {user.plan}
+              </span>
+              <span className="text-xs text-gray-400">ชำระครั้งเดียว ตลอดชีพ</span>
             </div>
           </div>
-          <button className="mt-4 text-sm font-bold px-6 py-2.5 border-2 rounded-lg transition-colors" style={{ borderColor: 'var(--green)', color: 'var(--green)', borderRadius: '8px' }}>
+          <Link to="/#contact" className="text-sm font-semibold transition-colors" style={{ color: 'var(--blue)' }}>
+            อัปเกรดแผน →
+          </Link>
+        </div>
+      </div>
+
+      {/* ── 6. Security ── */}
+      <div className="bg-white rounded-xl border border-gray-100 p-6 mt-4">
+        <h2 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
+          <Lock className="w-4 h-4 text-gray-400" /> ความปลอดภัย
+        </h2>
+        <form onSubmit={handlePasswordChange} className="space-y-3">
+          <div>
+            <label className={labelCls}>รหัสผ่านปัจจุบัน</label>
+            <input type="password" value={pwCurrent} onChange={e => setPwCurrent(e.target.value)}
+              placeholder="••••••••"
+              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-green-400 transition-colors" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>รหัสผ่านใหม่</label>
+              <input type="password" value={pwNew} onChange={e => { setPwNew(e.target.value); setPwError('') }}
+                placeholder="••••••••"
+                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-green-400 transition-colors" />
+            </div>
+            <div>
+              <label className={labelCls}>ยืนยันรหัสผ่านใหม่</label>
+              <input type="password" value={pwConfirm} onChange={e => { setPwConfirm(e.target.value); setPwError('') }}
+                placeholder="••••••••"
+                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-green-400 transition-colors" />
+            </div>
+          </div>
+          {pwError && <p className="text-xs text-red-500">{pwError}</p>}
+          <button type="submit" className="text-sm font-bold px-6 py-2.5 border-2 rounded-lg transition-colors"
+            style={{ borderColor: 'var(--green)', color: 'var(--green)', borderRadius: '8px' }}>
             เปลี่ยนรหัสผ่าน
           </button>
-        </div>
+        </form>
       </div>
     </div>
   )
@@ -549,6 +900,7 @@ export default function Dashboard() {
           <main className="flex-1 p-6">
             {activeView === 'overview'  && <Overview setView={setActiveView} user={user} />}
             {activeView === 'policies'  && <PoliciesList />}
+            {activeView === 'tickets'   && <TicketsList user={user} />}
             {activeView === 'settings'  && <AccountSettings user={user} />}
           </main>
 

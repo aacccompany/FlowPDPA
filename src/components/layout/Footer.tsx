@@ -12,7 +12,8 @@ const legalLinks = [
   { label: 'นโยบายความเป็นส่วนตัว', to: '/privacy-policy' },
   { label: 'เงื่อนไขการใช้งาน', to: '/terms' },
   { label: 'คำถามที่พบบ่อย', to: '/faq' },
-  { label: 'ติดต่อฝ่ายสนับสนุน', to: '/#contact' },
+  { label: 'ติดต่อฝ่ายสนับสนุน', to: '/support' },
+  { label: 'Helpdesk', to: '/helpdesk' },
 ]
 
 export default function Footer() {

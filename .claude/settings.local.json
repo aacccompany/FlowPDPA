@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:pdpa.pro)",
+      "WebSearch",
+      "WebFetch(domain:consentwow.com)",
+      "WebFetch(domain:cookiewow.com)"
+    ]
+  }
+}
