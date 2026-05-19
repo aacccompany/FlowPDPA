@@ -4,7 +4,7 @@ import {
   LayoutDashboard, FileText, Plus, Settings, LogOut, Bell,
   ChevronRight, Download, Copy, Pencil,
   Trash2, CheckCircle, Clock, Globe, Lock, X, ShieldCheck,
-  LifeBuoy, ExternalLink, AlertCircle, Loader, XCircle,
+  LifeBuoy, ExternalLink, AlertCircle, Loader, XCircle, ShieldAlert,
 } from 'lucide-react'
 import { type TicketRecord } from '@/api/helpdesk'
 import { fetchContact, updateContact, defaultProfile, type ContactProfile } from '@/api/contact'
@@ -832,6 +832,16 @@ export default function Dashboard() {
                 <div className="text-xs truncate" style={{ color: '#334155' }}>{user.plan}</div>
               </div>
             </div>
+            <Link
+              to="/admin"
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mb-0.5"
+              style={{ color: '#475569' }}
+              onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'rgba(220,38,38,0.1)'; e.currentTarget.style.color = '#f87171' }}
+              onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#475569' }}
+            >
+              <ShieldAlert className="w-4 h-4 shrink-0" />
+              Admin Panel
+            </Link>
             <button
               onClick={handleLogout}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"

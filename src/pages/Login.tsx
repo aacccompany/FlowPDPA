@@ -207,6 +207,19 @@ export default function Login() {
                 สมัครสมาชิก
               </Link>
             </p>
+
+            {/* Admin link */}
+            <p className="text-center mt-3">
+              <Link
+                to="/admin"
+                className="text-xs transition-colors"
+                style={{ color: '#334155' }}
+                onMouseEnter={e => (e.currentTarget.style.color = '#f87171')}
+                onMouseLeave={e => (e.currentTarget.style.color = '#334155')}
+              >
+                Admin Login →
+              </Link>
+            </p>
           </div>
 
           {/* Footer links */}

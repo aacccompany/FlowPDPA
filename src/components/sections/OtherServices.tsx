@@ -1,8 +1,36 @@
 const services = [
-  { name: 'FlowConsent', desc: 'ระบบจัดการความยินยอมของลูกค้าแบบครบวงจร', color: 'var(--navy)', light: '#f0f4ff' },
-  { name: 'FlowCookie', desc: 'สร้างแบนเนอร์แจ้งคุกกี้ที่ถูกต้องตามกฎหมาย', color: 'var(--blue)', light: '#eff6ff' },
-  { name: 'FlowForm', desc: 'แบบฟอร์มออนไลน์ที่รวบรวมข้อมูลได้อย่างถูกต้อง', color: 'var(--blue-dark)', light: '#f0f4ff' },
-  { name: 'LearnPDPA', desc: 'คอร์สอบรม PDPA สำหรับทีมงานในองค์กรของคุณ', color: 'var(--green)', light: 'var(--green-light)' },
+  {
+    name: 'FlowScan',
+    tag: 'Risk Checker',
+    desc: 'วางลิงก์เว็บไซต์ของคุณ — ระบบสแกนหาจุดเสี่ยง PDPA และรายงานผลใน 60 วินาที',
+    color: 'var(--navy)',
+    light: '#f0f4ff',
+    icon: '🔍',
+  },
+  {
+    name: 'FlowLine',
+    tag: 'LINE Native',
+    desc: 'รับความยินยอมและส่ง Privacy Notice ผ่าน LINE OA ของคุณ เหมาะสำหรับธุรกิจไทยที่ใช้ LINE เป็นช่องทางหลัก',
+    color: '#06b640',
+    light: '#f0fdf4',
+    icon: '💬',
+  },
+  {
+    name: 'FlowBadge',
+    tag: 'Trust Signal',
+    desc: 'ตราสัญลักษณ์ PDPA Compliant สำหรับติดบนเว็บไซต์ของคุณ เพิ่มความน่าเชื่อถือให้ลูกค้าเห็นได้ทันที',
+    color: 'var(--blue-mid)',
+    light: '#eff6ff',
+    icon: '🛡️',
+  },
+  {
+    name: 'FlowAlert',
+    tag: 'Law Monitor',
+    desc: 'รับแจ้งเตือนทันทีเมื่อกฎหมาย PDPA มีการเปลี่ยนแปลง พร้อมคำแนะนำว่านโยบายของคุณต้องอัปเดตอะไรบ้าง',
+    color: '#d97706',
+    light: '#fffbeb',
+    icon: '🔔',
+  },
 ]
 
 export default function OtherServices() {
@@ -24,17 +52,25 @@ export default function OtherServices() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-          {services.map(({ name, desc, color, light }) => (
+          {services.map(({ name, tag, desc, color, light, icon }) => (
             <a
               key={name}
               href="#"
-              className="rounded-xl p-6 block border border-gray-200 hover:shadow-md transition-shadow bg-white group"
+              className="rounded-xl p-6 block border border-gray-200 hover:shadow-md transition-all bg-white group"
             >
-              <div
-                className="w-10 h-10 rounded-lg flex items-center justify-center mb-4"
-                style={{ backgroundColor: light }}
-              >
-                <span className="text-lg font-black" style={{ color }}>F</span>
+              <div className="flex items-start justify-between mb-4">
+                <div
+                  className="w-10 h-10 rounded-lg flex items-center justify-center text-xl"
+                  style={{ backgroundColor: light }}
+                >
+                  {icon}
+                </div>
+                <span
+                  className="text-xs font-bold px-2 py-0.5 rounded-full"
+                  style={{ backgroundColor: light, color }}
+                >
+                  {tag}
+                </span>
               </div>
               <h3 className="font-bold text-gray-900 text-base mb-1.5 group-hover:underline" style={{ color }}>
                 {name}
@@ -53,10 +89,11 @@ export default function OtherServices() {
               Bundle Deal
             </div>
             <h3 className="font-bold text-xl text-gray-900 mb-1">
-              <span style={{ color: 'var(--blue)' }}>FlowPDPA Kit</span> — ชุดเอกสาร PDPA ครบจบสำหรับองค์กร
+              <span style={{ color: 'var(--blue)' }}>FlowPDPA Suite</span> — ครบทุกเครื่องมือในแพ็กเกจเดียว
             </h3>
             <p className="text-gray-500 text-sm">
-              ราคาพิเศษ <span className="font-bold text-lg" style={{ color: 'var(--green)' }}>ติดต่อสอบถาม</span>
+              Policy + FlowScan + FlowBadge + FlowAlert ราคาพิเศษ{' '}
+              <span className="font-bold text-lg" style={{ color: 'var(--green)' }}>ติดต่อสอบถาม</span>
             </p>
           </div>
           <a href="#contact" className="btn-green px-8 py-3 shrink-0 whitespace-nowrap">
