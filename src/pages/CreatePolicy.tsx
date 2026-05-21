@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Check, ChevronRight, ChevronLeft, X, Download, Copy, ExternalLink, CheckCircle } from 'lucide-react'
+import { Check, ChevronRight, ChevronLeft, X, CheckCircle } from 'lucide-react'
 
 // ── Auth constants ────────────────────────────────────────────
 const DEMO_EMAIL = 'demo@flowpdpa.co.th'
@@ -695,63 +695,89 @@ function Step6({ data }: { data: FormData }) {
 
 function SuccessScreen({ data, onReset }: { data: FormData; onReset: () => void }) {
   const policy = policyTypes.find(p => p.key === data.policyType)
-  const [copied, setCopied] = useState(false)
+
+  const timeline = [
+    { label: 'ส่งข้อมูลเสร็จสิ้น',              done: true,  active: false },
+    { label: 'ทีมกฎหมายกำลังตรวจสอบเอกสาร',    done: false, active: true  },
+    { label: 'ส่งนโยบายให้คุณทางอีเมล',         done: false, active: false },
+  ]
 
   return (
     <div className="text-center py-6">
+      {/* Icon */}
       <div
         className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5"
-        style={{ backgroundColor: 'rgba(5,150,105,0.12)' }}
+        style={{ backgroundColor: 'rgba(217,119,6,0.12)' }}
       >
-        <CheckCircle className="w-8 h-8" style={{ color: 'var(--green)' }} />
+        <CheckCircle className="w-8 h-8" style={{ color: '#d97706' }} />
       </div>
-      <h2 className="text-2xl font-black text-gray-900 mb-2">สร้างนโยบายสำเร็จ! 🎉</h2>
-      <p className="text-gray-500 text-sm mb-2">
+
+      <h2 className="text-2xl font-black text-gray-900 mb-2">ส่งข้อมูลสำเร็จ!</h2>
+      <p className="text-gray-500 text-sm mb-1">
         {policy?.icon} <strong>{policy?.label}</strong> สำหรับ <strong>{data.websiteName}</strong>
       </p>
-      <p className="text-gray-400 text-xs mb-8">พร้อมใช้งานแล้ว — คุณสามารถดู แชร์ หรือดาวน์โหลดได้ทันที</p>
+      <p className="text-gray-400 text-xs mb-8">
+        ทีมกฎหมายของเรากำลังตรวจสอบเอกสาร คาดว่าแล้วเสร็จภายใน 1 วันทำการ
+      </p>
 
-      {/* Shareable URL mockup */}
+      {/* Status timeline */}
+      <div className="max-w-xs mx-auto mb-8 text-left">
+        {timeline.map(({ label, done, active }, i) => (
+          <div key={i} className="flex items-start gap-3">
+            <div className="flex flex-col items-center">
+              <div
+                className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-xs font-bold"
+                style={{
+                  backgroundColor: done ? 'var(--green)' : active ? '#d97706' : '#e5e7eb',
+                  color: done || active ? 'white' : '#9ca3af',
+                }}
+              >
+                {done ? <Check className="w-3 h-3" strokeWidth={3} /> : i + 1}
+              </div>
+              {i < timeline.length - 1 && (
+                <div className="w-px flex-1 my-1" style={{ backgroundColor: done ? 'var(--green)' : '#e5e7eb', minHeight: '20px' }} />
+              )}
+            </div>
+            <div className="pb-5">
+              <p
+                className="text-sm font-semibold leading-snug"
+                style={{ color: done ? 'var(--green)' : active ? '#d97706' : '#9ca3af' }}
+              >
+                {label}
+              </p>
+              {active && (
+                <p className="text-xs text-gray-400 mt-0.5">คาดว่าแล้วเสร็จภายใน 1 วันทำการ</p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Email notice */}
       <div
-        className="flex items-center gap-2 p-3 rounded-xl mb-6 text-left max-w-sm mx-auto"
-        style={{ backgroundColor: '#f8fafc', border: '1px solid #e5e7eb' }}
+        className="max-w-sm mx-auto rounded-xl px-5 py-4 mb-8 text-left"
+        style={{ backgroundColor: 'rgba(217,119,6,0.06)', border: '1px solid rgba(217,119,6,0.15)' }}
       >
-        <ExternalLink className="w-4 h-4 shrink-0 text-gray-400" />
-        <span className="text-xs text-gray-600 flex-1 truncate">
-          flowpdpa.co.th/p/{data.websiteUrl.replace(/https?:\/\//, '').replace(/\//g, '') || 'mysite-com'}/privacy
-        </span>
-        <button
-          onClick={() => { setCopied(true); setTimeout(() => setCopied(false), 2000) }}
-          className="text-xs font-semibold shrink-0 transition-colors"
-          style={{ color: copied ? 'var(--green)' : '#6b7280' }}
-        >
-          {copied ? 'คัดลอกแล้ว!' : <Copy className="w-3.5 h-3.5" />}
-        </button>
+        <p className="text-sm font-semibold mb-0.5" style={{ color: '#92400e' }}>คุณจะได้รับอีเมลแจ้งเตือน</p>
+        <p className="text-xs text-gray-500">
+          เมื่อนโยบายพร้อมใช้งาน ระบบจะส่งอีเมลไปที่ <strong>{data.contactEmail}</strong> พร้อมลิงก์ดาวน์โหลด
+        </p>
       </div>
 
-      {/* Action buttons */}
-      <div className="flex flex-col sm:flex-row gap-3 justify-center mb-8">
-        <button className="btn-green px-8 py-3 text-sm flex items-center justify-center gap-2" style={{ borderRadius: '8px' }}>
-          <Download className="w-4 h-4" /> ดาวน์โหลด PDF
-        </button>
-        <button
-          className="px-8 py-3 text-sm font-bold border-2 rounded-lg transition-colors flex items-center justify-center gap-2"
-          style={{ borderColor: 'var(--green)', color: 'var(--green)', borderRadius: '8px' }}
-        >
-          <ExternalLink className="w-4 h-4" /> ดูนโยบาย
-        </button>
-      </div>
-
+      {/* Actions */}
       <div className="flex flex-col sm:flex-row gap-3 justify-center">
         <Link
           to="/dashboard"
-          className="text-sm font-semibold transition-colors"
-          style={{ color: 'var(--blue)' }}
+          className="btn-green px-8 py-3 text-sm flex items-center justify-center gap-2"
+          style={{ borderRadius: '8px' }}
         >
-          ← กลับ Dashboard
+          ดูสถานะใน Dashboard
         </Link>
-        <span className="text-gray-300 hidden sm:block">|</span>
-        <button onClick={onReset} className="text-sm font-semibold text-gray-500 hover:text-gray-700 transition-colors">
+        <button
+          onClick={onReset}
+          className="px-8 py-3 text-sm font-bold border-2 rounded-lg transition-colors"
+          style={{ borderColor: '#e5e7eb', color: '#64748b', borderRadius: '8px' }}
+        >
           สร้าง Policy ใหม่
         </button>
       </div>

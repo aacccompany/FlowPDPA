@@ -33,6 +33,15 @@ const policies = [
     type: 'privacy',
   },
   {
+    id: 2,
+    name: 'Privacy + Cookies Policy',
+    domain: 'newsite.co.th',
+    lang: 'TH',
+    status: 'Pending Review',
+    updated: '21 May 2026',
+    type: 'privacy',
+  },
+  {
     id: 3,
     name: 'HR Privacy Policy',
     domain: 'hr.mycompany.co.th',
@@ -55,16 +64,16 @@ const navItems = [
 
 // ── Helpers ───────────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
-  const active = status === 'Active'
+  const cfg =
+    status === 'Active'         ? { bg: 'rgba(5,150,105,0.12)',    color: 'var(--green)', dot: 'var(--green)' } :
+    status === 'Pending Review' ? { bg: 'rgba(217,119,6,0.12)',    color: '#d97706',      dot: '#d97706' } :
+                                  { bg: 'rgba(100,116,139,0.12)',  color: '#64748b',      dot: '#64748b' }
   return (
     <span
       className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full"
-      style={{
-        backgroundColor: active ? 'rgba(5,150,105,0.12)' : 'rgba(100,116,139,0.12)',
-        color: active ? 'var(--green)' : '#64748b',
-      }}
+      style={{ backgroundColor: cfg.bg, color: cfg.color }}
     >
-      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: active ? 'var(--green)' : '#64748b' }} />
+      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: cfg.dot }} />
       {status}
     </span>
   )
