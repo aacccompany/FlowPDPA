@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  CheckCircle, Clock, XCircle, AlertCircle, ChevronLeft,
+  CheckCircle, Clock, XCircle, AlertCircle, ChevronLeft, ChevronRight,
   LogOut, FileText, Scale, Eye, EyeOff,
 } from 'lucide-react'
 
@@ -354,12 +354,11 @@ function QueueScreen({
         <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
           {/* Table header */}
           <div className="hidden md:grid grid-cols-12 gap-4 px-6 py-3 bg-gray-50 border-b border-gray-100 text-xs font-bold uppercase tracking-wider text-gray-400">
-            <div className="col-span-1">ID</div>
             <div className="col-span-3">บริษัท / ร้านค้า</div>
             <div className="col-span-2">ลูกค้า</div>
             <div className="col-span-2">ประเภทธุรกิจ</div>
             <div className="col-span-2">ส่งเมื่อ</div>
-            <div className="col-span-1">สถานะ</div>
+            <div className="col-span-2">สถานะ</div>
             <div className="col-span-1 text-right">ดู</div>
           </div>
 
@@ -376,19 +375,23 @@ function QueueScreen({
                   className="grid grid-cols-2 md:grid-cols-12 gap-4 px-6 py-4 items-center hover:bg-blue-50 transition-colors cursor-pointer"
                   onClick={() => onSelect(s)}
                 >
-                  <div className="hidden md:block md:col-span-1 text-xs font-mono text-gray-400">{s.id}</div>
                   <div className="col-span-2 md:col-span-3">
                     <div className="text-sm font-semibold text-gray-900">{s.businessName}</div>
-                    <div className="text-xs text-gray-400 md:hidden">{s.submittedAt}</div>
+                    <div className="text-xs font-mono text-gray-400 mt-0.5">{s.id}</div>
                   </div>
                   <div className="hidden md:block md:col-span-2 text-sm text-gray-600">{s.customerName}</div>
                   <div className="hidden md:block md:col-span-2 text-xs text-gray-500">{s.businessType}</div>
                   <div className="hidden md:block md:col-span-2 text-xs text-gray-400">{s.submittedAt}</div>
-                  <div className="col-span-1 md:col-span-1">
+                  <div className="col-span-1 md:col-span-2">
                     <StatusBadge status={s.status} />
                   </div>
                   <div className="hidden md:flex md:col-span-1 justify-end">
-                    <span className="text-xs font-semibold" style={{ color: '#2563eb' }}>ตรวจสอบ →</span>
+                    <span
+                      className="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors"
+                      style={{ color: '#2563eb', borderColor: '#bfdbfe', backgroundColor: '#eff6ff' }}
+                    >
+                      ตรวจสอบ <ChevronRight className="w-3 h-3" />
+                    </span>
                   </div>
                 </div>
               ))}

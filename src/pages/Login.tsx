@@ -208,8 +208,8 @@ export default function Login() {
               </Link>
             </p>
 
-            {/* Admin link */}
-            <p className="text-center mt-3">
+            {/* Admin & Legal links */}
+            <p className="text-center mt-3 flex items-center justify-center gap-4">
               <Link
                 to="/admin"
                 className="text-xs transition-colors"
@@ -218,6 +218,16 @@ export default function Login() {
                 onMouseLeave={e => (e.currentTarget.style.color = '#334155')}
               >
                 Admin Login →
+              </Link>
+              <span className="text-gray-300">|</span>
+              <Link
+                to="/legal"
+                className="text-xs transition-colors"
+                style={{ color: '#334155' }}
+                onMouseEnter={e => (e.currentTarget.style.color = '#2563eb')}
+                onMouseLeave={e => (e.currentTarget.style.color = '#334155')}
+              >
+                Legal Portal →
               </Link>
             </p>
           </div>
