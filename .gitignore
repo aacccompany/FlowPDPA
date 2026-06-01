@@ -15,7 +15,6 @@ dist-ssr
 # Environment variables — never commit real secrets
 .env
 .env.*
-!.env.example
 
 # Claude Code local config
 .claude
