@@ -1,4 +1,6 @@
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
+import { AuthProvider } from '@/contexts/AuthContext'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import Navbar from '@/components/layout/Navbar'
 import Footer from '@/components/layout/Footer'
 import CookieBanner from '@/components/layout/CookieBanner'
@@ -41,28 +43,32 @@ function AnimatedRoutes() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <ScrollToTop />
-      <Routes>
-        <Route path="/admin" element={<Admin />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/create/policy" element={<CreatePolicy />} />
-        <Route
-          path="*"
-          element={
-            <>
-              <Navbar />
-              <main>
-                <AnimatedRoutes />
-              </main>
-              <Footer />
-              <CookieBanner />
-            </>
-          }
-        />
-      </Routes>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AuthProvider>
+          <ScrollToTop />
+          <Routes>
+            <Route path="/admin" element={<Admin />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/create/policy" element={<CreatePolicy />} />
+            <Route
+              path="*"
+              element={
+                <>
+                  <Navbar />
+                  <main>
+                    <AnimatedRoutes />
+                  </main>
+                  <Footer />
+                  <CookieBanner />
+                </>
+              }
+            />
+          </Routes>
+        </AuthProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   )
 }

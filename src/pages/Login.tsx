@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff, ShieldCheck } from 'lucide-react'
+import { storage } from '@/utils/storage'
 
 const DEMO_EMAIL = 'demo@flowpdpa.co.th'
 const DEMO_PASSWORD = 'demo1234'
@@ -12,24 +13,57 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (email === DEMO_EMAIL && password === DEMO_PASSWORD) {
-      localStorage.setItem('flowpdpa_auth', JSON.stringify({ email, name: 'Demo User', plan: 'Premium' }))
-      navigate('/dashboard')
-    } else {
-      const raw = localStorage.getItem('flowpdpa_reg_' + email)
-      if (raw) {
+    setError('')
+
+    try {
+      // Demo user login (for development)
+      if (email === DEMO_EMAIL && password === DEMO_PASSWORD) {
+        storage.auth.set({
+          email,
+          name: 'Demo User',
+          plan: 'Premium',
+          token: 'demo-token'
+        })
+        navigate('/dashboard')
+        return
+      }
+
+      // Check for stored registration
+      const reg = localStorage.getItem(`flowpdpa_reg_${email}`)
+      if (reg) {
         try {
-          const reg = JSON.parse(raw)
-          if (reg.password === password) {
-            localStorage.setItem('flowpdpa_auth', JSON.stringify({ email, name: reg.name, plan: 'Free' }))
+          const registrationData = JSON.parse(reg)
+          if (registrationData.password === password) {
+            storage.auth.set({
+              email,
+              name: registrationData.name,
+              plan: 'Free',
+              token: 'local-token'
+            })
             navigate('/dashboard')
             return
           }
-        } catch { /* ignore */ }
+        } catch {
+          // Invalid JSON in storage
+        }
       }
+
+      // If we want to connect to real API later:
+      // const response = await api.auth.login({ email, password })
+      // if (response.success && response.data) {
+      //   session.auth.set(response.data)
+      //   navigate('/dashboard')
+      //   return
+      // } else {
+      //   setError(response.error?.message || 'Login failed')
+      // }
+
       setError('อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง')
+    } catch (err) {
+      console.error('Login error:', err)
+      setError('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง')
     }
   }
 
