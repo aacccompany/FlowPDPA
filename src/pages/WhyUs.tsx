@@ -168,7 +168,7 @@ export default function WhyUs() {
             ใช้เวลาน้อยกว่า 5 นาที ได้ Privacy Policy ที่ถูกต้องตาม PDPA ทันที
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link to="/create/policy" className="btn-green px-10 py-3 text-sm" style={{ borderRadius: '8px' }}>
+            <Link to="/get-started" className="btn-green px-10 py-3 text-sm" style={{ borderRadius: '8px' }}>
               สร้าง Policy เลย
             </Link>
             <Link to="/support" className="btn-outline-white px-10 py-3 text-sm" style={{ borderRadius: '8px' }}>

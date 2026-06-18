@@ -5,7 +5,7 @@ import {
   LogOut, ShieldAlert, Search, ChevronLeft, CheckCircle,
   XCircle, Clock, AlertCircle, TrendingUp, DollarSign,
   Eye, Ban, Play, X, Menu, RefreshCw, Loader,
-  ArrowUpRight, ArrowDownRight, FileText,
+  ArrowUpRight, ArrowDownRight, FileText, Scale,
 } from 'lucide-react'
 
 // ── Admin credentials ─────────────────────────────────────────
@@ -1138,6 +1138,16 @@ export default function Admin() {
               <div className="text-xs truncate" style={{ color: '#334155' }}>admin@flowpdpa.co.th</div>
             </div>
           </div>
+          <Link
+            to="/legal"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mb-0.5"
+            style={{ color: '#475569' }}
+            onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'rgba(37,99,235,0.1)'; e.currentTarget.style.color = '#60a5fa' }}
+            onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#475569' }}
+          >
+            <Scale className="w-4 h-4 shrink-0" />
+            Legal Portal
+          </Link>
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"

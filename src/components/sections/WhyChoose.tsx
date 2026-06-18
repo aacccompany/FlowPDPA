@@ -30,7 +30,7 @@ export default function WhyChoose() {
               ทำไมธุรกิจไทยเลือก FlowPDPA
             </h2>
           </div>
-          <a href="/create/policy" className="btn-green text-sm px-7 py-3 shrink-0">
+          <a href="/get-started" className="btn-green text-sm px-7 py-3 shrink-0">
             เริ่มสร้าง Policy
           </a>
         </FadeUp>

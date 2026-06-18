@@ -19,6 +19,9 @@ import Register from '@/pages/Register'
 import Dashboard from '@/pages/Dashboard'
 import CreatePolicy from '@/pages/CreatePolicy'
 import Admin from '@/pages/Admin'
+import Legal from '@/pages/Legal'
+import PolicyView from '@/pages/PolicyView'
+import GetStarted from '@/pages/GetStarted'
 import NotFound from '@/pages/NotFound'
 
 function AnimatedRoutes() {
@@ -49,10 +52,13 @@ export default function App() {
           <ScrollToTop />
           <Routes>
             <Route path="/admin" element={<Admin />} />
+            <Route path="/legal" element={<Legal />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/create/policy" element={<CreatePolicy />} />
+            <Route path="/get-started" element={<GetStarted />} />
+            <Route path="/p/:slug" element={<PolicyView />} />
             <Route
               path="*"
               element={

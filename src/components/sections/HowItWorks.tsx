@@ -104,7 +104,7 @@ export default function HowItWorks() {
             <p className="text-sm" style={{ color: '#475569' }}>
               เฉลี่ยใช้เวลาน้อยกว่า <span className="text-white font-bold">5 นาที</span> ในการสร้างนโยบาย
             </p>
-            <a href="/create/policy" className="btn-green px-10 py-3 text-base shrink-0">
+            <a href="/get-started" className="btn-green px-10 py-3 text-base shrink-0">
               เริ่มสร้าง Policy เลย
             </a>
           </div>

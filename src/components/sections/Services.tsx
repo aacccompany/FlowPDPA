@@ -115,7 +115,7 @@ export default function Services() {
           <div className="bg-white px-8 py-6 text-center border-b border-gray-100">
             <h3 className="text-xl font-bold mb-2" style={{ color: 'var(--blue)' }}>{info.title}</h3>
             <p className="text-gray-600 text-sm leading-relaxed mb-2">{info.desc}</p>
-            <a href="/create/policy" className="text-sm font-medium" style={{ color: 'var(--green)' }}>
+            <a href="/get-started" className="text-sm font-medium" style={{ color: 'var(--green)' }}>
               ดูรายละเอียดและตัวอย่างเพิ่มเติม →
             </a>
           </div>
@@ -155,7 +155,7 @@ export default function Services() {
             <p className="text-sm mb-4" style={{ color: 'var(--green)' }}>
               ทุกแพ็กเกจรวมนโยบายทั้งภาษาไทยและภาษาอังกฤษในฉบับเดียว
             </p>
-            <a href="/create/policy" className="block w-full py-4 rounded text-white font-bold text-base" style={{ backgroundColor: 'var(--green)' }}>
+            <a href="/get-started" className="block w-full py-4 rounded text-white font-bold text-base" style={{ backgroundColor: 'var(--green)' }}>
               เริ่มสร้าง Policy ของคุณเดี๋ยวนี้
             </a>
           </div>

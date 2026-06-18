@@ -33,7 +33,7 @@ export default function Footer() {
             </p>
           </div>
           <Link
-            to="/create/policy"
+            to="/get-started"
             className="btn-green px-8 py-3 text-sm shrink-0"
           >
             เริ่มต้นฟรีวันนี้

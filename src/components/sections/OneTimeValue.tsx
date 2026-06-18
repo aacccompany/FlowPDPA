@@ -29,7 +29,7 @@ export default function OneTimeValue() {
             ))}
 
             <div className="flex gap-4 pt-4 flex-wrap">
-              <a href="/create/policy" className="btn-green px-8 py-3 text-base">
+              <a href="/get-started" className="btn-green px-8 py-3 text-base">
                 สร้าง Policy เลย!
               </a>
               <a href="#faq" className="btn-outline-green px-8 py-3 text-base">

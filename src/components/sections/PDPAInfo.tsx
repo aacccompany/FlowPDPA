@@ -31,7 +31,7 @@ export default function PDPAInfo() {
                 ไม่ปฏิบัติตาม มีโทษปรับทางแพ่งสูงสุด 5 ล้านบาท และโทษจำคุกสูงสุด 1 ปี
               </p>
             </div>
-            <a href="/create/policy" className="btn-green px-8 py-3 text-sm w-full text-center block" style={{ borderRadius: '8px' }}>
+            <a href="/get-started" className="btn-green px-8 py-3 text-sm w-full text-center block" style={{ borderRadius: '8px' }}>
               สร้าง Privacy Policy ตอนนี้
             </a>
           </FadeUp>

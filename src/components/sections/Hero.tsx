@@ -34,7 +34,7 @@ export default function Hero() {
             </p>
 
             <div className="flex flex-wrap gap-3 mb-12">
-              <Link to="/create/policy" className="btn-green px-8 py-3.5 text-sm">
+              <Link to="/get-started" className="btn-green px-8 py-3.5 text-sm">
                 สร้าง Policy เลย
               </Link>
               <a href="#check-website" className="btn-outline-white px-8 py-3.5 text-sm">

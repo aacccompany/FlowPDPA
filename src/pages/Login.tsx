@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { Eye, EyeOff, ShieldCheck } from 'lucide-react'
 import { storage } from '@/utils/storage'
 
@@ -8,6 +8,8 @@ const DEMO_PASSWORD = 'demo1234'
 
 export default function Login() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const from = (location.state as { from?: string } | null)?.from ?? '/dashboard'
   const [showPassword, setShowPassword] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -26,7 +28,7 @@ export default function Login() {
           plan: 'Premium',
           token: 'demo-token'
         })
-        navigate('/dashboard')
+        navigate(from)
         return
       }
 
@@ -42,7 +44,7 @@ export default function Login() {
               plan: 'Free',
               token: 'local-token'
             })
-            navigate('/dashboard')
+            navigate(from)
             return
           }
         } catch {
@@ -242,8 +244,8 @@ export default function Login() {
               </Link>
             </p>
 
-            {/* Admin link */}
-            <p className="text-center mt-3">
+            {/* Staff links */}
+            <p className="text-center mt-4 flex items-center justify-center gap-5">
               <Link
                 to="/admin"
                 className="text-xs transition-colors"
@@ -252,6 +254,16 @@ export default function Login() {
                 onMouseLeave={e => (e.currentTarget.style.color = '#334155')}
               >
                 Admin Login →
+              </Link>
+              <span className="w-1 h-1 rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.05)' }} />
+              <Link
+                to="/legal"
+                className="text-xs transition-colors"
+                style={{ color: '#334155' }}
+                onMouseEnter={e => (e.currentTarget.style.color = '#60a5fa')}
+                onMouseLeave={e => (e.currentTarget.style.color = '#334155')}
+              >
+                Legal Portal →
               </Link>
             </p>
           </div>

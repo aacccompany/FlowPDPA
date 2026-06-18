@@ -97,6 +97,12 @@ body {
 .btn-outline-green:hover { background-color: var(--green-light); }
 
 .text-green { color: var(--green); }
+
+@keyframes stepIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.step-in { animation: stepIn 0.22s ease-out both; }
 .text-blue { color: var(--blue); }
 .bg-navy { background-color: var(--navy); }
 .bg-blue-dark { background-color: var(--blue-dark); }

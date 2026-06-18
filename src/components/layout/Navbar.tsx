@@ -12,10 +12,22 @@ const navLinks = [
 export default function Navbar() {
   const [open, setOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
   const { pathname } = useLocation()
 
   const isHome = pathname === '/'
   const dark = isHome && !scrolled
+
+  useEffect(() => {
+    const check = () => setIsLoggedIn(!!localStorage.getItem('flowpdpa_auth'))
+    check()
+    window.addEventListener('storage', check)
+    return () => window.removeEventListener('storage', check)
+  }, [])
+
+  useEffect(() => {
+    setIsLoggedIn(!!localStorage.getItem('flowpdpa_auth'))
+  }, [pathname])
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40)
@@ -62,7 +74,7 @@ export default function Navbar() {
 
           <div className="flex items-center gap-2">
             <Link
-              to="/login"
+              to={isLoggedIn ? '/dashboard' : '/login'}
               className="hidden sm:inline-flex items-center text-sm font-semibold px-4 py-2 transition-all"
               style={{
                 color: dark ? 'rgba(255,255,255,0.7)' : '#374151',
@@ -78,10 +90,10 @@ export default function Navbar() {
                 e.currentTarget.style.borderColor = dark ? 'rgba(255,255,255,0.2)' : '#d1d5db'
               }}
             >
-              เข้าสู่ระบบ
+              {isLoggedIn ? 'Dashboard' : 'เข้าสู่ระบบ'}
             </Link>
             <Link
-              to="/create/policy"
+              to="/get-started"
               className="hidden sm:inline-flex items-center text-sm font-bold text-white px-5 py-2 transition-opacity hover:opacity-90"
               style={{ backgroundColor: 'var(--green)', borderRadius: '6px' }}
             >
@@ -112,14 +124,14 @@ export default function Navbar() {
           ))}
           <div className="pt-2 mt-1 border-t border-gray-100 flex flex-col gap-2">
             <Link
-              to="/login"
+              to={isLoggedIn ? '/dashboard' : '/login'}
               className="text-sm font-semibold text-gray-700 py-2.5 w-full text-center block border border-gray-200 rounded"
               style={{ borderRadius: '6px' }}
               onClick={() => setOpen(false)}
             >
-              เข้าสู่ระบบ
+              {isLoggedIn ? 'Dashboard' : 'เข้าสู่ระบบ'}
             </Link>
-            <Link to="/create/policy" className="btn-green text-sm py-2.5 w-full text-center block" style={{ borderRadius: '6px' }} onClick={() => setOpen(false)}>
+            <Link to="/get-started" className="btn-green text-sm py-2.5 w-full text-center block" style={{ borderRadius: '6px' }} onClick={() => setOpen(false)}>
               Get Started
             </Link>
           </div>

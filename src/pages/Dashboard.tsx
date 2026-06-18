@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, FileText, Plus, Settings, LogOut, Bell,
-  ChevronRight, Download, Copy, Pencil,
+  ChevronRight, Download, Copy,
   Trash2, CheckCircle, Clock, Globe, Lock, X, ShieldCheck,
   LifeBuoy, ExternalLink, AlertCircle, Loader, XCircle, ShieldAlert,
 } from 'lucide-react'
 import { type TicketRecord } from '@/api/helpdesk'
 import { fetchContact, updateContact, defaultProfile, type ContactProfile } from '@/api/contact'
+import { policyStorage, type SavedPolicy } from '@/utils/policyStorage'
 
 // ── Auth helper ───────────────────────────────────────────────
 type AuthUser = { name: string; email: string; plan: string; company?: string; phone?: string }
@@ -20,28 +21,17 @@ function getCurrentUser(): AuthUser {
   return { name: 'User', email: '', plan: 'Free' }
 }
 
-// ── Mock data ────────────────────────────────────────────────
+// ── Policy helpers ───────────────────────────────────────────
 
-const policies = [
-  {
-    id: 1,
-    name: 'Privacy + Cookies Policy',
-    domain: 'mysite.com',
-    lang: 'TH + EN',
-    status: 'Active',
-    updated: '12 May 2025',
-    type: 'privacy',
-  },
-  {
-    id: 3,
-    name: 'HR Privacy Policy',
-    domain: 'hr.mycompany.co.th',
-    lang: 'TH',
-    status: 'Draft',
-    updated: '—',
-    type: 'hr',
-  },
-]
+const langDisplay: Record<string, string> = {
+  th:   'TH',
+  en:   'EN',
+  both: 'TH + EN',
+}
+
+function getUserPolicies(email: string): SavedPolicy[] {
+  return policyStorage.getAll(email)
+}
 
 
 // ── Sidebar nav items ─────────────────────────────────────────
@@ -54,32 +44,40 @@ const navItems = [
 ]
 
 // ── Helpers ───────────────────────────────────────────────────
+const statusDisplay: Record<string, { label: string; color: string; bg: string }> = {
+  pending_review:    { label: 'Review',             color: '#d97706', bg: 'rgba(217,119,6,0.1)' },
+  approved:          { label: 'Reviewed',           color: '#059669', bg: 'rgba(5,150,105,0.12)' },
+  rejected:          { label: 'Rejected',           color: '#dc2626', bg: 'rgba(220,38,38,0.1)' },
+  edited:            { label: 'Edited',             color: '#7c3aed', bg: 'rgba(124,58,237,0.1)' },
+  Draft:             { label: 'Draft',              color: '#64748b', bg: 'rgba(100,116,139,0.1)' },
+  Active:            { label: 'Active',             color: '#059669', bg: 'rgba(5,150,105,0.12)' },
+}
+
 function StatusBadge({ status }: { status: string }) {
-  const active = status === 'Active'
+  const cfg = statusDisplay[status] ?? { label: status, color: '#64748b', bg: 'rgba(100,116,139,0.1)' }
   return (
     <span
       className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full"
-      style={{
-        backgroundColor: active ? 'rgba(5,150,105,0.12)' : 'rgba(100,116,139,0.12)',
-        color: active ? 'var(--green)' : '#64748b',
-      }}
+      style={{ backgroundColor: cfg.bg, color: cfg.color }}
     >
-      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: active ? 'var(--green)' : '#64748b' }} />
-      {status}
+      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: cfg.color }} />
+      {cfg.label}
     </span>
   )
 }
 
 // ── Sub-views ─────────────────────────────────────────────────
 function Overview({ setView, user }: { setView: (v: string) => void; user: AuthUser }) {
+  const userPolicies  = getUserPolicies(user.email)
+  const activePolicies = userPolicies.filter(p => p.status === 'approved').length
   const userTickets   = getUserTickets(user.email)
   const openTickets   = userTickets.filter(t => t.status === 'open' || t.status === 'in_progress').length
 
   const stats = [
-    { label: 'นโยบายทั้งหมด',  value: '3',           Icon: FileText,    color: 'var(--blue)' },
-    { label: 'Active Policies', value: '2',           Icon: CheckCircle, color: 'var(--green)' },
-    { label: 'PDPA Status',     value: 'Compliant',   Icon: ShieldCheck, color: 'var(--green)' },
-    { label: 'Tickets (เปิด)',  value: String(openTickets), Icon: LifeBuoy, color: '#f59e0b' },
+    { label: 'นโยบายทั้งหมด',  value: String(userPolicies.length || 0), Icon: FileText,    color: 'var(--blue)' },
+    { label: 'อนุมัติแล้ว',      value: String(activePolicies || 0),       Icon: CheckCircle, color: 'var(--green)' },
+    { label: 'PDPA Status',     value: 'Compliant',                        Icon: ShieldCheck, color: 'var(--green)' },
+    { label: 'Tickets (เปิด)',  value: String(openTickets),               Icon: LifeBuoy,    color: '#f59e0b' },
   ]
 
   return (
@@ -120,30 +118,39 @@ function Overview({ setView, user }: { setView: (v: string) => void; user: AuthU
             ดูทั้งหมด <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
-        <div className="divide-y divide-gray-50">
-          {policies.map((p) => (
-            <div key={p.id} className="flex items-center justify-between px-6 py-4">
-              <div className="flex items-center gap-3">
-                <div
-                  className="w-8 h-8 rounded-lg flex items-center justify-center text-sm"
-                  style={{ backgroundColor: '#f8fafc' }}
-                >
-                  {p.type === 'privacy' ? '🔒' : '👥'}
-                </div>
-                <div>
-                  <div className="text-sm font-semibold text-gray-900">{p.name}</div>
-                  <div className="text-xs text-gray-400 flex items-center gap-1">
-                    <Globe className="w-3 h-3" /> {p.domain}
+        {userPolicies.length === 0 ? (
+          <div className="px-6 py-8 text-center">
+            <p className="text-xs text-gray-400 mb-3">ยังไม่มีนโยบาย</p>
+            <Link to="/create/policy" className="text-xs font-semibold underline" style={{ color: 'var(--green)' }}>
+              สร้างนโยบายแรก →
+            </Link>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {userPolicies.slice(0, 3).map((p) => (
+              <div key={p.id} className="flex items-center justify-between px-6 py-4">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-8 h-8 rounded-lg flex items-center justify-center text-sm"
+                    style={{ backgroundColor: '#f8fafc' }}
+                  >
+                    {p.typeIcon}
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-gray-900">{p.typeName}</div>
+                    <div className="text-xs text-gray-400 flex items-center gap-1">
+                      <Globe className="w-3 h-3" /> {p.domain}
+                    </div>
                   </div>
                 </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-xs text-gray-400 hidden sm:block">{langDisplay[p.language] || p.language}</span>
+                  <StatusBadge status={p.status} />
+                </div>
               </div>
-              <div className="flex items-center gap-4">
-                <span className="text-xs text-gray-400 hidden sm:block">{p.lang}</span>
-                <StatusBadge status={p.status} />
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Recent tickets */}
@@ -214,12 +221,38 @@ function Overview({ setView, user }: { setView: (v: string) => void; user: AuthU
   )
 }
 
-function PoliciesList() {
-  const [copied, setCopied] = useState<number | null>(null)
+function PoliciesList({ user }: { user: AuthUser }) {
+  const [policies, setPolicies] = useState<SavedPolicy[]>([])
+  const [copied, setCopied] = useState<string | null>(null)
 
-  const handleCopy = (id: number) => {
-    setCopied(id)
+  useEffect(() => {
+    setPolicies(getUserPolicies(user.email))
+  }, [user.email])
+
+  const handleCopy = (p: SavedPolicy) => {
+    const url = `${window.location.origin}/p/${p.slug}`
+    navigator.clipboard.writeText(url).catch(() => {
+      const ta = document.createElement('textarea')
+      ta.value = url
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta)
+    })
+    setCopied(p.id)
     setTimeout(() => setCopied(null), 2000)
+  }
+
+  const handleDownload = (p: SavedPolicy) => {
+    const text = p.htmlContent.replace(/<[^>]+>/g, '').replace(/\s{2,}/g, '\n').trim()
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `${p.websiteName}-${p.type}-policy.txt`; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleDelete = (p: SavedPolicy) => {
+    if (!confirm(`ลบนโยบาย "${p.typeName}" ของ ${p.websiteName}?`)) return
+    policyStorage.delete(p.id, user.email)
+    setPolicies(getUserPolicies(user.email))
   }
 
   return (
@@ -238,110 +271,152 @@ function PoliciesList() {
         </Link>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-        {/* Table header */}
-        <div className="hidden md:grid grid-cols-12 gap-4 px-6 py-3 bg-gray-50 border-b border-gray-100 text-xs font-semibold uppercase tracking-wider text-gray-400">
-          <div className="col-span-4">ชื่อนโยบาย</div>
-          <div className="col-span-2">โดเมน</div>
-          <div className="col-span-1">ภาษา</div>
-          <div className="col-span-2">สถานะ</div>
-          <div className="col-span-2">อัปเดตล่าสุด</div>
-          <div className="col-span-1 text-right">จัดการ</div>
-        </div>
-
-        {/* Rows */}
-        {policies.map((p, i) => (
+      {policies.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-100 p-14 text-center">
           <div
-            key={p.id}
-            className={`grid grid-cols-2 md:grid-cols-12 gap-4 px-6 py-4 items-center ${i < policies.length - 1 ? 'border-b border-gray-50' : ''} hover:bg-gray-50 transition-colors`}
+            className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4"
+            style={{ backgroundColor: '#f1f5f9' }}
           >
-            {/* Name */}
-            <div className="col-span-2 md:col-span-4 flex items-center gap-3">
-              <div
-                className="w-9 h-9 rounded-lg flex items-center justify-center text-base shrink-0"
-                style={{ backgroundColor: '#f1f5f9' }}
-              >
-                {p.type === 'privacy' ? '🔒' : '👥'}
-              </div>
-              <div>
-                <div className="text-sm font-semibold text-gray-900">{p.name}</div>
-                <div className="text-xs text-gray-400 md:hidden">{p.domain}</div>
-              </div>
-            </div>
-
-            {/* Domain */}
-            <div className="hidden md:flex md:col-span-2 items-center gap-1 text-xs text-gray-500">
-              <Globe className="w-3 h-3 shrink-0" /> {p.domain}
-            </div>
-
-            {/* Lang */}
-            <div className="hidden md:block md:col-span-1 text-xs text-gray-500">{p.lang}</div>
-
-            {/* Status */}
-            <div className="md:col-span-2">
-              <StatusBadge status={p.status} />
-            </div>
-
-            {/* Updated */}
-            <div className="hidden md:block md:col-span-2 text-xs text-gray-400">{p.updated}</div>
-
-            {/* Actions */}
-            <div className="col-span-1 flex items-center justify-end gap-1">
-              <button
-                title="คัดลอกลิงก์"
-                onClick={() => handleCopy(p.id)}
-                className="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
-                style={{ color: copied === p.id ? 'var(--green)' : '#9ca3af' }}
-                onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f3f4f6')}
-                onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-              >
-                <Copy className="w-3.5 h-3.5" />
-              </button>
-              <button
-                title="ดาวน์โหลด"
-                className="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
-                style={{ color: '#9ca3af' }}
-                onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#f3f4f6'; e.currentTarget.style.color = '#374151' }}
-                onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#9ca3af' }}
-              >
-                <Download className="w-3.5 h-3.5" />
-              </button>
-              <button
-                title="แก้ไข"
-                className="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
-                style={{ color: '#9ca3af' }}
-                onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#f3f4f6'; e.currentTarget.style.color = '#374151' }}
-                onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#9ca3af' }}
-              >
-                <Pencil className="w-3.5 h-3.5" />
-              </button>
-              <button
-                title="ลบ"
-                className="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
-                style={{ color: '#9ca3af' }}
-                onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#fef2f2'; e.currentTarget.style.color = '#ef4444' }}
-                onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#9ca3af' }}
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
+            <FileText className="w-6 h-6 text-gray-300" />
           </div>
-        ))}
-      </div>
+          <p className="text-sm font-semibold text-gray-500 mb-1">ยังไม่มีนโยบาย</p>
+          <p className="text-xs text-gray-400 mb-5">สร้างนโยบาย PDPA สำหรับธุรกิจของคุณใน 5 นาที</p>
+          <Link to="/create/policy" className="btn-green text-sm px-6 py-2.5" style={{ borderRadius: '8px' }}>
+            สร้างนโยบายแรก
+          </Link>
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+          {/* Table header */}
+          <div className="hidden md:grid grid-cols-12 gap-4 px-6 py-3 bg-gray-50 border-b border-gray-100 text-xs font-semibold uppercase tracking-wider text-gray-400">
+            <div className="col-span-4">ชื่อนโยบาย</div>
+            <div className="col-span-2">โดเมน</div>
+            <div className="col-span-1">ภาษา</div>
+            <div className="col-span-2">สถานะ</div>
+            <div className="col-span-2">อัปเดตล่าสุด</div>
+            <div className="col-span-1 text-right">จัดการ</div>
+          </div>
 
-      {/* Export formats note */}
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <span className="text-xs text-gray-400">รูปแบบดาวน์โหลดที่รองรับ:</span>
-        {['PDF', 'Word (.docx)', 'TXT', 'HTML Embed'].map((f) => (
-          <span
-            key={f}
-            className="text-xs font-medium px-2.5 py-1 rounded-full border"
-            style={{ borderColor: '#e5e7eb', color: '#6b7280' }}
-          >
-            {f}
-          </span>
-        ))}
-      </div>
+          {/* Rows */}
+          {policies.map((p, i) => (
+            <div
+              key={p.id}
+              className={`grid grid-cols-2 md:grid-cols-12 gap-4 px-6 py-4 items-center ${i < policies.length - 1 ? 'border-b border-gray-50' : ''} hover:bg-gray-50 transition-colors`}
+            >
+              {/* Name */}
+              <div className="col-span-2 md:col-span-4 flex items-center gap-3">
+                <div
+                  className="w-9 h-9 rounded-lg flex items-center justify-center text-base shrink-0"
+                  style={{ backgroundColor: '#f1f5f9' }}
+                >
+                  {p.typeIcon}
+                </div>
+                <div>
+                  {p.status === 'approved' ? (
+                    <a
+                      href={`/p/${p.slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-semibold text-gray-900 hover:underline"
+                      style={{ textDecorationColor: 'var(--green)' }}
+                    >
+                      {p.typeName}
+                    </a>
+                  ) : (
+                    <span className="text-sm font-semibold text-gray-900">{p.typeName}</span>
+                  )}
+                  <div className="text-xs text-gray-400 md:hidden">{p.domain}</div>
+                </div>
+              </div>
+
+              {/* Domain */}
+              <div className="hidden md:flex md:col-span-2 items-center gap-1 text-xs text-gray-500">
+                <Globe className="w-3 h-3 shrink-0" /> {p.domain}
+              </div>
+
+              {/* Lang */}
+              <div className="hidden md:block md:col-span-1 text-xs text-gray-500">
+                {langDisplay[p.language] || p.language}
+              </div>
+
+              {/* Status */}
+              <div className="md:col-span-2">
+                <StatusBadge status={p.status} />
+              </div>
+
+              {/* Updated */}
+              <div className="hidden md:block md:col-span-2 text-xs text-gray-400">
+                {new Date(p.updatedAt).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </div>
+
+              {/* Actions */}
+              <div className="col-span-1 flex items-center justify-end gap-1">
+                {p.status === 'approved' && (
+                  <>
+                    <button
+                      title="คัดลอกลิงก์"
+                      onClick={() => handleCopy(p)}
+                      className="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
+                      style={{ color: copied === p.id ? 'var(--green)' : '#9ca3af' }}
+                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f3f4f6')}
+                      onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      title="ดาวน์โหลด TXT"
+                      onClick={() => handleDownload(p)}
+                      className="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
+                      style={{ color: '#9ca3af' }}
+                      onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#f3f4f6'; e.currentTarget.style.color = '#374151' }}
+                      onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#9ca3af' }}
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                    <a
+                      href={`/p/${p.slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="ดูนโยบาย"
+                      className="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
+                      style={{ color: '#9ca3af' }}
+                      onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#f3f4f6'; e.currentTarget.style.color = '#374151' }}
+                      onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#9ca3af' }}
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </>
+                )}
+                <button
+                  title="ลบ"
+                  onClick={() => handleDelete(p)}
+                  className="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
+                  style={{ color: '#9ca3af' }}
+                  onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#fef2f2'; e.currentTarget.style.color = '#ef4444' }}
+                  onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#9ca3af' }}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {policies.length > 0 && (
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <span className="text-xs text-gray-400">รูปแบบดาวน์โหลดที่รองรับ:</span>
+          {['TXT', 'HTML Embed (เร็วๆ นี้)', 'PDF (เร็วๆ นี้)', 'Word (เร็วๆ นี้)'].map((f) => (
+            <span
+              key={f}
+              className="text-xs font-medium px-2.5 py-1 rounded-full border"
+              style={{ borderColor: '#e5e7eb', color: '#6b7280' }}
+            >
+              {f}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -909,7 +984,7 @@ export default function Dashboard() {
           {/* Page content */}
           <main className="flex-1 p-6">
             {activeView === 'overview'  && <Overview setView={setActiveView} user={user} />}
-            {activeView === 'policies'  && <PoliciesList />}
+            {activeView === 'policies'  && <PoliciesList user={user} />}
             {activeView === 'tickets'   && <TicketsList user={user} />}
             {activeView === 'settings'  && <AccountSettings user={user} />}
           </main>

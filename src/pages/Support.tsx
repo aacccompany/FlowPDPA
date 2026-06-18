@@ -30,7 +30,7 @@ const channels = [
 const quickLinks = [
   { Icon: FileText, label: 'ดูคำถามที่พบบ่อย', to: '/faq' },
   { Icon: HelpCircle, label: 'วิธีนำ Policy ไปใช้บนเว็บไซต์', to: '/faq' },
-  { Icon: FileText, label: 'สร้าง Policy ของคุณ', to: '/create/policy' },
+  { Icon: FileText, label: 'สร้าง Policy ของคุณ', to: '/get-started' },
   { Icon: HelpCircle, label: 'ส่งคำขอรับการสนับสนุน (Helpdesk)', to: '/helpdesk' },
 ]
 
