@@ -17,11 +17,13 @@ import Helpdesk from '@/pages/Helpdesk'
 import HelpdeskTrack from '@/pages/HelpdeskTrack'
 import Login from '@/pages/Login'
 import Register from '@/pages/Register'
+import ForgotPassword from '@/pages/ForgotPassword'
 import Dashboard from '@/pages/Dashboard'
 import CreatePolicy from '@/pages/CreatePolicy'
 import Admin from '@/pages/Admin'
 import Legal from '@/pages/Legal'
 import PolicyView from '@/pages/PolicyView'
+import PolicyEdit from '@/pages/PolicyEdit'
 import NotFound from '@/pages/NotFound'
 import { roleHome, type UserRole } from '@/utils/storage'
 
@@ -99,7 +101,9 @@ export default function App() {
             <Route path="/legal" element={<ProtectedRoute roles={['legal']}><Legal /></ProtectedRoute>} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/dashboard" element={<ProtectedRoute roles={['merchant']}><Dashboard /></ProtectedRoute>} />
+            <Route path="/dashboard/policies/:policyId" element={<ProtectedRoute roles={['merchant']}><VerifiedRoute><PolicyEdit /></VerifiedRoute></ProtectedRoute>} />
             <Route path="/create/policy" element={<ProtectedRoute roles={['merchant']}><VerifiedRoute><CreatePolicy /></VerifiedRoute></ProtectedRoute>} />
             <Route path="/get-started" element={<Navigate to="/login" replace state={{ from: '/create/policy' }} />} />
             <Route path="/p/:slug" element={<PolicyView />} />

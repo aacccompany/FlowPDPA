@@ -89,7 +89,7 @@ Successful response shapes are endpoint-specific. Some return `{ "success": true
 │                                                                         │
 │  3. ADMIN LOGIN                                                        │
 │     ┌─────────────────────────────────────────────────────────────────┐ │
-│     │ POST /auth/admin-login                                         │ │
+│     │ POST /auth/login (merchant, legal, admin)                      │ │
 │     │ Request: { email: "admin@flowpdpa.co.th", password }           │ │
 │     │ Response: { token, role: "admin" }                              │ │
 │     └─────────────────────────────────────────────────────────────────┘ │
@@ -237,7 +237,8 @@ Response 200:
       "email": "demo@flowpdpa.co.th",
       "plan": "Premium",
       "company": "Demo Company",
-      "phone": "02-xxx-xxxx"
+      "phone": "02-xxx-xxxx",
+      "role": "merchant"
     },
     "token": "jwt_access_token",
     "refresh_token": "jwt_refresh_token",
@@ -256,33 +257,13 @@ Response 401:
 }
 ```
 
-#### 1.3 Admin Login
-```http
-POST /auth/admin-login
-Content-Type: application/json
+#### 1.3 Role-Based Login Routing
 
-{
-  "email": "admin@flowpdpa.co.th",
-  "password": "admin2025"
-}
+`POST /auth/login` is the only login endpoint. It authenticates `merchant`, `legal`, and `admin` accounts and returns `data.user.role`.
 
-Response 200:
-{
-  "success": true,
-  "data": {
-    "user": {
-      "id": "admin_user_id",
-      "email": "admin@flowpdpa.co.th",
-      "name": "Admin User",
-      "role": "admin"
-    },
-    "token": "jwt_admin_access_token",
-    "refresh_token": "jwt_admin_refresh_token",
-    "token_type": "bearer",
-    "expires_in": 900
-  }
-}
-```
+- `merchant` -> `/dashboard`
+- `legal` -> `/legal`
+- `admin` -> `/admin`
 
 #### 1.4 Verify Token (for protected routes)
 ```http
@@ -342,6 +323,51 @@ Content-Type: application/json
 
 Response 200 returns `access_token`, rotated `refresh_token`, `token_type`, and `expires_in`. This response is not wrapped in `success/data`.
 
+#### 1.8 Request Password Reset
+```http
+POST /auth/password-reset/request
+Content-Type: application/json
+
+{
+  "email": "john@example.com"
+}
+```
+
+Always returns the same `200` response so callers cannot discover registered emails. A real account receives a six-digit code that expires after 10 minutes. Resend has a 60-second cooldown and a maximum of five sends per reset window.
+
+```json
+{
+  "success": true,
+  "data": {
+    "expiresIn": 600,
+    "canResendIn": 60
+  }
+}
+```
+
+#### 1.9 Confirm Password Reset
+```http
+POST /auth/password-reset/confirm
+Content-Type: application/json
+
+{
+  "email": "john@example.com",
+  "otp": "123456",
+  "newPassword": "newSecurePassword123"
+}
+```
+
+The code is single-use and allows at most five failed attempts. Success updates the password hash and removes the reset state from Redis.
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Password changed successfully"
+  }
+}
+```
+
 ---
 
 ### 2. Policy + Legal Review APIs
@@ -381,6 +407,7 @@ interface SavedPolicy {
   updatedAt: string
   htmlContent: string
   htmlContentByLanguage: { th: string | null; en: string | null }
+  contentByLanguage?: { th: string | null; en: string | null } // raw Markdown, included in authenticated detail responses for Legal editing
   ownerEmail: string
   ownerName?: string
   reviewComment?: string | null
@@ -618,31 +645,10 @@ Response 200:
 ```
 
 #### 2.4 Legal Login
-```http
-POST /legal/auth/login
-Content-Type: application/json
 
-{
-  "email": "legal-user@example.com",
-  "password": "securePassword123"
-}
-```
+Legal users sign in through the shared `POST /auth/login` endpoint from Section 1.2. The frontend reads `data.user.role = "legal"` and routes the user to `/legal`.
 
-Response 200:
-
-```json
-{
-  "user": {
-    "id": "legal_uuid",
-    "email": "legal-user@example.com",
-    "name": "Legal Reviewer",
-    "role": "legal"
-  },
-  "token": "legal_jwt_token"
-}
-```
-
-Admin creates legal accounts through `POST /admin/legal-users`. The legacy `legal@flowpdpa.co.th` credentials are available only when `DEBUG=true`.
+Admin creates legal accounts through `POST /admin/legal-users`.
 
 #### 2.5 Merchant Creates Policy Change Request
 Used after a customer/data subject contacts the merchant and the merchant verifies that the policy should be reviewed. This request goes directly to FlowPDPA legal with `status = pending_review`.

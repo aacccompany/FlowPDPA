@@ -21,10 +21,6 @@ export const authApi = {
     apiRequest<AuthPayload>(API_ENDPOINTS.auth.login, {
       method: 'POST', body: data, authenticated: false,
     }),
-  adminLogin: (data: { email: string; password: string }) =>
-    apiRequest<AuthPayload>(API_ENDPOINTS.auth.adminLogin, {
-      method: 'POST', body: data, authenticated: false,
-    }),
   register: {
     initiate: (data: RegisterRequest) =>
       apiRequest<RegistrationStarted>(API_ENDPOINTS.auth.register, {
@@ -42,5 +38,15 @@ export const authApi = {
   },
   verify: () => apiRequest<{ valid: boolean; user: ApiUser }>(API_ENDPOINTS.auth.verifyToken),
   refreshToken: refreshAccessToken,
+  passwordReset: {
+    request: (data: { email: string }) =>
+      apiRequest<{ expiresIn: number; canResendIn: number }>(API_ENDPOINTS.auth.requestPasswordReset, {
+        method: 'POST', body: data, authenticated: false,
+      }),
+    confirm: (data: { email: string; otp: string; newPassword: string }) =>
+      apiRequest<{ message: string }>(API_ENDPOINTS.auth.confirmPasswordReset, {
+        method: 'POST', body: data, authenticated: false,
+      }),
+  },
   logout: () => storage.auth.clear(),
 }

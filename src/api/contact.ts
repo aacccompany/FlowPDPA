@@ -1,5 +1,5 @@
-import { storage } from '@/utils/storage'
 import { api } from '@/services/api'
+import type { UserProfile } from '@/services/api'
 
 export interface ContactProfile {
   name: string
@@ -29,11 +29,9 @@ export const defaultProfile = (): ContactProfile => ({
 export const fetchContact = async (email: string): Promise<ContactProfile | null> => {
   void email
   const response = await api.profile.get()
-  if (!response.success || !response.data || typeof response.data !== 'object') return null
-  const profile = response.data as Record<string, unknown>
-  const address = profile.address && typeof profile.address === 'object'
-    ? profile.address as Record<string, unknown>
-    : {}
+  if (!response.success || !response.data) throw new Error(response.error?.message || 'Unable to load profile')
+  const profile = response.data
+  const address = profile.address
   return {
     ...defaultProfile(),
     name: String(profile.name ?? ''),
@@ -54,8 +52,8 @@ export const fetchContact = async (email: string): Promise<ContactProfile | null
   }
 }
 
-export const updateContact = async (_email: string, profile: ContactProfile): Promise<void> => {
-  await api.profile.update({
+export const updateContact = async (_email: string, profile: ContactProfile): Promise<UserProfile> => {
+  const response = await api.profile.update({
     name: profile.name,
     function: profile.function,
     phone: profile.phone,
@@ -73,14 +71,6 @@ export const updateContact = async (_email: string, profile: ContactProfile): Pr
       country: profile.country_name,
     },
   })
-  const auth = storage.auth.get()
-  if (auth) {
-    storage.auth.set({
-      ...auth,
-      name: profile.name,
-      email: profile.email,
-      phone: profile.phone,
-      company: profile.company_name,
-    })
-  }
+  if (!response.success || !response.data) throw new Error(response.error?.message || 'Unable to update profile')
+  return response.data
 }

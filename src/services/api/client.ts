@@ -6,11 +6,14 @@ const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.
 
 const parseError = (payload: unknown, status: number): ApiError => {
   const body = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {}
-  const nested = body.error && typeof body.error === 'object'
-    ? body.error as Record<string, unknown>
-    : body.detail && typeof body.detail === 'object'
-      ? body.detail as Record<string, unknown>
-      : body
+  const detail = body.detail && typeof body.detail === 'object'
+    ? body.detail as Record<string, unknown>
+    : body
+  const nested = detail.error && typeof detail.error === 'object'
+    ? detail.error as Record<string, unknown>
+    : body.error && typeof body.error === 'object'
+      ? body.error as Record<string, unknown>
+      : detail
 
   return {
     code: typeof nested.code === 'string' ? nested.code : `HTTP_${status}`,

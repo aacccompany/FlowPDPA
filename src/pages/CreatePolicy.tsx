@@ -2,9 +2,10 @@ import { useState, useCallback, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Check, ChevronRight, ChevronLeft, X, Clock, CheckCircle, ShieldCheck, Search, Loader2, Building2, AlertCircle, UserRound, Languages } from 'lucide-react'
 import { PolicyTypeIcon } from '@/components/policy/PolicyTypeIcon'
-import { isValidEmail, isValidThaiPhone, sanitizeThaiPhone } from '@/utils/validation'
+import { isValidEmail, isValidThaiPhone, isValidWebsiteUrl, normalizeWebsiteUrl, sanitizeThaiPhone } from '@/utils/validation'
 import { storage } from '@/utils/storage'
 import { api } from '@/services/api'
+import type { PolicyQuestionnaire } from '@/services/api'
 
 // ── Thai RD Company Lookup ────────────────────────────────────
 // Replace with real Thai RD VAT API calls via your backend proxy
@@ -910,13 +911,13 @@ function Step6({ data }: { data: FormData }) {
   )
 }
 
-function WaitingReviewScreen({ data, slug, onReset }: { data: FormData; slug: string; onReset: () => void }) {
+function WaitingReviewScreen({ data, slug, processing, error, onRetry, onReset }: { data: FormData; slug: string; processing: boolean; error: string; onRetry: () => void; onReset: () => void }) {
   const policy = policyTypes.find(p => p.key === data.policyType)
-  const refId = slug.split('-').pop()?.toUpperCase() || '------'
+  const refId = processing ? 'กำลังสร้าง...' : slug.split('-').pop()?.toUpperCase() || '------'
 
   const reviewSteps = [
-    { icon: CheckCircle, label: 'ส่งข้อมูลเรียบร้อย',    done: true },
-    { icon: Clock,        label: 'รอทีมกฎหมายตรวจสอบ', done: false, active: true },
+    { icon: processing ? Loader2 : CheckCircle, label: processing ? 'AI กำลังสร้างร่าง' : 'ส่งข้อมูลเรียบร้อย', done: !processing, active: processing },
+    { icon: Clock,        label: 'รอทีมกฎหมายตรวจสอบ', done: false, active: !processing && !error },
     { icon: ShieldCheck,  label: 'อนุมัติและเผยแพร่',   done: false },
   ]
 
@@ -928,17 +929,15 @@ function WaitingReviewScreen({ data, slug, onReset }: { data: FormData; slug: st
         className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"
         style={{ backgroundColor: 'rgba(245,158,11,0.1)', border: '2px solid rgba(245,158,11,0.2)' }}
       >
-        <Clock className="w-10 h-10" style={{ color: '#f59e0b' }} />
+        {processing ? <Loader2 className="w-10 h-10 animate-spin" style={{ color: '#f59e0b' }} /> : error ? <AlertCircle className="w-10 h-10 text-red-500" /> : <Clock className="w-10 h-10" style={{ color: '#f59e0b' }} />}
       </div>
 
-      <h2 className="text-2xl font-black text-gray-900 mb-2">รอการตรวจสอบจากทีมกฎหมาย</h2>
+      <h2 className="text-2xl font-black text-gray-900 mb-2">{processing ? 'AI กำลังจัดทำร่างนโยบาย' : error ? 'สร้างร่างนโยบายไม่สำเร็จ' : 'รอการตรวจสอบจากทีมกฎหมาย'}</h2>
       <p className="text-sm text-gray-500 mb-1 flex items-center justify-center gap-1.5 flex-wrap">
         <PolicyTypeIcon type={policy?.key ?? 'privacy'} className="w-4 h-4" />
         <strong>{policy?.label}</strong> สำหรับ <strong>{data.websiteName}</strong>
       </p>
-      <p className="text-xs text-gray-400 mb-8">
-        ทีมกฎหมายจะตรวจสอบและอนุมัตินโยบายของคุณภายใน 1–2 วันทำการ
-      </p>
+      <p className="text-xs text-gray-400 mb-8">{processing ? 'คุณอยู่ในหน้าสถานะแล้ว ไม่ต้องรออยู่ที่แบบฟอร์ม หน้านี้จะอัปเดตเมื่อร่างพร้อม' : error ? error : 'ทีมกฎหมายจะตรวจสอบและอนุมัตินโยบายของคุณภายใน 1–2 วันทำการ'}</p>
 
       {/* Reference ID */}
       <div
@@ -992,11 +991,9 @@ function WaitingReviewScreen({ data, slug, onReset }: { data: FormData; slug: st
         className="text-left px-5 py-4 rounded-xl mb-8 text-sm space-y-2"
         style={{ backgroundColor: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)' }}
       >
-        <p className="font-semibold text-gray-700">ขั้นตอนถัดไป</p>
+        <p className="font-semibold text-gray-700">{processing ? 'กำลังดำเนินการ' : 'ขั้นตอนถัดไป'}</p>
         <ul className="space-y-1 text-xs text-gray-500 list-disc list-inside">
-          <li>ทีมกฎหมายจะรับข้อมูลและเริ่มตรวจสอบโดยเร็ว</li>
-          <li>ผลการตรวจสอบจะแสดงในหน้า Dashboard ของคุณ</li>
-          <li>คุณจะได้รับแจ้งเมื่อนโยบายได้รับการอนุมัติ</li>
+          {processing ? <><li>AI กำลังสร้างเนื้อหาภาษาไทยและภาษาอังกฤษตามที่เลือก</li><li>เมื่อร่างพร้อม ระบบจะส่งให้ทีมกฎหมายโดยอัตโนมัติ</li><li>คุณสามารถกลับ Dashboard ได้โดยไม่ต้องเปิดหน้านี้ค้างไว้</li></> : <><li>ทีมกฎหมายจะรับข้อมูลและเริ่มตรวจสอบโดยเร็ว</li><li>ผลการตรวจสอบจะแสดงในหน้า Dashboard ของคุณ</li><li>คุณจะได้รับแจ้งเมื่อนโยบายได้รับการอนุมัติ</li></>}
         </ul>
       </div>
 
@@ -1009,15 +1006,16 @@ function WaitingReviewScreen({ data, slug, onReset }: { data: FormData; slug: st
         >
           กลับ Dashboard
         </Link>
-        <button
+        {error ? <button onClick={onRetry} className="btn-green px-8 py-3 text-sm" style={{ borderRadius: '8px' }}>ลองสร้างอีกครั้ง</button> : <button
           onClick={onReset}
+          disabled={processing}
           className="px-8 py-3 text-sm font-bold border-2 rounded-lg transition-colors"
           style={{ borderColor: '#e5e7eb', color: '#6b7280', borderRadius: '8px' }}
           onMouseEnter={e => { e.currentTarget.style.borderColor = '#d1d5db'; e.currentTarget.style.color = '#374151' }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.color = '#6b7280' }}
         >
           ส่งข้อมูลนโยบายอื่น
-        </button>
+        </button>}
       </div>
     </div>
   )
@@ -1070,7 +1068,7 @@ export default function CreatePolicy() {
     if (step === 1) return data.policyType !== null && data.agreedToTerms
     if (step === 2) {
       const contactIsValid = isValidEmail(data.contactEmail) && (!data.contactPhone || isValidThaiPhone(data.contactPhone))
-      const base = !!(data.websiteName && data.websiteUrl && contactIsValid)
+      const base = !!(data.websiteName && isValidWebsiteUrl(data.websiteUrl) && contactIsValid)
       if (data.ownerType === 'person') return base && !!(data.ownerFullName && data.ownerIdCard)
       return base && !!(data.companyName && data.companyRegNumber && data.businessType)
     }
@@ -1083,17 +1081,32 @@ export default function CreatePolicy() {
   const startGeneration = async () => {
     setGenerating(true)
     setGenerationError('')
-    const response = await api.policies.create(data)
+    if (!data.policyType || !data.agreedToTerms) {
+      setGenerating(false)
+      setGenerationError('Please select a policy type and accept the terms.')
+      return
+    }
+    setDone(true)
+    const payload: PolicyQuestionnaire = {
+      ...data,
+      websiteUrl: normalizeWebsiteUrl(data.websiteUrl),
+      policyType: data.policyType,
+      agreedToTerms: true,
+      language: data.language as PolicyQuestionnaire['language'],
+      templateVersion: 'v1-dev',
+      useAI: true,
+    }
+    const response = await api.policies.create(payload)
     setGenerating(false)
     if (response.success && response.data) {
       setSavedSlug(response.data.slug)
-      setDone(true)
       return
     }
     setGenerationError(response.error?.message ?? 'Unable to create policy. Please try again.')
   }
 
   const handleGenerate = () => {
+    if (generating) return
     void startGeneration()
   }
 
@@ -1174,14 +1187,14 @@ export default function CreatePolicy() {
       {/* Content */}
       <main className="flex-1 py-8 px-4 sm:px-6">
         <div className="max-w-4xl mx-auto">
-          {generationError && (
+          {generationError && !done && (
             <div className="mb-4 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
               {generationError}
             </div>
           )}
           {done ? (
             <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-sm">
-              <WaitingReviewScreen data={data} slug={savedSlug} onReset={() => { setDataRaw(initialData); setStep(1); setDone(false); setSavedSlug('') }} />
+              <WaitingReviewScreen data={data} slug={savedSlug} processing={generating} error={generationError} onRetry={() => void startGeneration()} onReset={() => { setDataRaw(initialData); setStep(1); setDone(false); setSavedSlug(''); setGenerationError('') }} />
             </div>
           ) : generating ? (
             <div className="bg-white rounded-2xl border border-gray-100 p-16 shadow-sm text-center">

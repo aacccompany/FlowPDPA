@@ -64,3 +64,40 @@ export interface RefreshTokenResponse {
   token_type: string
   expires_in: number
 }
+
+export interface ProfileAddress {
+  street: string
+  street2: string
+  city: string
+  state: string
+  zip: string
+  country: string
+}
+
+export interface UserProfile {
+  id: string
+  name: string
+  email: string
+  plan: string
+  function: string
+  phone: string
+  mobile: string
+  website: string
+  company_name: string
+  vat: string
+  address: ProfileAddress
+  lang: string
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+export type ProfileUpdatePayload = Omit<UserProfile, 'id' | 'email' | 'plan' | 'createdAt' | 'updatedAt'>
+
+export interface ChangePasswordPayload {
+  currentPassword: string
+  newPassword: string
+}
+
+export interface ChangePasswordResult {
+  message: string
+}
