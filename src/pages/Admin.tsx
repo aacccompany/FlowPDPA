@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Activity, AlertTriangle, BarChart3, ChevronLeft, ChevronRight,
   CircleDollarSign, CreditCard, FileText, Gauge, Landmark, LogOut,
-  Menu, Plus, ReceiptText, Scale, Search, ShieldCheck,
+  Eye, Languages, Menu, Plus, ReceiptText, Scale, Search, ShieldCheck,
   UserCog, Users, WalletCards, X,
 } from 'lucide-react'
 import { session } from '@/utils/storage'
@@ -11,12 +11,14 @@ import { api } from '@/services/api'
 import type {
   AdminAnalytics, AdminErrorLog, AdminLegalReview, AdminLegalStatus, AdminLegalUser,
   AdminLegalWorkload, AdminMerchant, AdminMerchantStatus, AdminOverview, AdminPayment,
-  AdminPolicy, AdminPolicyStatus, AdminSubscription,
+  AdminPolicy, AdminPolicyDetail, AdminPolicyStatus, AdminSubscription,
 } from '@/services/api'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { marked } from 'marked'
+import { normalizePolicyMarkdown } from '@/utils/policyMarkdown'
 import './Portal.css'
 
-type AdminView = 'overview' | 'merchants' | 'subscriptions' | 'payments' | 'policies' | 'legal' | 'logs' | 'analytics'
+type AdminView = 'overview' | 'merchants' | 'subscriptions' | 'payments' | 'policies' | 'assignments' | 'legal' | 'logs' | 'analytics'
 type Merchant = AdminMerchant
 type Policy = AdminPolicy
 type LegalUser = AdminLegalUser
@@ -43,7 +45,7 @@ function Badge({ value }: { value: string }) {
   return <span className="portal-badge" style={{ color: meta.color, background: meta.bg }}>{value.replaceAll('_', ' ')}</span>
 }
 
-const ADMIN_PAGE_SIZE = 3
+const ADMIN_PAGE_SIZE = 10
 
 function usePagination<T>(rows: T[], pageSize = ADMIN_PAGE_SIZE) {
   const [requestedPage, setRequestedPage] = useState(1)
@@ -67,7 +69,7 @@ function Sidebar({ view, change, open, close, logout }: { view: AdminView; chang
   const groups = [
     { label: 'Platform', items: [{ id: 'overview' as const, text: 'Overview', Icon: Gauge }, { id: 'merchants' as const, text: 'Merchants', Icon: Users }, { id: 'policies' as const, text: 'Policies', Icon: FileText }] },
     { label: 'Billing', items: [{ id: 'subscriptions' as const, text: 'Subscriptions', Icon: WalletCards }, { id: 'payments' as const, text: 'Payments', Icon: ReceiptText }] },
-    { label: 'Operations', items: [{ id: 'legal' as const, text: 'Legal management', Icon: Scale }, { id: 'logs' as const, text: 'Error logs', Icon: AlertTriangle }, { id: 'analytics' as const, text: 'Analytics', Icon: BarChart3 }] },
+    { label: 'Operations', items: [{ id: 'assignments' as const, text: 'Review assignments', Icon: FileText }, { id: 'legal' as const, text: 'Legal management', Icon: Scale }, { id: 'logs' as const, text: 'Error logs', Icon: AlertTriangle }, { id: 'analytics' as const, text: 'Analytics', Icon: BarChart3 }] },
   ]
   return <>{open && <button className="portal-overlay" onClick={close} aria-label="Close navigation" />}<aside className="portal-sidebar" data-open={open}>
     <div className="portal-brand"><span className="portal-brand-mark"><ShieldCheck className="w-4 h-4" /></span><div><p className="text-sm font-bold">FlowPDPA</p><p className="text-[10px] text-gray-400">ADMIN CONSOLE</p></div></div>
@@ -123,6 +125,9 @@ function PolicyView({ rows, legalUsers, setRows }: { rows: Policy[]; legalUsers:
   const [query, setQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [error, setError] = useState('')
+  const [selectedPolicy, setSelectedPolicy] = useState<AdminPolicyDetail | null>(null)
+  const [contentOpen, setContentOpen] = useState(false)
+  const [contentLoading, setContentLoading] = useState(false)
   const visible = rows.filter(row => {
     const matchesQuery = `${row.websiteName} ${row.slug} ${row.merchantName || ''}`.toLowerCase().includes(query.toLowerCase())
     return matchesQuery && (filter === 'all' || row.status === filter) && (typeFilter === 'all' || row.type === typeFilter)
@@ -135,10 +140,18 @@ function PolicyView({ rows, legalUsers, setRows }: { rows: Policy[]; legalUsers:
     if (!response.success) { setError(response.error?.message || 'Unable to assign legal reviewer.'); return }
     setRows(current => current.map(row => row.id === id ? { ...row, assignedLegalUserId: legalId } : row))
   }
+  const openContent = async (policyId: string) => {
+    setSelectedPolicy(null); setContentOpen(true); setContentLoading(true); setError('')
+    const response = await api.admin.getPolicy(policyId)
+    setContentLoading(false)
+    if (!response.success || !response.data) { setError(response.error?.message || 'Unable to load policy content.'); return }
+    setSelectedPolicy(response.data.policy)
+  }
   return <><PageTitle eyebrow="POLICY OPERATIONS" title="All policies" description="Inspect workflow state and override automatic legal assignment." />
     <div className="flex flex-wrap items-center gap-2 mb-4">{(['all', 'pending_review', 'approved', 'edited', 'rejected', 'archived'] as const).map(value => <button key={value} className="portal-filter" data-active={filter === value} onClick={() => setFilter(value)}>{value.replaceAll('_', ' ')}</button>)}<div className="sm:ml-auto"><SearchBox value={query} setValue={setQuery} placeholder="Search policies" /></div><select className="portal-filter h-9" value={typeFilter} onChange={event => setTypeFilter(event.target.value)}><option value="all">All types</option>{Array.from(new Set(rows.map(row => row.type))).map(value => <option key={value} value={value}>{value}</option>)}</select></div>
     {error && <p className="mb-4 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
-    <section className="portal-panel"><div className="portal-table-wrap"><table className="portal-table"><thead><tr><th>Website / policy</th><th>Merchant</th><th>Language</th><th>Status</th><th>Legal reviewer</th><th>Updated</th></tr></thead><tbody>{pagination.pageRows.map(row => <tr key={row.id}><td><p className="font-semibold">{row.websiteName}</p><p className="text-xs text-gray-400">{row.slug}</p></td><td>{row.merchantName || '-'}</td><td>{row.language.toUpperCase()}</td><td><Badge value={row.status} /></td><td><select className="portal-filter" value={row.assignedLegalUserId || ''} onChange={event => void assign(row.id, event.target.value)}><option value="" disabled>Unassigned</option>{legalUsers.filter(user => user.status === 'active').map(user => <option value={user.id} key={user.id}>{user.name}</option>)}</select></td><td>{formatDate(row.updatedAt)}</td></tr>)}</tbody></table></div><Pagination {...pagination} total={visible.length} /></section>
+    <section className="portal-panel"><div className="portal-table-wrap"><table className="portal-table"><thead><tr><th>Website / policy</th><th>Merchant</th><th>Language</th><th>Status</th><th>Legal reviewer</th><th>Updated</th><th>Content</th></tr></thead><tbody>{pagination.pageRows.map(row => <tr key={row.id}><td><p className="font-semibold">{row.websiteName}</p><p className="text-xs text-gray-400">{row.slug}</p></td><td>{row.merchantName || '-'}</td><td>{row.language.toUpperCase()}</td><td><Badge value={row.status} /></td><td><select className="portal-filter" value={row.assignedLegalUserId || ''} onChange={event => void assign(row.id, event.target.value)}><option value="" disabled>Unassigned</option>{legalUsers.filter(user => user.status === 'active').map(user => <option value={user.id} key={user.id}>{user.name}</option>)}</select></td><td>{formatDate(row.updatedAt)}</td><td><button type="button" className="portal-button" onClick={() => void openContent(row.id)}><Eye className="w-3.5 h-3.5" />View</button></td></tr>)}</tbody></table></div><Pagination {...pagination} total={visible.length} /></section>
+    {contentOpen && <PolicyContentModal policy={selectedPolicy} loading={contentLoading} close={() => { setContentOpen(false); setSelectedPolicy(null) }} />}
   </>
 }
 
@@ -163,6 +176,85 @@ function BillingView({ mode, subscriptions, payments }: { mode: 'subscriptions' 
     <div className="flex flex-wrap items-center gap-2 mb-4"><SearchBox value={query} setValue={setQuery} placeholder={`Search ${mode}`} /><select className="portal-filter h-9" value={statusFilter} onChange={event => setStatusFilter(event.target.value)}><option value="all">All statuses</option>{statuses.map(value => <option key={value} value={value}>{value}</option>)}</select><select className="portal-filter h-9" value={typeFilter} onChange={event => setTypeFilter(event.target.value)}><option value="all">All policy types</option>{policyTypes.map(value => <option key={value} value={value}>{value}</option>)}</select></div>
     <section className="portal-panel"><div className="portal-table-wrap">{mode === 'subscriptions' ? <table className="portal-table"><thead><tr><th>Subscription</th><th>Merchant</th><th>Policy type</th><th>Period start</th><th>Period end</th><th>Cancellation</th><th>Status</th></tr></thead><tbody>{subscriptionPagination.pageRows.map(row => <tr key={row.id}><td className="font-mono text-xs">{row.id}</td><td><p className="font-semibold">{row.merchantName || '-'}</p><p className="text-xs text-gray-400">{row.merchantEmail}</p></td><td>{row.policyType}</td><td>{formatDate(row.currentPeriodStart)}</td><td>{formatDate(row.currentPeriodEnd)}</td><td>{row.cancelAtPeriodEnd ? 'At period end' : '-'}</td><td><Badge value={row.status} /></td></tr>)}</tbody></table> :
       <table className="portal-table"><thead><tr><th>Invoice</th><th>Merchant</th><th>Policy type</th><th>Amount</th><th>Paid at</th><th>Status</th></tr></thead><tbody>{paymentPagination.pageRows.map(row => <tr key={row.id}><td className="font-mono text-xs">{row.stripeInvoiceId || row.id}</td><td>{row.merchantName || '-'}</td><td>{row.policyType || '-'}</td><td>{money(row.amountPaid)} {row.currency.toUpperCase()}</td><td>{formatDate(row.paidAt)}</td><td><Badge value={row.status} /></td></tr>)}</tbody></table>}</div>{mode === 'subscriptions' ? <Pagination {...subscriptionPagination} total={visibleSubscriptions.length} /> : <Pagination {...paymentPagination} total={visiblePayments.length} />}</section>
+  </>
+}
+
+function policyPreviewDocument(content: string) {
+  const source = /<(?:!doctype|html|body|h[1-6]|p|div|ul|ol)\b/i.test(content)
+    ? content
+    : marked.parse(normalizePolicyMarkdown(content), { async: false }) as string
+  const parsed = new DOMParser().parseFromString(source, 'text/html')
+  parsed.querySelectorAll('script, iframe, object, embed, form, meta[http-equiv], base').forEach(node => node.remove())
+  parsed.querySelectorAll('*').forEach(node => {
+    Array.from(node.attributes).forEach(attribute => {
+      if (attribute.name.toLowerCase().startsWith('on') || /javascript:/i.test(attribute.value)) node.removeAttribute(attribute.name)
+    })
+  })
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src https: data:"><style>body{max-width:850px;margin:0 auto;padding:40px 48px;color:#172033;font:15px/1.75 Arial,'Noto Sans Thai',sans-serif}h1{font-size:30px}h2{font-size:22px;margin-top:32px;padding-top:18px;border-top:1px solid #dce1e8}h3{font-size:18px}a{color:#087a5b}li{margin:6px 0}blockquote{margin:18px 0;padding:12px 16px;border-left:3px solid #087a5b;background:#edf5f2}table{width:100%;border-collapse:collapse}th,td{border:1px solid #dce1e8;padding:8px;text-align:left}@media(max-width:640px){body{padding:24px 18px}}</style></head><body>${parsed.body.innerHTML}</body></html>`
+}
+
+function PolicyContentModal({ policy, loading, close }: { policy: AdminPolicyDetail | null; loading: boolean; close: () => void }) {
+  const availableLanguages = policy
+    ? ([['th', policy.contentTh], ['en', policy.contentEn]] as const).filter((entry): entry is readonly ['th' | 'en', string] => Boolean(entry[1]))
+    : []
+  const [language, setLanguage] = useState<'th' | 'en'>('th')
+  const selectedLanguage = availableLanguages.some(([value]) => value === language) ? language : availableLanguages[0]?.[0]
+  const content = selectedLanguage === 'en' ? policy?.contentEn : policy?.contentTh
+
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label="Policy content">
+    <section className="portal-panel flex h-[92vh] w-full max-w-6xl flex-col overflow-hidden">
+      <header className="portal-panel-head shrink-0">
+        <div className="min-w-0"><p className="text-sm font-semibold">{policy?.websiteName || 'Policy content'}</p><p className="mt-1 truncate text-xs text-gray-400">{policy?.slug || 'Loading document...'}</p></div>
+        <button type="button" className="portal-button px-2" onClick={close} aria-label="Close policy content"><X className="w-4 h-4" /></button>
+      </header>
+      {loading ? <div className="portal-empty flex-1">Loading policy content...</div> : policy ? <>
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-gray-200 px-5 py-3">
+          <Badge value={policy.status} />
+          <span className="text-xs text-gray-500">Version {policy.version}</span>
+          <span className="text-xs text-gray-300">|</span>
+          <span className="text-xs text-gray-500">Reviewed {formatDate(policy.reviewedAt)}</span>
+          <div className="ml-auto flex gap-2">{availableLanguages.map(([value]) => <button type="button" className="portal-filter" data-active={selectedLanguage === value} onClick={() => setLanguage(value)} key={value}><Languages className="w-3.5 h-3.5" />{value === 'th' ? 'Thai' : 'English'}</button>)}</div>
+        </div>
+        {content ? <iframe className="min-h-0 flex-1 w-full bg-white" sandbox="" srcDoc={policyPreviewDocument(content)} title={`${policy.websiteName} ${selectedLanguage || ''} policy`} /> : <div className="portal-empty flex-1">No policy content is available.</div>}
+      </> : <div className="portal-empty flex-1">Unable to load policy content.</div>}
+    </section>
+  </div>
+}
+
+function LegalAssignments({ users, policies }: { users: LegalUser[]; policies: Policy[] }) {
+  const [query, setQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [reviewerFilter, setReviewerFilter] = useState('all')
+  const [error, setError] = useState('')
+  const [selectedPolicy, setSelectedPolicy] = useState<AdminPolicyDetail | null>(null)
+  const [contentOpen, setContentOpen] = useState(false)
+  const [contentLoading, setContentLoading] = useState(false)
+  const visible = policies.filter(row => {
+    if (!row.assignedLegalUserId) return false
+    const reviewer = users.find(user => user.id === row.assignedLegalUserId)
+    const matchesQuery = `${row.websiteName} ${row.slug} ${row.merchantName || ''} ${reviewer?.name || ''} ${reviewer?.email || ''}`.toLowerCase().includes(query.toLowerCase())
+    return matchesQuery
+      && (statusFilter === 'all' || row.status === statusFilter)
+      && (reviewerFilter === 'all' || row.assignedLegalUserId === reviewerFilter)
+  })
+  const pagination = usePagination(visible)
+  const openContent = async (policyId: string) => {
+    setSelectedPolicy(null); setContentOpen(true); setContentLoading(true); setError('')
+    const response = await api.admin.getPolicy(policyId)
+    setContentLoading(false)
+    if (!response.success || !response.data) { setError(response.error?.message || 'Unable to load policy content.'); return }
+    setSelectedPolicy(response.data.policy)
+  }
+
+  return <><PageTitle eyebrow="LEGAL OPERATIONS" title="Review assignments" description="Track every assigned policy by reviewer and review status." />
+    <div className="mb-4 flex flex-wrap items-center gap-2">
+      {(['all', 'pending_review', 'approved', 'rejected'] as const).map(value => <button key={value} className="portal-filter" data-active={statusFilter === value} onClick={() => setStatusFilter(value)}>{value === 'all' ? 'All reviews' : value.replaceAll('_', ' ')}</button>)}
+      <div className="sm:ml-auto"><SearchBox value={query} setValue={setQuery} placeholder="Search assigned policies" /></div>
+      <select className="portal-filter h-9" value={reviewerFilter} onChange={event => setReviewerFilter(event.target.value)} aria-label="Filter by legal reviewer"><option value="all">All legal reviewers</option>{users.map(user => <option value={user.id} key={user.id}>{user.name} ({user.email})</option>)}</select>
+    </div>
+    {error && <p className="mb-4 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+    <section className="portal-panel"><div className="portal-table-wrap"><table className="portal-table"><thead><tr><th>Policy</th><th>Legal reviewer</th><th>Merchant</th><th>Status</th><th>Deadline</th><th>Content</th></tr></thead><tbody>{pagination.pageRows.map(row => { const reviewer = users.find(user => user.id === row.assignedLegalUserId); return <tr key={row.id}><td><p className="font-semibold">{row.websiteName}</p><p className="text-xs text-gray-400">{row.slug}</p></td><td><p className="font-semibold">{reviewer?.name || 'Unknown reviewer'}</p><p className="text-xs text-gray-400">{reviewer?.email}</p></td><td>{row.merchantName || row.merchantEmail || '-'}</td><td><Badge value={row.status} /></td><td>{formatDate(row.approvalDeadline)}</td><td><button type="button" className="portal-button" onClick={() => void openContent(row.id)}><Eye className="w-3.5 h-3.5" />View</button></td></tr>})}</tbody></table></div><Pagination {...pagination} total={visible.length} /></section>
+    {contentOpen && <PolicyContentModal policy={selectedPolicy} loading={contentLoading} close={() => { setContentOpen(false); setSelectedPolicy(null) }} />}
   </>
 }
 
@@ -285,6 +377,7 @@ export default function Admin() {
   else if (view === 'merchants') content = <MerchantView rows={merchants} setRows={setMerchants} />
   else if (view === 'policies') content = <PolicyView rows={policies} legalUsers={legalUsers} setRows={setPolicies} />
   else if (view === 'subscriptions' || view === 'payments') content = <BillingView mode={view} subscriptions={subscriptions} payments={payments} />
+  else if (view === 'assignments') content = <LegalAssignments users={legalUsers} policies={policies} />
   else if (view === 'legal') content = <LegalManagement users={legalUsers} setUsers={setLegalUsers} workload={workload} reviews={reviews} />
   else if (view === 'logs') content = <LogsView logs={logs} />
   else if (view === 'analytics' && analytics) content = <AnalyticsView analytics={analytics} />

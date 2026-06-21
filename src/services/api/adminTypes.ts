@@ -56,6 +56,14 @@ export interface AdminPolicy {
   updatedAt: string | null
 }
 
+export interface AdminPolicyDetail extends AdminPolicy {
+  formData: Record<string, unknown>
+  assignmentNote: string | null
+  reviewComment: string | null
+  contentTh: string | null
+  contentEn: string | null
+}
+
 export interface AdminMerchant {
   id: string
   name: string

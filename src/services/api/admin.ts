@@ -3,7 +3,7 @@ import { API_ENDPOINTS } from './endpoints'
 import type {
   AdminAnalytics, AdminErrorLog, AdminLegalReview, AdminLegalStatus, AdminLegalUser,
   AdminLegalWorkload, AdminMerchant, AdminMerchantStatus, AdminOverview, AdminPagination,
-  AdminPayment, AdminPolicy, AdminSubscription,
+  AdminPayment, AdminPolicy, AdminPolicyDetail, AdminSubscription,
 } from './adminTypes'
 
 const query = (params: Record<string, string | number | undefined>) => {
@@ -26,7 +26,7 @@ export const adminApi = {
     apiRequest<{ payments: AdminPayment[]; summary: { totalCollected: number; pending: number; failed: number }; pagination: AdminPagination }>(`${API_ENDPOINTS.admin.payments}${query(params)}`),
   listPolicies: (params: { status?: string; policyType?: string; merchantId?: string; search?: string; page?: number; limit?: number } = {}) =>
     apiRequest<{ policies: AdminPolicy[]; pagination: AdminPagination }>(`${API_ENDPOINTS.admin.policies}${query(params)}`),
-  getPolicy: (id: string) => apiRequest<{ policy: AdminPolicy & { formData: Record<string, unknown>; assignmentNote: string | null; reviewComment: string | null } }>(API_ENDPOINTS.admin.policy(id)),
+  getPolicy: (id: string) => apiRequest<{ policy: AdminPolicyDetail }>(API_ENDPOINTS.admin.policy(id)),
   assignLegal: (policyId: string, legalUserId: string, note?: string) =>
     apiRequest<{ policyId: string; assignedLegalUserId: string; assignedAt: string }>(API_ENDPOINTS.admin.assignLegal(policyId), { method: 'PUT', body: { legalUserId, note } }),
   listLogs: (params: { level?: string; service?: string; page?: number; limit?: number } = {}) =>

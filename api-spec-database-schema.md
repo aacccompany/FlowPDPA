@@ -1694,7 +1694,7 @@ GET /admin/policies/:policyId
 Authorization: Bearer <admin_token>
 ```
 
-Admin can inspect merchant ownership, form metadata, workflow status, assignment, deadline, and review metadata. Admin cannot edit legal policy content.
+Admin can inspect merchant ownership, form metadata, workflow status, assignment, deadline, review metadata, and read-only `contentTh` / `contentEn`. Admin cannot edit legal policy content.
 
 #### 5.7 Error Logs
 Supports `level`, `service`, `page`, and `limit`. Stored context contains request method/path only; request bodies and authorization headers are not persisted.
