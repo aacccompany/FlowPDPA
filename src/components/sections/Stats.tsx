@@ -11,7 +11,7 @@ export default function Stats() {
   const { ref, inView } = useInView()
 
   return (
-    <section className="py-10" style={{ backgroundColor: 'var(--navy-light)', borderTop: '1px solid rgba(255,255,255,0.06)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+    <section className="public-light-stats py-10" style={{ backgroundColor: 'var(--navy-light)', borderTop: '1px solid rgba(255,255,255,0.06)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div
           ref={ref}

@@ -63,7 +63,7 @@ export default function WhyUs() {
     <div style={{ paddingTop: '61px' }}>
 
       {/* Header — dark navy */}
-      <div className="py-20" style={{ backgroundColor: 'var(--navy)' }}>
+      <div className="public-light-page-header py-20" style={{ backgroundColor: 'var(--navy)' }}>
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.15em] mb-5" style={{ color: 'var(--green)' }}>
             <span className="block w-8 h-px" style={{ backgroundColor: 'var(--green)', opacity: 0.5 }} />
@@ -125,7 +125,7 @@ export default function WhyUs() {
             <div className="rounded-2xl border border-gray-200 overflow-hidden bg-white">
               <table className="w-full">
                 <thead>
-                  <tr style={{ backgroundColor: 'var(--navy)' }}>
+                  <tr className="public-light-table-head" style={{ backgroundColor: 'var(--navy)' }}>
                     <th className="text-left px-6 py-4 text-sm font-semibold text-white w-2/5">คุณสมบัติ</th>
                     <th className="px-4 py-4 text-center w-1/5">
                       <div className="text-xs font-black uppercase tracking-wider mb-1" style={{ color: 'var(--green)' }}>FlowPDPA</div>
@@ -161,7 +161,7 @@ export default function WhyUs() {
       </div>
 
       {/* CTA */}
-      <div className="py-16" style={{ backgroundColor: 'var(--navy)' }}>
+      <div className="public-light-cta py-16" style={{ backgroundColor: 'var(--navy)' }}>
         <div className="max-w-2xl mx-auto px-4 text-center">
           <h2 className="text-2xl font-black text-white mb-3">พร้อมเริ่มต้นแล้วหรือยัง?</h2>
           <p className="text-sm mb-8" style={{ color: '#64748b' }}>

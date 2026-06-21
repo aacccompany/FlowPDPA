@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 
 export default function Hero() {
   return (
-    <section style={{ backgroundColor: 'var(--navy)', paddingTop: '61px', minHeight: '92vh' }}>
+    <section className="public-light-hero" style={{ backgroundColor: 'var(--navy)', paddingTop: '61px', minHeight: '92vh' }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 items-center">
 
@@ -66,22 +66,22 @@ export default function Hero() {
               className="overflow-hidden"
               style={{
                 borderRadius: '12px',
-                border: '1px solid rgba(255,255,255,0.08)',
-                boxShadow: '0 32px 64px -12px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04)',
-                backgroundColor: 'var(--navy-light)',
+                border: '1px solid #dce1e8',
+                boxShadow: '0 16px 40px rgba(23,32,51,0.08)',
+                backgroundColor: '#ffffff',
               }}
             >
               {/* Browser chrome */}
               <div
                 className="px-4 py-2.5 flex items-center gap-2"
-                style={{ backgroundColor: '#0f172a', borderBottom: '1px solid rgba(255,255,255,0.06)' }}
+                style={{ backgroundColor: '#eef1f5', borderBottom: '1px solid #dce1e8' }}
               >
                 <span className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
                 <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
                 <span className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
                 <div
                   className="flex-1 mx-3 rounded text-xs px-3 py-1 text-center"
-                  style={{ backgroundColor: 'rgba(255,255,255,0.05)', color: '#475569' }}
+                  style={{ backgroundColor: '#ffffff', color: '#667085', border: '1px solid #dce1e8' }}
                 >
                   flowpdpa.th/dashboard
                 </div>

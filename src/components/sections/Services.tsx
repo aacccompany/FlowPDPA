@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Check, Minus } from 'lucide-react'
 import FadeUp from '@/components/ui/FadeUp'
 
 const tabs = [
@@ -65,7 +66,7 @@ function GreenCheck() {
   return (
     <div className="flex justify-center">
       <div className="w-6 h-6 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--green)' }}>
-        <span className="text-white text-xs font-bold">✓</span>
+        <Check className="w-3.5 h-3.5 text-white" strokeWidth={2.5} aria-hidden="true" />
       </div>
     </div>
   )
@@ -75,7 +76,7 @@ function GrayX() {
   return (
     <div className="flex justify-center">
       <div className="w-6 h-6 rounded-full flex items-center justify-center bg-gray-100">
-        <span className="text-gray-300 text-xs font-bold">—</span>
+        <Minus className="w-3.5 h-3.5 text-gray-300" strokeWidth={2.2} aria-hidden="true" />
       </div>
     </div>
   )

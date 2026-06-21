@@ -15,9 +15,6 @@ export default function Navbar() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const { pathname } = useLocation()
 
-  const isHome = pathname === '/'
-  const dark = isHome && !scrolled
-
   useEffect(() => {
     const check = () => setIsLoggedIn(!!localStorage.getItem('flowpdpa_auth'))
     check()
@@ -39,21 +36,19 @@ export default function Navbar() {
     <header
       className="fixed top-0 left-0 right-0 z-50"
       style={{
-        backgroundColor: dark ? 'transparent' : 'white',
-        borderBottom: dark ? 'none' : '1px solid #e5e7eb',
-        boxShadow: scrolled ? '0 1px 20px rgba(0,0,0,0.1)' : 'none',
+        backgroundColor: 'rgba(255,255,255,0.98)',
+        borderBottom: '1px solid #dce1e8',
+        boxShadow: scrolled ? '0 4px 16px rgba(23,32,51,0.06)' : 'none',
         transition: 'background-color 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease',
       }}
     >
-      {/* Top accent bar — only when not dark transparent */}
-      {!dark && (
-        <div className="h-0.5" style={{ background: 'linear-gradient(90deg, var(--green) 0%, var(--blue) 100%)' }} />
-      )}
+      {/* Brand accent */}
+      <div className="h-0.5" style={{ backgroundColor: 'var(--green)' }} />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between" style={{ height: '60px' }}>
           <Link to="/" className="flex items-center gap-0.5 shrink-0">
-            <span className={`font-black text-xl tracking-tight ${dark ? 'text-white' : 'text-gray-900'}`}>Flow</span>
+            <span className="font-black text-xl tracking-tight text-gray-900">Flow</span>
             <span className="font-black text-xl tracking-tight" style={{ color: 'var(--green)' }}>PDPA</span>
           </Link>
 
@@ -63,9 +58,9 @@ export default function Navbar() {
                 key={link.href}
                 to={link.href}
                 className="text-sm font-medium whitespace-nowrap transition-colors"
-                style={{ color: dark ? 'rgba(255,255,255,0.7)' : '#6b7280' }}
-                onMouseEnter={e => (e.currentTarget.style.color = dark ? 'white' : '#111827')}
-                onMouseLeave={e => (e.currentTarget.style.color = dark ? 'rgba(255,255,255,0.7)' : '#6b7280')}
+                style={{ color: '#667085' }}
+                onMouseEnter={e => (e.currentTarget.style.color = '#172033')}
+                onMouseLeave={e => (e.currentTarget.style.color = '#667085')}
               >
                 {link.label}
               </Link>
@@ -77,17 +72,17 @@ export default function Navbar() {
               to={isLoggedIn ? '/dashboard' : '/login'}
               className="hidden sm:inline-flex items-center text-sm font-semibold px-4 py-2 transition-all"
               style={{
-                color: dark ? 'rgba(255,255,255,0.7)' : '#374151',
-                border: dark ? '1px solid rgba(255,255,255,0.2)' : '1px solid #d1d5db',
+                color: '#374151',
+                border: '1px solid #d1d5db',
                 borderRadius: '6px',
               }}
               onMouseEnter={e => {
-                e.currentTarget.style.color = dark ? 'white' : '#111827'
-                e.currentTarget.style.borderColor = dark ? 'rgba(255,255,255,0.5)' : '#9ca3af'
+                e.currentTarget.style.color = '#111827'
+                e.currentTarget.style.borderColor = '#9ca3af'
               }}
               onMouseLeave={e => {
-                e.currentTarget.style.color = dark ? 'rgba(255,255,255,0.7)' : '#374151'
-                e.currentTarget.style.borderColor = dark ? 'rgba(255,255,255,0.2)' : '#d1d5db'
+                e.currentTarget.style.color = '#374151'
+                e.currentTarget.style.borderColor = '#d1d5db'
               }}
             >
               {isLoggedIn ? 'Dashboard' : 'เข้าสู่ระบบ'}
@@ -101,7 +96,7 @@ export default function Navbar() {
             </Link>
             <button
               className="lg:hidden p-2 transition-colors"
-              style={{ color: dark ? 'rgba(255,255,255,0.8)' : '#6b7280' }}
+              style={{ color: '#667085' }}
               onClick={() => setOpen(!open)}
             >
               {open ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}

@@ -41,7 +41,7 @@ export default function Support() {
     <div style={{ paddingTop: '61px' }}>
 
       {/* Header — dark navy */}
-      <div className="py-20" style={{ backgroundColor: 'var(--navy)' }}>
+      <div className="public-light-page-header py-20" style={{ backgroundColor: 'var(--navy)' }}>
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.15em] mb-5" style={{ color: 'var(--green)' }}>
             <span className="block w-8 h-px" style={{ backgroundColor: 'var(--green)', opacity: 0.5 }} />
@@ -88,7 +88,7 @@ export default function Support() {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <FadeUp>
             <div
-              className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5 rounded-2xl px-8 py-7"
+              className="public-light-callout flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5 rounded-2xl px-8 py-7"
               style={{ backgroundColor: 'var(--navy)' }}
             >
               <div className="flex items-start gap-4">
@@ -122,7 +122,7 @@ export default function Support() {
         <div className="grid grid-cols-1 lg:grid-cols-2" style={{ minHeight: '600px' }}>
 
           {/* Left — info */}
-          <div className="py-16 px-8 lg:px-14" style={{ backgroundColor: 'var(--navy)' }}>
+          <div className="public-light-contact py-16 px-8 lg:px-14" style={{ backgroundColor: 'var(--navy)' }}>
             <p
               className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.15em] mb-4"
               style={{ color: 'var(--green)' }}

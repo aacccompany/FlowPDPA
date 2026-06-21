@@ -1,23 +1,38 @@
-import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { UserPlus, Mail, RefreshCw, CheckCircle, Loader2 } from 'lucide-react'
-import { defaultProfile } from '@/api/contact'
-import { storage } from '@/utils/storage'
+import { useCallback, useState, useEffect, useRef } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { AlertCircle, ArrowLeft, Clock3, UserPlus, Mail, RefreshCw, CheckCircle, Loader2 } from 'lucide-react'
+import { api } from '@/services/api'
+import { normalizeRole, roleHome, storage } from '@/utils/storage'
+import { isValidEmail, isValidThaiPhone, sanitizeThaiPhone } from '@/utils/validation'
+import './Register.css'
 
 interface InitiateData {
   name: string
   email: string
   password: string
   confirm: string
-  phone?: string
-  company?: string
+  phone: string
+  company: string
+}
+
+const formatCooldown = (seconds: number) => {
+  if (seconds < 60) return `${seconds}s`
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const remainingSeconds = seconds % 60
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
+    : `${minutes}:${String(remainingSeconds).padStart(2, '0')}`
 }
 
 export default function Register() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const verificationState = location.state as { verificationEmail?: string; otpSent?: boolean; requestOtp?: boolean } | null
+  const automaticResendStarted = useRef(false)
 
   // Step management
-  const [step, setStep] = useState<'form' | 'verify' | 'success'>('form')
+  const [step, setStep] = useState<'form' | 'verify' | 'success'>(verificationState?.verificationEmail ? 'verify' : 'form')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -33,110 +48,14 @@ export default function Register() {
 
   // OTP state
   const [otp, setOtp] = useState(['', '', '', '', '', ''])
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(verificationState?.verificationEmail ?? '')
+  const [initiating, setInitiating] = useState(false)
+  const [otpReady, setOtpReady] = useState(Boolean(verificationState?.otpSent))
   const [resendLoading, setResendLoading] = useState(false)
   const [resendCooldown, setResendCooldown] = useState(0)
   const [expiryCountdown, setExpiryCountdown] = useState(300) // 5 minutes
 
-  const handleInitiate = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-
-    if (!formData.name.trim()) { setError('กรุณาระบุชื่อ-นามสกุล'); return }
-    if (formData.password.length < 6) { setError('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร'); return }
-    if (formData.password !== formData.confirm) { setError('รหัสผ่านไม่ตรงกัน'); return }
-
-    setLoading(true)
-    try {
-      // Simulate successful registration initiation
-      setEmail(formData.email)
-      setStep('verify')
-      setExpiryCountdown(300) // 5 minutes
-      startResendCooldown(60) // 1 minute cooldown
-
-      // Store registration data for verification
-      storage.registration.set(formData.email, {
-        name: formData.name.trim(),
-        password: formData.password
-      })
-
-    } catch (err) {
-      console.error('Registration error:', err)
-      setError('เกิดข้อผิดพลาด กรุณาลองใหม่')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleVerify = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-
-    const otpValue = otp.join('')
-    if (otpValue.length !== 6) {
-      setError('กรุณากรอกรหัสยืนยัน 6 หลัก')
-      return
-    }
-
-    setLoading(true)
-    try {
-      // Simulate successful verification
-      const regData = storage.registration.get(email)
-      if (regData && otpValue === '123456') { // Demo OTP
-        // Auto-login
-        storage.auth.set({
-          email,
-          name: regData.name,
-          plan: 'Free',
-          token: 'verified-token',
-          company: formData.company,
-          phone: formData.phone
-        })
-
-        // Create initial profile
-        storage.profile.set(email, {
-          ...defaultProfile(),
-          name: regData.name,
-          email,
-          phone: formData.phone || '',
-          company_name: formData.company || ''
-        })
-
-        // Show success briefly before redirecting
-        setStep('success')
-        setTimeout(() => {
-          navigate('/dashboard')
-        }, 2000)
-      } else {
-        setError('รหัสยืนยันไม่ถูกต้อง')
-      }
-
-    } catch (err) {
-      console.error('OTP verification error:', err)
-      setError('เกิดข้อผิดพลาด กรุณาลองใหม่')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleResend = async () => {
-    setResendLoading(true)
-    setError('')
-    try {
-      // Simulate successful resend
-      setExpiryCountdown(300) // 5 minutes
-      startResendCooldown(60) // 1 minute
-      setError('') // Clear any previous errors
-
-    } catch (err) {
-      console.error('Resend OTP error:', err)
-      setError('เกิดข้อผิดพลาด กรุณาลองใหม่')
-    } finally {
-      setResendLoading(false)
-    }
-  }
-
-  const startResendCooldown = (seconds: number) => {
+  const startResendCooldown = useCallback((seconds: number) => {
     setResendCooldown(seconds)
     const timer = setInterval(() => {
       setResendCooldown(prev => {
@@ -147,7 +66,177 @@ export default function Register() {
         return prev - 1
       })
     }, 1000)
+  }, [])
+
+  const handleInitiate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+
+    if (!formData.name.trim()) { setError('กรุณาระบุชื่อ-นามสกุล'); return }
+    if (!isValidEmail(formData.email)) { setError('กรุณากรอกอีเมลให้ถูกต้อง'); return }
+    if (formData.phone && !isValidThaiPhone(formData.phone)) { setError('กรุณากรอกเบอร์โทรศัพท์ไทยให้ถูกต้อง'); return }
+    if (formData.password.length < 8) { setError('รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร'); return }
+    if (formData.password !== formData.confirm) { setError('รหัสผ่านไม่ตรงกัน'); return }
+
+    const normalizedEmail = formData.email.trim().toLowerCase()
+    setEmail(normalizedEmail)
+    setOtpReady(false)
+    setInitiating(true)
+    setStep('verify')
+    try {
+      const response = await api.auth.register.initiate({
+        name: formData.name.trim(),
+        email: normalizedEmail,
+        password: formData.password,
+        phone: formData.phone,
+        company: formData.company,
+      })
+      if (!response.success) {
+        setError(response.error?.message || 'ไม่สามารถสมัครสมาชิกได้')
+        return
+      }
+
+      setOtpReady(true)
+      setExpiryCountdown(300)
+      startResendCooldown(60)
+
+      const data = response.data
+      const token = data?.token ?? data?.access_token
+      if (token && data?.user) {
+        const role = normalizeRole(data.user.role)
+        storage.auth.set({
+          id: data.user.id,
+          email: data.user.email ?? normalizedEmail,
+          name: data.user.name ?? formData.name.trim(),
+          plan: data.user.plan ?? 'Free',
+          role,
+          token,
+          refreshToken: data.refresh_token,
+          expiresAt: data.expires_in ? Date.now() + data.expires_in * 1000 : undefined,
+          company: formData.company,
+          phone: formData.phone,
+          emailVerified: false,
+        })
+        navigate(roleHome(role), { replace: true })
+      }
+
+    } catch (err) {
+      console.error('Registration error:', err)
+      setError('ส่งรหัสไม่สำเร็จ กรุณากลับไปตรวจสอบข้อมูลแล้วลองใหม่')
+    } finally {
+      setInitiating(false)
+    }
   }
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+
+    if (!otpReady || initiating) return
+
+    const otpValue = otp.join('')
+    if (otpValue.length !== 6) {
+      setError('กรุณากรอกรหัสยืนยัน 6 หลัก')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const response = await api.auth.register.verify({ email, otp: otpValue })
+      if (!response.success || !response.data) {
+        setError(response.error?.message || 'รหัสยืนยันไม่ถูกต้อง')
+        return
+      }
+
+      const data = response.data as {
+        token?: string
+        access_token?: string
+        refresh_token?: string
+        expires_in?: number
+        user?: { id?: string; email?: string; name?: string; role?: string; plan?: string }
+      }
+      const token = data.token ?? data.access_token
+      if (!token) {
+        setError('Verification response did not include an access token')
+        return
+      }
+
+      const role = normalizeRole(data.user?.role)
+      storage.auth.set({
+        id: data.user?.id,
+        email: data.user?.email ?? email,
+        name: data.user?.name ?? formData.name.trim(),
+        plan: data.user?.plan ?? 'Free',
+        role,
+        token,
+        refreshToken: data.refresh_token,
+        expiresAt: data.expires_in ? Date.now() + data.expires_in * 1000 : undefined,
+        company: formData.company,
+        phone: formData.phone,
+        emailVerified: true,
+      })
+      setStep('success')
+      setTimeout(() => navigate(roleHome(role), { replace: true }), 2000)
+
+    } catch (err) {
+      console.error('OTP verification error:', err)
+      setError('เกิดข้อผิดพลาด กรุณาลองใหม่')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleResend = useCallback(async () => {
+    setResendLoading(true)
+    setError('')
+    try {
+      const response = await api.auth.register.resendOtp({ email })
+      if (!response.success) {
+        const details = response.error?.details && typeof response.error.details === 'object'
+          ? response.error.details as Record<string, unknown>
+          : {}
+        if (response.error?.code === 'RESEND_COOLDOWN') {
+          const seconds = typeof details.canResendIn === 'number' ? details.canResendIn : 60
+          setOtpReady(true)
+          startResendCooldown(seconds)
+          setError('รหัสยืนยันเดิมยังใช้งานได้ กรุณาตรวจสอบอีเมลของคุณ')
+          return
+        }
+        if (response.error?.code === 'MAX_RESEND_EXCEEDED') {
+          const seconds = typeof details.retryAfter === 'number' ? details.retryAfter : 900
+          setOtpReady(true)
+          startResendCooldown(seconds)
+          setError(`ขอรหัสใหม่ครบ 3 ครั้งแล้ว รหัสล่าสุดยังใช้ได้ 5 นาที หรือขอใหม่ได้ใน ${Math.ceil(seconds / 60)} นาที`)
+          return
+        }
+        if (response.error?.code === 'DAILY_OTP_LIMIT_EXCEEDED') {
+          const seconds = typeof details.retryAfter === 'number' ? details.retryAfter : 86400
+          setOtpReady(true)
+          startResendCooldown(seconds)
+          setError(`ส่งรหัสครบ 10 ครั้งใน 24 ชั่วโมงแล้ว ขอใหม่ได้ใน ${Math.ceil(seconds / 3600)} ชั่วโมง`)
+          return
+        }
+        setError(response.error?.message || 'ไม่สามารถส่งรหัสยืนยันใหม่ได้')
+        return
+      }
+      setExpiryCountdown(300)
+      setOtpReady(true)
+      startResendCooldown(60)
+
+    } catch (err) {
+      console.error('Resend OTP error:', err)
+      setError('เกิดข้อผิดพลาด กรุณาลองใหม่')
+    } finally {
+      setResendLoading(false)
+    }
+  }, [email, startResendCooldown])
+
+  useEffect(() => {
+    if (!verificationState?.requestOtp || !email || automaticResendStarted.current) return
+    automaticResendStarted.current = true
+    setInitiating(true)
+    void handleResend().finally(() => setInitiating(false))
+  }, [email, handleResend, verificationState?.requestOtp])
 
   const handleOtpChange = (index: number, value: string) => {
     if (value.length <= 1 && /^\d*$/.test(value)) {
@@ -177,7 +266,7 @@ export default function Register() {
 
   // Countdown timer for OTP expiry
   useEffect(() => {
-    if (step === 'verify' && expiryCountdown > 0) {
+    if (step === 'verify' && otpReady && expiryCountdown > 0) {
       const timer = setInterval(() => {
         setExpiryCountdown(prev => {
           if (prev <= 1) {
@@ -189,7 +278,13 @@ export default function Register() {
       }, 1000)
       return () => clearInterval(timer)
     }
-  }, [step, expiryCountdown])
+  }, [step, otpReady, expiryCountdown])
+
+  useEffect(() => {
+    if (step === 'verify' && otpReady) {
+      document.getElementById('otp-0')?.focus()
+    }
+  }, [step, otpReady])
 
   // Format time for display
   const formatTime = (seconds: number) => {
@@ -202,48 +297,37 @@ export default function Register() {
   const labelStyle = { color: '#64748b' }
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--navy)' }}>
-
-      {/* Background grid */}
-      <div
-        className="fixed inset-0 pointer-events-none"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)',
-          backgroundSize: '40px 40px',
-        }}
-      />
+    <div className="register-shell min-h-screen flex flex-col">
 
       {/* Top bar */}
-      <div className="relative z-10 px-6 py-5 flex items-center justify-between max-w-7xl mx-auto w-full">
-        <Link to="/" className="flex items-center gap-0.5">
-          <span className="font-black text-xl tracking-tight text-white">Flow</span>
-          <span className="font-black text-xl tracking-tight" style={{ color: 'var(--green)' }}>PDPA</span>
+      <div className="register-topbar px-6 flex items-center justify-between w-full">
+        <Link to="/" className="flex items-center gap-3">
+          <span className="register-brand-mark">FP</span>
+          <span className="font-bold text-base text-gray-900">FlowPDPA</span>
         </Link>
         <Link
           to="/support"
           className="text-xs font-medium transition-colors"
-          style={{ color: '#475569' }}
-          onMouseEnter={e => (e.currentTarget.style.color = '#94a3b8')}
-          onMouseLeave={e => (e.currentTarget.style.color = '#475569')}
+          style={{ color: '#667085' }}
         >
           ต้องการความช่วยเหลือ?
         </Link>
       </div>
 
       {/* Main Card */}
-      <div className="relative z-10 flex-1 flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-md">
+      <div className="register-main">
+        <div className="register-layout">
+          <div className="register-panel">
 
           {step === 'form' ? (
             <>
-              <div className="rounded-2xl p-8 sm:p-10" style={{
+              <div className="register-card rounded-2xl p-8 sm:p-10" style={{
                 backgroundColor: '#0f1f38',
                 border: '1px solid rgba(255,255,255,0.07)',
                 boxShadow: '0 32px 64px -12px rgba(0,0,0,0.5)',
               }}>
                 {/* Icon */}
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-6" style={{ backgroundColor: 'rgba(5,150,105,0.15)' }}>
+                <div className="register-icon w-12 h-12 rounded-xl flex items-center justify-center mb-6" style={{ backgroundColor: 'rgba(5,150,105,0.15)' }}>
                   <UserPlus className="w-6 h-6" style={{ color: 'var(--green)' }} />
                 </div>
 
@@ -256,10 +340,10 @@ export default function Register() {
 
               {/* ── Contact Info (res.partner) ── */}
               <div
-                className="rounded-xl p-4 space-y-3"
+                className="register-section rounded-xl p-4 space-y-3"
                 style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
               >
-                <p className="text-xs font-bold uppercase tracking-widest" style={{ color: '#334155' }}>
+                <p className="register-section-title text-xs font-bold uppercase tracking-widest" style={{ color: '#334155' }}>
                   ข้อมูลติดต่อ
                 </p>
 
@@ -285,26 +369,35 @@ export default function Register() {
                   </label>
                   <input
                     type="email" required placeholder="email@company.com"
-                    value={formData.email} onChange={e => { setFormData({...formData, email: e.target.value}); setError('') }}
+                    value={formData.email} onChange={e => { setFormData({...formData, email: e.target.value.trimStart()}); setError('') }}
+                    autoComplete="email"
+                    aria-invalid={Boolean(formData.email) && !isValidEmail(formData.email)}
                     className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-800 focus:outline-none transition-colors bg-white"
                     style={{ backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
                     onFocus={e => (e.currentTarget.style.borderColor = 'var(--green)')}
                     onBlur={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)')}
                   />
+                  {formData.email && !isValidEmail(formData.email) && (
+                    <p className="text-xs text-red-400 mt-1.5">กรอกอีเมล เช่น name@company.com</p>
+                  )}
                 </div>
 
                 {/* Phone + Company */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className={labelCls} style={labelStyle}>โทรศัพท์</label>
+                    <label className={labelCls} style={labelStyle}>โทรศัพท์ไทย</label>
                     <input
-                      type="tel" placeholder="08x-xxx-xxxx"
-                      value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})}
+                      type="tel" inputMode="numeric" maxLength={10} autoComplete="tel-national" placeholder="0812345678"
+                      value={formData.phone} onChange={e => { setFormData({...formData, phone: sanitizeThaiPhone(e.target.value)}); setError('') }}
+                      aria-invalid={Boolean(formData.phone) && !isValidThaiPhone(formData.phone)}
                       className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-800 focus:outline-none transition-colors bg-white"
                       style={{ backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
                       onFocus={e => (e.currentTarget.style.borderColor = 'var(--green)')}
                       onBlur={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)')}
                     />
+                    {formData.phone && !isValidThaiPhone(formData.phone) && (
+                      <p className="text-xs text-red-400 mt-1.5">เบอร์มือถือไทย 10 หลัก หรือสำนักงาน 9 หลัก</p>
+                    )}
                   </div>
                   <div>
                     <label className={labelCls} style={labelStyle}>บริษัท / องค์กร</label>
@@ -322,10 +415,10 @@ export default function Register() {
 
               {/* ── Security ── */}
               <div
-                className="rounded-xl p-4 space-y-3"
+                className="register-section rounded-xl p-4 space-y-3"
                 style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
               >
-                <p className="text-xs font-bold uppercase tracking-widest" style={{ color: '#334155' }}>
+                <p className="register-section-title text-xs font-bold uppercase tracking-widest" style={{ color: '#334155' }}>
                   ความปลอดภัย
                 </p>
 
@@ -334,7 +427,7 @@ export default function Register() {
                     รหัสผ่าน <span className="text-red-400 normal-case font-normal">*</span>
                   </label>
                   <input
-                    type="password" required placeholder="อย่างน้อย 6 ตัวอักษร"
+                    type="password" required placeholder="อย่างน้อย 8 ตัวอักษร"
                     value={formData.password} onChange={e => { setFormData({...formData, password: e.target.value}); setError('') }}
                     className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-800 focus:outline-none transition-colors bg-white"
                     style={{ backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
@@ -360,7 +453,7 @@ export default function Register() {
 
               {error && (
                 <div
-                  className="text-xs px-4 py-3 rounded-lg"
+                  className="register-error text-xs px-4 py-3 rounded"
                   style={{ backgroundColor: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}
                 >
                   {error}
@@ -369,14 +462,14 @@ export default function Register() {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={initiating}
                 className="btn-green w-full py-3 text-sm mt-2 flex items-center justify-center gap-2"
                 style={{
                   borderRadius: '8px',
-                  opacity: loading ? 0.7 : 1
+                  opacity: initiating ? 0.7 : 1
                 }}
               >
-                {loading ? (
+                {initiating ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
                     กำลังส่ง...
@@ -398,14 +491,14 @@ export default function Register() {
             </form>
 
             <div className="flex items-center gap-3 my-6">
-              <span className="flex-1 h-px" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
-              <span className="text-xs" style={{ color: '#334155' }}>มีบัญชีแล้ว?</span>
-              <span className="flex-1 h-px" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
+              <span className="register-divider flex-1 h-px" />
+              <span className="text-xs text-gray-500">มีบัญชีแล้ว?</span>
+              <span className="register-divider flex-1 h-px" />
             </div>
 
             <Link
               to="/login"
-              className="block w-full py-3 text-sm font-semibold text-center rounded-lg transition-colors"
+              className="register-login-link block w-full py-3 text-sm font-semibold text-center rounded transition-colors"
               style={{ border: '1px solid rgba(255,255,255,0.08)', color: '#94a3b8' }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; e.currentTarget.style.color = 'white' }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#94a3b8' }}
@@ -414,7 +507,7 @@ export default function Register() {
             </Link>
           </div>
 
-          <div className="flex items-center justify-center gap-5 mt-8">
+          <div className="register-legal flex items-center justify-center gap-5 mt-6">
             <Link to="/terms" className="text-xs transition-colors" style={{ color: '#334155' }}
               onMouseEnter={e => (e.currentTarget.style.color = '#64748b')}
               onMouseLeave={e => (e.currentTarget.style.color = '#334155')}>
@@ -429,13 +522,13 @@ export default function Register() {
           </div>
             </>
           ) : step === 'verify' ? (
-            <div className="rounded-2xl p-8 sm:p-10" style={{
+            <div className="register-card rounded-2xl p-8 sm:p-10" style={{
               backgroundColor: '#0f1f38',
               border: '1px solid rgba(255,255,255,0.07)',
               boxShadow: '0 32px 64px -12px rgba(0,0,0,0.5)',
             }}>
               {/* Icon */}
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-6" style={{ backgroundColor: 'rgba(5,150,105,0.15)' }}>
+              <div className="register-icon w-12 h-12 rounded-xl flex items-center justify-center mb-6" style={{ backgroundColor: 'rgba(5,150,105,0.15)' }}>
                 <Mail className="w-6 h-6" style={{ color: 'var(--green)' }} />
               </div>
 
@@ -459,67 +552,50 @@ export default function Register() {
                             type="text"
                             inputMode="numeric"
                             maxLength={1}
+                            disabled={!otpReady || initiating}
                             value={digit}
                             onChange={(e) => handleOtpChange(index, e.target.value)}
                             onKeyDown={(e) => handleOtpKeyDown(index, e as React.KeyboardEvent<HTMLInputElement>)}
-                            className="w-14 h-16 text-center text-3xl font-bold tracking-wider rounded-xl border-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2"
+                            className="register-otp text-center tracking-wider transition-colors focus:outline-none disabled:cursor-wait disabled:opacity-60"
                             style={{
-                              backgroundColor: digit ? 'rgba(5,150,105,0.1)' : 'rgba(255,255,255,0.05)',
-                              color: 'white',
-                              borderColor: digit ? 'var(--green)' : 'rgba(255,255,255,0.2)',
-                              boxShadow: digit ? '0 0 0 3px rgba(5,150,105,0.2)' : 'none'
+                              backgroundColor: digit ? '#edf5f2' : '#fff',
+                              color: '#172033',
+                              borderColor: digit ? 'var(--green)' : '#d0d5dd',
                             }}
-                            autoFocus={index === 0}
                           />
-                          {index === 0 && !digit && (
-                            <div className="absolute -top-6 left-1/2 -translate-x-1/2">
-                              <span className="text-xs font-semibold" style={{ color: 'var(--green)' }}>1</span>
-                            </div>
-                          )}
-                          {index === 2 && !digit && (
-                            <div className="absolute -top-6 left-1/2 -translate-x-1/2">
-                              <span className="text-xs font-semibold" style={{ color: 'var(--green)' }}>2</span>
-                            </div>
-                          )}
-                          {index === 4 && !digit && (
-                            <div className="absolute -top-6 left-1/2 -translate-x-1/2">
-                              <span className="text-xs font-semibold" style={{ color: 'var(--green)' }}>3</span>
-                            </div>
-                          )}
                         </div>
                       ))}
                     </div>
-                    <div className="flex justify-center gap-1 text-xs">
-                      <span style={{ color: '#9ca3af' }}>จำนวนเลข</span>
-                      <span className="mx-2" style={{ color: '#475569' }}>•</span>
-                      <span style={{ color: '#9ca3af' }}>เวลาที่เหลือ</span>
-                    </div>
+                    <p className="text-xs text-gray-400">กรอกรหัสตัวเลข 6 หลักจากอีเมล</p>
                   </div>
 
-                  {/* Timer */}
-                  {expiryCountdown > 0 ? (
-                    <div className="flex items-center justify-center gap-2 py-3 px-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                      <svg className="w-4 h-4 animate-pulse" style={{ color: '#3b82f6' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span className="text-sm font-medium" style={{ color: '#3b82f6' }}>
+                  {initiating ? (
+                    <div className="register-status flex items-start gap-3 py-3 px-4">
+                      <Loader2 className="w-4 h-4 mt-0.5 shrink-0 animate-spin" />
+                      <div>
+                        <p className="text-sm font-semibold">กำลังส่งรหัสยืนยัน</p>
+                        <p className="text-xs mt-0.5 opacity-75">อยู่หน้านี้ได้เลย ช่องกรอกรหัสจะเปิดเมื่อพร้อมใช้งาน</p>
+                      </div>
+                    </div>
+                  ) : otpReady && expiryCountdown > 0 ? (
+                    <div className="register-status flex items-center justify-center gap-2 py-3 px-4">
+                      <Clock3 className="w-4 h-4" aria-hidden="true" />
+                      <span className="text-sm font-medium">
                         หมดอายุใน {formatTime(expiryCountdown)}
                       </span>
                     </div>
-                  ) : (
-                    <div className="flex items-center justify-center gap-2 py-3 px-4 rounded-lg bg-red-500/10 border border-red-500/20">
-                      <svg className="w-4 h-4" style={{ color: '#ef4444' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span className="text-sm font-medium" style={{ color: '#ef4444' }}>
+                  ) : otpReady ? (
+                    <div className="register-error flex items-center justify-center gap-2 py-3 px-4 rounded border">
+                      <AlertCircle className="w-4 h-4" aria-hidden="true" />
+                      <span className="text-sm font-medium">
                         รหัสหมดอายุแล้ว
                       </span>
                     </div>
-                  )}
+                  ) : null}
 
                   {/* Error Message */}
                   {error && (
-                    <div className="text-xs px-4 py-3 rounded-lg text-center" style={{
+                    <div className="register-error text-xs px-4 py-3 rounded text-center" style={{
                       backgroundColor: 'rgba(239,68,68,0.1)',
                       color: '#f87171',
                       border: '1px solid rgba(239,68,68,0.2)'
@@ -531,11 +607,11 @@ export default function Register() {
                   <div className="flex gap-3">
                     <button
                       type="submit"
-                      disabled={loading || otp.join('').length !== 6 || expiryCountdown === 0}
+                      disabled={initiating || !otpReady || loading || otp.join('').length !== 6 || expiryCountdown === 0}
                       className="flex-1 btn-green py-3 text-sm font-bold flex items-center justify-center gap-2 rounded-lg"
                       style={{
-                        opacity: (loading || otp.join('').length !== 6 || expiryCountdown === 0) ? 0.5 : 1,
-                        boxShadow: (loading || otp.join('').length !== 6 || expiryCountdown === 0) ? 'none' : '0 4px 12px rgba(5,150,105,0.3)'
+                        opacity: (initiating || !otpReady || loading || otp.join('').length !== 6 || expiryCountdown === 0) ? 0.5 : 1,
+                        boxShadow: 'none'
                       }}
                     >
                       {loading ? (
@@ -554,36 +630,37 @@ export default function Register() {
                     <button
                       type="button"
                       onClick={handleResend}
-                      disabled={resendLoading || resendCooldown > 0}
+                      disabled={initiating || !otpReady || resendLoading || resendCooldown > 0}
                       className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold rounded-lg transition-all"
                       style={{
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        color: resendCooldown > 0 ? '#64748b' : '#94a3b8',
-                        opacity: (resendLoading || resendCooldown > 0) ? 0.5 : 1,
-                        cursor: (resendLoading || resendCooldown > 0) ? 'not-allowed' : 'pointer',
-                        backgroundColor: resendLoading || resendCooldown > 0 ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.05)'
+                        border: '1px solid #d0d5dd',
+                        color: resendCooldown > 0 ? '#98a2b3' : '#475467',
+                        opacity: (initiating || !otpReady || resendLoading || resendCooldown > 0) ? 0.5 : 1,
+                        cursor: (initiating || !otpReady || resendLoading || resendCooldown > 0) ? 'not-allowed' : 'pointer',
+                        backgroundColor: '#fff'
                       }}
                     >
                       <RefreshCw className={`w-4 h-4 ${resendLoading ? 'animate-spin' : ''}`} />
-                      {resendCooldown > 0 ? `${resendCooldown}s` : 'ส่งใหม่'}
+                      {resendCooldown > 0 ? formatCooldown(resendCooldown) : 'ส่งใหม่'}
                     </button>
                   </div>
 
                   <div className="text-center mt-4">
                     <button
                       type="button"
+                      disabled={initiating}
                       onClick={() => setStep('form')}
-                      className="text-xs underline transition-colors hover:opacity-80"
+                      className="inline-flex items-center gap-1.5 text-xs transition-colors hover:opacity-80 disabled:opacity-40 disabled:cursor-wait"
                       style={{ color: '#64748b' }}
                     >
-                      ← กลับไปกรอกข้อมูล
+                      <ArrowLeft className="w-3.5 h-3.5" /> กลับไปกรอกข้อมูล
                     </button>
                   </div>
                 </div>
               </form>
             </div>
           ) : (
-            <div className="rounded-2xl p-8 sm:p-10 text-center" style={{
+            <div className="register-card rounded-2xl p-8 sm:p-10 text-center" style={{
               backgroundColor: '#0f1f38',
               border: '1px solid rgba(255,255,255,0.07)',
               boxShadow: '0 32px 64px -12px rgba(0,0,0,0.5)',
@@ -592,7 +669,7 @@ export default function Register() {
                 <CheckCircle className="w-8 h-8" style={{ color: 'var(--green)' }} />
               </div>
 
-              <h1 className="text-2xl font-black text-white mb-2">ยืนยนอีเมลสำเร็จ! 🎉</h1>
+              <h1 className="text-2xl font-black text-white mb-2">ยืนยันอีเมลสำเร็จ</h1>
               <p className="text-sm mb-6" style={{ color: '#64748b' }}>
                 บัญชีของคุณถูกสร้างแล้ว กำลังนำทางคุณไปสู่ Dashboard...
               </p>
@@ -600,6 +677,7 @@ export default function Register() {
               <div className="w-12 h-12 rounded-full border-4 border-gray-500 mx-auto mb-4 border-t-transparent animate-spin" style={{ borderTopColor: 'var(--green)' }}></div>
             </div>
           )}
+          </div>
         </div>
       </div>
     </div>

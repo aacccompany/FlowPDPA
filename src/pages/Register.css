@@ -1,0 +1,127 @@
+.register-shell {
+  min-height: 100vh;
+  background: #f4f6f9 !important;
+  color: #172033;
+}
+
+.register-topbar {
+  min-height: 64px;
+  border-bottom: 1px solid #dce1e8;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.register-brand-mark {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid #087a5b;
+  border-radius: 4px;
+  color: #087a5b;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.register-main {
+  display: flex;
+  flex: 1;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 48px 24px 64px;
+}
+
+.register-layout {
+  width: min(100%, 672px);
+}
+
+.register-panel { min-width: 0; }
+
+.register-card {
+  padding: 32px !important;
+  border: 1px solid #dce1e8 !important;
+  border-radius: 6px !important;
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+.register-card h1 { color: #172033 !important; }
+.register-card > p { color: #667085 !important; }
+
+.register-icon {
+  width: 40px;
+  height: 40px;
+  border: 1px solid #b9d9cf;
+  border-radius: 5px !important;
+  background: #edf5f2 !important;
+}
+
+.register-section {
+  padding: 18px 0 !important;
+  border: 0 !important;
+  border-top: 1px solid #eaecf0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+.register-section:first-of-type { border-top: 0 !important; padding-top: 0 !important; }
+
+.register-section-title { color: #667085 !important; }
+
+.register-shell input {
+  border: 1px solid #d0d5dd !important;
+  border-radius: 4px !important;
+  background: #fff !important;
+  color: #172033 !important;
+  box-shadow: none !important;
+}
+
+.register-shell input::placeholder { color: #98a2b3; }
+.register-shell input:focus {
+  border-color: #087a5b !important;
+  outline: 2px solid rgba(8, 122, 91, 0.12) !important;
+  outline-offset: 0;
+}
+
+.register-shell input[aria-invalid='true'] { border-color: #d92d20 !important; }
+
+.register-otp {
+  width: 52px;
+  height: 58px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 24px;
+  font-weight: 500;
+}
+
+.register-status {
+  border-radius: 4px;
+  border: 1px solid #b9d9cf;
+  background: #edf5f2;
+  color: #075f49;
+}
+
+.register-error {
+  border-color: #f5b8b2 !important;
+  background: #fff1f0 !important;
+  color: #b42318 !important;
+}
+
+.register-divider { background: #eaecf0 !important; }
+
+.register-login-link {
+  border: 1px solid #d0d5dd !important;
+  border-radius: 4px !important;
+  color: #344054 !important;
+  background: #fff;
+}
+
+.register-login-link:hover { border-color: #98a2b3 !important; color: #172033 !important; }
+
+.register-legal a { color: #667085 !important; }
+.register-legal > span { background: #d0d5dd !important; }
+
+@media (max-width: 767px) {
+  .register-main { padding: 24px 16px 40px; }
+  .register-card { padding: 24px 18px !important; }
+  .register-otp { width: clamp(38px, 12vw, 48px); height: 52px; font-size: 20px; }
+}

@@ -15,7 +15,7 @@ export default function WhyChoose() {
   const { ref, inView } = useInView()
 
   return (
-    <section id="why" className="py-20" style={{ backgroundColor: 'var(--navy)' }}>
+    <section id="why" className="public-light-feature-section py-20" style={{ backgroundColor: 'var(--navy)' }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <FadeUp className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 mb-14">
           <div>

@@ -5,8 +5,8 @@ export default function Referral() {
     <section className="py-16 bg-white">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
         <div
-          className="relative overflow-hidden rounded-2xl px-10 py-10 flex flex-col sm:flex-row items-center gap-8"
-          style={{ background: 'linear-gradient(135deg, var(--blue-dark) 0%, var(--blue) 100%)' }}
+          className="public-light-referral relative overflow-hidden rounded-2xl px-10 py-10 flex flex-col sm:flex-row items-center gap-8"
+          style={{ backgroundColor: '#eef7f3' }}
         >
           {/* Background accent */}
           <div

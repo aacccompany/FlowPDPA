@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { MapPin, Phone, Mail, Clock } from 'lucide-react'
+import { CheckCircle, MapPin, Phone, Mail, Clock } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 const contactInfo = [
@@ -17,7 +17,7 @@ export default function Contact() {
       <div className="grid grid-cols-1 lg:grid-cols-2" style={{ minHeight: '600px' }}>
 
         {/* Left — info */}
-        <div className="py-16 px-8 lg:px-14" style={{ backgroundColor: 'var(--blue-dark)' }}>
+        <div className="public-light-contact py-16 px-8 lg:px-14" style={{ backgroundColor: 'var(--blue-dark)' }}>
           <p className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.15em] mb-4" style={{ color: '#6ee7b7' }}>
             <span className="block w-8 h-px" style={{ backgroundColor: '#6ee7b7', opacity: 0.4 }} />
             Contact Us
@@ -56,7 +56,7 @@ export default function Contact() {
                   className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4"
                   style={{ backgroundColor: 'var(--green-light)' }}
                 >
-                  <span className="text-2xl font-bold" style={{ color: 'var(--green)' }}>✓</span>
+                  <CheckCircle className="w-6 h-6" style={{ color: 'var(--green)' }} aria-hidden="true" />
                 </div>
                 <p className="text-gray-900 text-xl font-bold mb-2">ส่งข้อความสำเร็จ!</p>
                 <p className="text-gray-400 text-sm">เราจะติดต่อกลับภายใน 1 วันทำการ</p>

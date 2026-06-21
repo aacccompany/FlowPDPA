@@ -18,10 +18,10 @@ const legalLinks = [
 
 export default function Footer() {
   return (
-    <footer style={{ backgroundColor: 'var(--navy)' }}>
+    <footer className="public-light-footer" style={{ backgroundColor: 'var(--navy)' }}>
 
-      {/* Top gradient line */}
-      <div style={{ height: '2px', background: 'linear-gradient(90deg, var(--green) 0%, var(--blue-mid) 100%)' }} />
+      {/* Brand accent */}
+      <div style={{ height: '2px', backgroundColor: 'var(--green)' }} />
 
       {/* CTA strip */}
       <div style={{ backgroundColor: 'var(--navy-light)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>

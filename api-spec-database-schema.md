@@ -1,7 +1,7 @@
 # FlowPDPA — Backend API Specification & Database Schema
 
-**Version:** 1.0  
-**Date:** 2026-05-23  
+**Version:** 1.1  
+**Date:** 2026-06-20  
 **For:** Backend Development Team
 
 ---
@@ -22,33 +22,37 @@
 
 ### Base URL
 ```
-https://api.flowpdpa.co.th/v1
+https://api.flowpdpa.co.th
 ```
+
+The FastAPI application routes do not include a `/v1` prefix. Add one only if the production reverse proxy is configured to rewrite it.
 
 ### Authentication
 - **Method:** JWT Bearer Token
 - **Header:** `Authorization: Bearer <token>`
-- **Token Expiry:** 7 days (configurable)
+- **Access Token Expiry:** 15 minutes (configurable)
+- **Refresh Token Expiry:** 7 days (configurable)
 
-### Response Format (Standard)
+### Response Format
+Errors always use this envelope:
+
 ```json
 {
-  "success": true|false,
-  "data": {},
+  "success": false,
   "error": {
     "code": "ERROR_CODE",
     "message": "Human readable message"
-  },
-  "meta": {
-    "timestamp": "2026-05-23T10:00:00Z",
-    "requestId": "req_xxxxxxxxx"
   }
 }
 ```
 
+Successful response shapes are endpoint-specific. Some return `{ "success": true, "data": ... }`; policy/legal/billing list endpoints may return an array directly. Frontend must follow each endpoint example rather than assuming one global success envelope.
+
 ---
 
 ## Authentication Flow
+
+> The endpoint specifications in section 1 are authoritative. Registration requires OTP verification before tokens are issued; users and admins authenticate from database accounts.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -59,15 +63,14 @@ https://api.flowpdpa.co.th/v1
 │     ┌─────────────────────────────────────────────────────────────────┐ │
 │     │ POST /auth/register                                             │ │
 │     │ Request: { name, email, password }                              │ │
-│     │ Response: { user, token, plan: "Free" }                         │ │
+│     │ Response: { email, expiresIn, canResendIn }                     │ │
 │     └─────────────────────────────────────────────────────────────────┘ │
 │                              │                                          │
 │                              ▼                                          │
 │     ┌─────────────────────────────────────────────────────────────────┐ │
-│     │ • Create user record with plan="Free"                           │ │
-│     │ • Hash password (bcrypt)                                        │ │
-│     │ • Generate JWT token                                            │ │
-│     │ • Return token + user profile                                   │ │
+│     │ • Store pending registration and send OTP                       │ │
+│     │ • POST /auth/register/verify with email + OTP                   │ │
+│     │ • Create account and return access + refresh tokens             │ │
 │     └─────────────────────────────────────────────────────────────────┘ │
 │                                                                         │
 │  2. LOGIN (Existing User)                                              │
@@ -79,10 +82,6 @@ https://api.flowpdpa.co.th/v1
 │                              │                                          │
 │                              ▼                                          │
 │     ┌─────────────────────────────────────────────────────────────────┐ │
-│     │ Demo User Check:                                                │ │
-│     │ • email="demo@flowpdpa.co.th", password="demo1234"              │ │
-│     │ • Returns plan="Premium" hardcoded                              │ │
-│     │                                                                 │ │
 │     │ Regular User:                                                    │ │
 │     │ • Verify password hash                                          │ │
 │     │ • Generate JWT token with: { sub, merchant_id, role, plan }    │ │
@@ -97,7 +96,7 @@ https://api.flowpdpa.co.th/v1
 │                              │                                          │
 │                              ▼                                          │
 │     ┌─────────────────────────────────────────────────────────────────┐ │
-│     │ • Verify hardcoded credentials                                  │ │
+│     │ • Verify database account and role="admin"                     │ │
 │     │ • Generate JWT with role="admin"                                │ │
 │     └─────────────────────────────────────────────────────────────────┘ │
 │                                                                         │
@@ -134,7 +133,7 @@ https://api.flowpdpa.co.th/v1
 │                              │                                          │
 │                              ▼                                          │
 │  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │ API: POST /policies/generate                                    │   │
+│  │ API: POST /policies                                    │   │
 │  │ Request: { formData: {...}, authToken }                         │   │
 │  └─────────────────────────────────────────────────────────────────┘   │
 │                              │                                          │
@@ -145,12 +144,12 @@ https://api.flowpdpa.co.th/v1
 │  │ 1. VALIDATE INPUT                                               │   │
 │  │    • Check required fields                                      │   │
 │  │    • Validate business type, data types, purposes               │   │
-│  │    • Check user plan permissions (Free vs Premium features)     │   │
+│  │    • Check policyType billing entitlement                       │   │
 │  │                                                                 │   │
 │  │ 2. PREPARE AI PROMPT                                            │   │
 │  │    • Build structured prompt from form data                     │   │
 │  │    • Include legal requirements (PDPA Thailand)                 │   │
-│  │    • Add GDPR/CCPA if Premium plan                              │   │
+│  │    • Add compliance clauses defined by the selected product     │   │
 │  │                                                                 │   │
 │  │ 3. CALL AI SERVICE (Async)                                      │   │
 │  │    • Send prompt to AI engine                                   │   │
@@ -162,22 +161,22 @@ https://api.flowpdpa.co.th/v1
 │  │    • Store generated content (with versioning)                  │   │
 │  │    • Link to merchant_id                                        │   │
 │  │                                                                 │   │
-│  │ 5. GENERATE EXPORT FILES                                        │   │
-│  │    • Convert to PDF                                             │   │
-│  │    • Convert to Word (.docx)                                    │   │
-│  │    • Generate HTML embed code                                   │   │
-│  │    • Generate TXT version                                       │   │
+│  │ 5. WAIT FOR LEGAL REVIEW                                        │   │
+│  │    • Legal edits DB content in portal                                             │   │
+│  │    • Legal approves, rejects, or marks edited                                    │   │
+│  │    • Exports are generated only after approval                                   │   │
+│  │    • Public links remain hidden before approval                                       │   │
 │  │                                                                 │   │
-│  │ 6. RETURN RESPONSE                                              │   │
-│  │    • Policy ID, URL, download links                             │   │
+│  │ 6. RETURN PENDING REVIEW RESPONSE                                              │   │
+│  │    • Policy ID, slug, status pending_review                             │   │
 │  └─────────────────────────────────────────────────────────────────┘   │
 │                              │                                          │
 │                              ▼                                          │
 │  ┌─────────────────────────────────────────────────────────────────┐   │
 │  │ FRONTEND: Success Screen                                        │   │
-│  │ • Show policy generated message                                 │   │
-│  │ • Display shareable URL: flowpdpa.co.th/p/{slug}               │   │
-│  │ • Download buttons (PDF, Word, TXT)                             │   │
+│  │ • Show pending legal review message                                 │   │
+│  │ • No public URL until approved/edited               │   │
+│  │ • Downloads appear after legal approval                             │   │
 │  │ • Copy URL button                                               │   │
 │  │ • "View Dashboard" button                                       │   │
 │  └─────────────────────────────────────────────────────────────────┘   │
@@ -201,27 +200,22 @@ Content-Type: application/json
   "email": "string (required, email format)",
   "phone": "string (optional, Thai format: 08x-xxx-xxxx)",
   "company": "string (optional, company/organization name)",
-  "password": "string (required, min 6 chars)",
-  "confirm": "string (required, must match password)"
+  "password": "string (required, min 8 chars)"
 }
 
-Response 200:
+Response 201:
 {
   "success": true,
+  "message": "OTP sent",
   "data": {
-    "user": {
-      "id": "merchant_uuid",
-      "name": "John Doe",
-      "email": "john@example.com",
-      "phone": "08x-xxx-xxxx",
-      "company": "My Company Ltd.",
-      "plan": "Free",
-      "createdAt": "2026-05-23T10:00:00Z"
-    },
-    "token": "jwt_token_string"
+    "email": "john@example.com",
+    "expiresIn": 300,
+    "canResendIn": 60
   }
 }
 ```
+
+`POST /auth/register` starts OTP registration. It does not return authentication tokens yet.
 
 #### 1.2 Login
 ```http
@@ -245,7 +239,10 @@ Response 200:
       "company": "Demo Company",
       "phone": "02-xxx-xxxx"
     },
-    "token": "jwt_token_string"
+    "token": "jwt_access_token",
+    "refresh_token": "jwt_refresh_token",
+    "token_type": "bearer",
+    "expires_in": 900
   }
 }
 
@@ -273,8 +270,16 @@ Response 200:
 {
   "success": true,
   "data": {
-    "token": "jwt_admin_token",
-    "role": "admin"
+    "user": {
+      "id": "admin_user_id",
+      "email": "admin@flowpdpa.co.th",
+      "name": "Admin User",
+      "role": "admin"
+    },
+    "token": "jwt_admin_access_token",
+    "refresh_token": "jwt_admin_refresh_token",
+    "token_type": "bearer",
+    "expires_in": 900
   }
 }
 ```
@@ -298,218 +303,969 @@ Response 200:
 }
 ```
 
----
-
-### 2. Policy APIs
-
-#### 2.1 Generate Policy (AI-powered)
+#### 1.5 Verify Registration OTP
 ```http
-POST /policies/generate
-Authorization: Bearer <token>
+POST /auth/register/verify
 Content-Type: application/json
 
 {
-  "policyType": "privacy" | "hr" | "cctv" | "recruitment" | "vendor" | "dpa",
-  "agreedToTerms": true,
-  
-  // Step 2: Business Info
-  "websiteName": "string (required)",
-  "websiteUrl": "string (required, url format)",
-  "businessType": "string (required)", // One of: 'ร้านค้าออนไลน์ (E-Commerce)', 'บริษัทจำกัด / บริษัทมหาชน', 'SME / วิสาหกิจขนาดกลางและเล็ก', 'สตาร์ทอัป (Startup)', 'ฟรีแลนซ์ / บุคคลธรรมดา', 'หน่วยงานราชการ / NGO', 'คลินิก / โรงพยาบาล', 'สถาบันการศึกษา', 'อื่นๆ'
-  "contactEmail": "string (required, email format)",
-  "contactPhone": "string (optional)",
-  "address": "string (optional)",
-
-  // Step 3: Data Types (10 standard + 3 sensitive)
-  "dataTypes": ["name", "email", "phone", "address", "payment", "idcard", "dob", "location", "behavior", "ip", "health", "religion", "biometric"],
-  // Standard: name (ชื่อ-นามสกุล), email (อีเมล), phone (เบอร์โทรศัพท์), address (ที่อยู่), payment (ข้อมูลการชำระเงิน), idcard (เลขบัตรประชาชน), dob (วันเดือนปีเกิด/อายุ), location (ข้อมูลตำแหน่งที่ตั้ง GPS), behavior (พฤติกรรมการใช้งานเว็บไซต์), ip (IP Address/Device Info)
-  // Sensitive: health (ข้อมูลสุขภาพ), religion (ศาสนา/ความเชื่อ), biometric (ข้อมูลชีวมิติ)
-  "hasCookies": "ใช่" | "ไม่ใช่",
-  "hasUserAccounts": "ใช่" | "ไม่ใช่",
-
-  // Step 4: Purposes & Third Parties
-  "purposes": ["service", "order", "contact", "payment", "marketing", "analytics", "legal", "security"],
-  // service (ให้บริการหลักแก่ผู้ใช้งาน), order (ดำเนินการคำสั่งซื้อและจัดส่งสินค้า), contact (ติดต่อกลับและตอบคำถามลูกค้า), payment (ดำเนินการชำระเงิน), marketing (ส่งข้อเสนอและข่าวสารการตลาด), analytics (วิเคราะห์และปรับปรุงคุณภาพบริการ), legal (ปฏิบัติตามข้อกำหนดทางกฎหมาย), security (ป้องกันการทุจริตและรักษาความปลอดภัย)
-  "thirdParties": ["ga", "gtm", "gads", "fb", "line", "stripe", "omise", "aws", "mailchimp", "zendesk"],
-  // ga (Google Analytics), gtm (Google Tag Manager), gads (Google Ads), fb (Facebook Pixel/Meta Ads), line (LINE Official Account), stripe (Stripe), omise (Omise/GB Prime Pay), aws (AWS/Google Cloud), mailchimp (Mailchimp/Klaviyo), zendesk (Zendesk/Freshdesk)
-
-  // Step 5: Settings
-  "language": "th" | "en" | "both",
-  "exportFormat": ["PDF", "Word (.docx)", "TXT", "HTML Embed"],
-  "dpoEmail": "string (optional)",
-  "retentionPeriod": "string" // One of: '1 ปี', '2 ปี', '3 ปี', '5 ปี', '7 ปี (ตามกฎหมายภาษี)', '10 ปี', 'ตลอดระยะเวลาการใช้บริการ'
+  "email": "john@example.com",
+  "otp": "123456"
 }
+```
 
-Response 200:
+On success, creates the merchant account and returns `user`, `token`, `refresh_token`, `token_type = bearer`, and `expires_in = 900`.
+
+Compatibility route: `POST /otp/register/verify`.
+
+#### 1.6 Resend Registration OTP
+```http
+POST /auth/register/resend-otp
+Content-Type: application/json
+
 {
-  "success": true,
-  "data": {
-    "policyId": "policy_uuid",
-    "slug": "mysite-com-privacy",
-    "shareUrl": "https://flowpdpa.co.th/p/mysite-com-privacy",
-    "name": "Privacy + Cookies Policy",
-    "type": "privacy",
-    "status": "active",
-    "content": {
-      "th": "Full Thai policy text...",
-      "en": "Full English policy text..."
-    },
-    "downloads": {
-      "pdf": "https://cdn.flowpdpa.co.th/policies/xxx.pdf",
-      "docx": "https://cdn.flowpdpa.co.th/policies/xxx.docx",
-      "txt": "https://cdn.flowpdpa.co.th/policies/xxx.txt",
-      "html": "<script>...</script>"
-    },
-    "createdAt": "2026-05-23T10:00:00Z"
+  "email": "john@example.com"
+}
+```
+
+Compatibility route: `POST /otp/register/resend-otp`. Frontend must respect `canResendIn`, `RESEND_COOLDOWN`, and resend-attempt limits.
+
+#### 1.7 Refresh Tokens
+```http
+POST /auth/refresh
+Content-Type: application/json
+
+{
+  "refresh_token": "jwt_refresh_token"
+}
+```
+
+Response 200 returns `access_token`, rotated `refresh_token`, `token_type`, and `expires_in`. This response is not wrapped in `success/data`.
+
+---
+
+### 2. Policy + Legal Review APIs
+
+Current flow:
+
+```text
+Merchant submits form
+-> AI generates content_th and optional content_en
+-> Backend saves DB row with status = pending_review
+-> Legal edits content directly in the Legal Portal
+-> Legal approves/rejects/marks edited
+-> Backend exports PDF/DOCX/TXT/HTML only after approved or edited
+-> Public links are visible only after approved or edited
+```
+
+Policy statuses:
+
+```ts
+type PolicyStatus = 'pending_review' | 'approved' | 'rejected' | 'edited' | 'archived'
+```
+
+Shared response shape (`SavedPolicy`):
+
+```ts
+interface SavedPolicy {
+  id: string
+  slug: string
+  type: string
+  typeName: string
+  typeIcon: string
+  websiteName: string
+  domain: string
+  language: 'th' | 'en' | 'both'
+  status: PolicyStatus
+  createdAt: string
+  updatedAt: string
+  htmlContent: string
+  htmlContentByLanguage: { th: string | null; en: string | null }
+  ownerEmail: string
+  ownerName?: string
+  reviewComment?: string | null
+  reviewedAt?: string | null
+  reviewedBy?: string | null
+  lastEditedBy?: string | null
+  lastEditedAt?: string | null
+  approvedBy?: string | null
+  approvedAt?: string | null
+  assignedLegalUserId?: string | null
+  assignedAt?: string | null
+  assignmentNote?: string | null
+  approvalDeadline?: string | null
+  googleDocId?: string | null
+  googleDocUrl?: string | null
+  shareUrl?: string | null
+  shareUrls: { th: string | null; en: string | null }
+  htmlEmbed?: string | null
+  htmlEmbeds: { th: string | null; en: string | null }
+  downloads: { pdf: string | null; docx: string | null; txt: string | null; html: string | null }
+  downloadsByLanguage: {
+    th: { pdf: string | null; docx: string | null; txt: string | null; html: string | null }
+    en: { pdf: string | null; docx: string | null; txt: string | null; html: string | null }
   }
+  formData?: object
 }
+```
 
-Response 402 (Plan Limit):
+#### 2.1 Create Policy Submission (AI Draft)
+Billing rule before creating:
+
+- Stripe billing is enabled: `STRIPE_BILLING_ENABLED=true`.
+- `privacy` is free and uses the complete flow without payment.
+- `hr`, `cctv`, `recruitment`, `vendor`, and `dpa` require an active monthly subscription for that policy type.
+- Both free and paid flows include AI draft, DB storage, legal review/edit/approval, final exports, public policy page, and change requests.
+- `retentionPeriod` is legal content only. It describes how long the merchant keeps personal data.
+- `retentionPeriod` never controls Stripe price, subscription length, or cancellation date.
+- Backend maps every paid `policyType` to a server-side Stripe monthly Price.
+- A paid request without an active entitlement returns `402 SUBSCRIPTION_REQUIRED` and points to `POST /billing/checkout-sessions`.
+- Frontend must never decide whether a type is free or trust a client-supplied amount/Stripe Price ID.
+
+Legal assignment after creating:
+
+- Backend automatically assigns the pending policy to the active legal user with the fewest pending policies.
+- Frontend and merchant do not choose a legal reviewer.
+- If no active legal user exists, the policy remains unassigned with `assignmentNote = Awaiting an active legal reviewer`.
+- Creating or reactivating a legal user automatically distributes the unassigned backlog.
+
+```http
+POST /policies
+Authorization: Bearer <merchant_token>
+Content-Type: application/json
+
 {
-  "success": false,
-  "error": {
-    "code": "PREMIUM_FEATURE",
-    "message": "ภาษาอังกฤษและฟีเจอร์ขั้นสูงต้องใช้แผน Premium"
+  "policyType": "privacy",
+  "agreedToTerms": true,
+  "ownerType": "company",
+  "ownerFullName": "",
+  "ownerIdCard": "",
+  "companyName": "Example Co., Ltd.",
+  "companyRegNumber": "0105565012345",
+  "websiteName": "My Website",
+  "websiteUrl": "https://example.com",
+  "businessType": "SME / วิสาหกิจขนาดกลางและเล็ก",
+  "contactEmail": "contact@example.com",
+  "contactPhone": "0812345678",
+  "address": "123 Bangkok",
+  "dataTypes": ["name", "email", "phone", "ip"],
+  "purposes": ["service", "contact", "analytics"],
+  "thirdParties": ["ga", "fb"],
+  "language": "th",
+  "exportFormat": ["PDF", "Word (.docx)", "TXT", "HTML Embed"],
+  "dpoEmail": "dpo@example.com",
+  "retentionPeriod": "2 ปี",
+  "templateVersion": "v1-dev",
+  "useAI": true
+}
+```
+
+Response 201:
+
+```json
+{
+  "id": "policy_uuid",
+  "slug": "example-com-privacy-a1b2c3d4",
+  "type": "privacy",
+  "typeName": "Privacy + Cookies Policy",
+  "typeIcon": "lock",
+  "websiteName": "My Website",
+  "domain": "example.com",
+  "language": "th",
+  "status": "pending_review",
+  "createdAt": "2026-06-19T10:00:00Z",
+  "updatedAt": "2026-06-19T10:00:00Z",
+  "htmlContent": "<!doctype html>...",
+  "htmlContentByLanguage": {
+    "th": "<!doctype html>...",
+    "en": null
+  },
+  "ownerEmail": "contact@example.com",
+  "ownerName": "Example Co., Ltd.",
+  "approvalDeadline": "2026-06-21T10:00:00Z",
+  "shareUrl": null,
+  "shareUrls": { "th": null, "en": null },
+  "downloads": { "pdf": null, "docx": null, "txt": null, "html": null },
+  "downloadsByLanguage": {
+    "th": { "pdf": null, "docx": null, "txt": null, "html": null },
+    "en": { "pdf": null, "docx": null, "txt": null, "html": null }
   }
 }
 ```
 
-#### 2.2 List User Policies
+Notes:
+- No final downloads are generated at submission time.
+- `language: "both"` stores separate `content_th` and `content_en`.
+- In the current free release this endpoint never returns a billing-related `402`.
+- After billing is enabled, a paid `policyType` without entitlement returns `402 PAYMENT_REQUIRED`.
+
+#### 2.2 Customer List Policies
 ```http
 GET /policies
-Authorization: Bearer <token>
-
-Response 200:
-{
-  "success": true,
-  "data": {
-    "policies": [
-      {
-        "id": "policy_uuid",
-        "name": "Privacy + Cookies Policy",
-        "domain": "mysite.com",
-        "type": "privacy",
-        "language": "TH + EN",
-        "status": "active",
-        "slug": "mysite-com-privacy",
-        "shareUrl": "https://flowpdpa.co.th/p/mysite-com-privacy",
-        "downloads": {
-          "pdf": "...",
-          "docx": "...",
-          "txt": "...",
-          "html": "..."
-        },
-        "updatedAt": "2026-05-23T10:00:00Z"
-      }
-    ],
-    "total": 3
-  }
-}
+Authorization: Bearer <merchant_token>
 ```
 
-#### 2.3 Get Policy Details
-```http
-GET /policies/:policyId
-Authorization: Bearer <token>
+Returns only active merchant policies. Policies with `status = archived` are excluded from this normal list.
 
 Response 200:
+
+```json
+[
+  {
+    "id": "policy_uuid",
+    "slug": "example-com-privacy-a1b2c3d4",
+    "type": "privacy",
+    "typeName": "Privacy + Cookies Policy",
+    "websiteName": "My Website",
+    "domain": "example.com",
+    "language": "both",
+    "status": "pending_review",
+    "reviewComment": null,
+    "reviewedAt": null,
+    "approvalDeadline": "2026-06-21T10:00:00Z",
+    "googleDocId": null,
+    "googleDocUrl": null,
+    "shareUrl": null,
+    "downloads": { "pdf": null, "docx": null, "txt": null, "html": null }
+  }
+]
+```
+
+#### 2.3 Customer Get Policy Detail
+```http
+GET /policies/:policyId
+Authorization: Bearer <merchant_token>
+```
+
+Response 200:
+
+```json
 {
   "success": true,
   "data": {
-    "policy": {
-      "id": "policy_uuid",
-      "name": "Privacy + Cookies Policy",
-      "type": "privacy",
-      "slug": "mysite-com-privacy",
-      "shareUrl": "https://flowpdpa.co.th/p/mysite-com-privacy",
-      "status": "active",
-      
-      // Form data for editing
-      "formData": { ... },
-      
-      // Generated content
-      "content": {
-        "th": "...",
-        "en": "..."
-      },
-      
-      // Metadata
-      "createdAt": "2026-05-23T10:00:00Z",
-      "updatedAt": "2026-05-23T10:00:00Z",
-      "version": 1
+    "id": "policy_uuid",
+    "slug": "example-com-privacy-a1b2c3d4",
+    "status": "pending_review",
+    "htmlContentByLanguage": {
+      "th": "<!doctype html>...",
+      "en": "<!doctype html>..."
+    },
+    "formData": { "...": "original merchant request" },
+    "reviewComment": null,
+    "shareUrls": { "th": null, "en": null },
+    "downloadsByLanguage": {
+      "th": { "pdf": null, "docx": null, "txt": null, "html": null },
+      "en": { "pdf": null, "docx": null, "txt": null, "html": null }
     }
   }
 }
 ```
 
-#### 2.4 Update Policy (Re-generate)
+#### 2.3.1 Merchant Regenerate Policy
+Replaces the complete merchant questionnaire for an existing policy and generates a new AI draft. It preserves the policy ID and public slug, increments the version, clears old final exports, and sets `status = pending_review` for legal review again.
+
 ```http
 PUT /policies/:policyId
-Authorization: Bearer <token>
+Authorization: Bearer <merchant_token>
 Content-Type: application/json
+```
 
+The body is the same complete questionnaire used by `POST /policies`:
+
+```json
 {
-  // Same structure as generate request
   "policyType": "privacy",
-  "websiteName": "...",
-  ...
+  "agreedToTerms": true,
+  "ownerType": "company",
+  "companyName": "Example Co., Ltd.",
+  "companyRegNumber": "0105559999999",
+  "websiteName": "My Website",
+  "websiteUrl": "https://example.com",
+  "businessType": "SME",
+  "contactEmail": "contact@example.com",
+  "contactPhone": "0812345678",
+  "address": "123 Bangkok",
+  "dataTypes": ["name", "email", "phone", "ip"],
+  "hasCookies": true,
+  "hasUserAccounts": false,
+  "purposes": ["service", "contact", "analytics"],
+  "thirdParties": ["ga", "fb"],
+  "language": "th",
+  "dpoEmail": "dpo@example.com",
+  "retentionPeriod": "2 years",
+  "exportFormat": ["PDF", "Word (.docx)", "TXT", "HTML Embed"],
+  "templateVersion": "v1-dev",
+  "useAI": true
 }
+```
+
+Use `PUT` only when the merchant changes the submitted questionnaire and wants AI to regenerate the entire policy. Legal text edits use `PATCH /legal/submissions/:slug` instead.
 
 Response 200:
+
+```json
 {
   "success": true,
   "data": {
     "policyId": "policy_uuid",
+    "slug": "example-com-privacy-a1b2c3d4",
+    "status": "pending_review",
     "version": 2,
-    "slug": "updated-slug",
-    ...
+    "content": { "th": "...", "en": null },
+    "formData": { "...": "complete updated questionnaire" }
   }
 }
 ```
 
-#### 2.5 Delete Policy
+#### 2.4 Legal Login
 ```http
-DELETE /policies/:policyId
-Authorization: Bearer <token>
+POST /legal/auth/login
+Content-Type: application/json
+
+{
+  "email": "legal-user@example.com",
+  "password": "securePassword123"
+}
+```
 
 Response 200:
+
+```json
+{
+  "user": {
+    "id": "legal_uuid",
+    "email": "legal-user@example.com",
+    "name": "Legal Reviewer",
+    "role": "legal"
+  },
+  "token": "legal_jwt_token"
+}
+```
+
+Admin creates legal accounts through `POST /admin/legal-users`. The legacy `legal@flowpdpa.co.th` credentials are available only when `DEBUG=true`.
+
+#### 2.5 Merchant Creates Policy Change Request
+Used after a customer/data subject contacts the merchant and the merchant verifies that the policy should be reviewed. This request goes directly to FlowPDPA legal with `status = pending_review`.
+
+```http
+POST /policies/:policyId/change-requests
+Authorization: Bearer <merchant_token>
+Content-Type: application/json
+
+{
+  "requesterName": "John Customer",
+  "requesterEmail": "customer@example.com",
+  "language": "th",
+  "sectionTitle": "3. วัตถุประสงค์ในการประมวลผลข้อมูล",
+  "selectedText": "เราใช้ข้อมูลเพื่อวิเคราะห์การใช้งานเว็บไซต์",
+  "lineStart": 42,
+  "lineEnd": 48,
+  "requestedChange": "Customer asked us to remove analytics purpose.",
+  "reason": "Merchant confirmed we no longer use Google Analytics.",
+  "priority": "normal",
+  "merchantComment": "Verified by merchant. Please update the policy."
+}
+```
+
+Response 201:
+
+```json
+{
+  "id": "change_request_uuid",
+  "policyId": "policy_uuid",
+  "policySlug": "example-com-privacy-a1b2c3d4",
+  "requesterEmail": "customer@example.com",
+  "language": "th",
+  "sectionTitle": "3. วัตถุประสงค์ในการประมวลผลข้อมูล",
+  "selectedText": "เราใช้ข้อมูลเพื่อวิเคราะห์การใช้งานเว็บไซต์",
+  "requestedChange": "Customer asked us to remove analytics purpose.",
+  "status": "pending_review",
+  "merchantComment": "Verified by merchant. Please update the policy.",
+  "merchantReviewedAt": "2026-06-19T10:00:00Z",
+  "createdAt": "2026-06-19T10:00:00Z"
+}
+```
+
+How frontend knows "which part":
+- Merchant portal should render sections with anchors like `section-3-purposes`.
+- Merchant can select/copy the section the customer complained about.
+- If customer highlights text, send `selectedText`.
+- If viewer/editor supports it, send `lineStart` and `lineEnd`.
+
+#### 2.6 Merchant List Change Requests
+
+```http
+GET /policies/:policyId/change-requests
+GET /policies/:policyId/change-requests?status=pending_review
+GET /policies/:policyId/change-requests?status=resolved
+Authorization: Bearer <merchant_token>
+```
+
+Response 200:
+
+```json
+[
+  {
+    "id": "change_request_uuid",
+    "requesterName": "John Customer",
+    "requesterEmail": "customer@example.com",
+    "language": "th",
+    "sectionTitle": "3. วัตถุประสงค์ในการประมวลผลข้อมูล",
+    "selectedText": "เราใช้ข้อมูลเพื่อวิเคราะห์การใช้งานเว็บไซต์",
+    "requestedChange": "Customer asked us to remove analytics purpose.",
+    "status": "pending_review",
+    "merchantComment": "Verified by merchant. Please update the policy.",
+    "legalComment": null,
+    "createdAt": "2026-06-19T10:00:00Z"
+  }
+]
+```
+
+#### 2.6.1 Merchant Change Request Detail
+
+```http
+GET /policies/:policyId/change-requests/:requestId
+Authorization: Bearer <merchant_token>
+```
+
+No body.
+
+Response 200: one change request object. Merchant can only see requests for policies they own.
+
+```json
+{
+  "id": "change_request_uuid",
+  "policyId": "policy_uuid",
+  "policySlug": "example-com-privacy-a1b2c3d4",
+  "requesterName": "John Customer",
+  "requesterEmail": "customer@example.com",
+  "language": "th",
+  "sectionTitle": "3. Purposes",
+  "selectedText": "analytics tracking text",
+  "lineStart": 42,
+  "lineEnd": 48,
+  "requestedChange": "Customer asked us to remove analytics purpose.",
+  "reason": "Merchant confirmed we no longer use Google Analytics.",
+  "priority": "normal",
+  "status": "pending_review",
+  "merchantComment": "Verified by merchant. Please update the policy.",
+  "legalComment": null,
+  "policyVersion": null,
+  "createdAt": "2026-06-19T10:00:00Z"
+}
+```
+
+Status meaning:
+- `pending_review`: request is in FlowPDPA legal queue.
+- `resolved`: legal updated the policy.
+- `rejected`: legal rejected the change request.
+
+#### 2.6.2 Legal Dashboard
+```http
+GET /legal/dashboard
+Authorization: Bearer <legal_token>
+```
+
+Returns only the authenticated legal reviewer's assigned workload. Each queue is limited to 10 items; use the full queue endpoints for pagination and filtering.
+
+Response 200:
+
+```json
 {
   "success": true,
   "data": {
-    "deleted": true,
-    "policyId": "policy_uuid"
+    "reviewer": {
+      "id": "legal_uuid",
+      "name": "Legal Reviewer",
+      "email": "legal@flowpdpa.co.th"
+    },
+    "summary": {
+      "pendingPolicies": 12,
+      "overduePolicies": 2,
+      "dueWithin24Hours": 3,
+      "pendingChangeRequests": 4,
+      "approvedThisMonth": 30,
+      "editedThisMonth": 8
+    },
+    "pendingPolicies": [
+      {
+        "policyId": "policy_uuid",
+        "slug": "example-com-privacy-a1b2c3d4",
+        "type": "privacy",
+        "websiteName": "Example Website",
+        "language": "both",
+        "approvalDeadline": "2026-06-21T10:00:00Z",
+        "isOverdue": false,
+        "assignmentNote": "Urgent client",
+        "createdAt": "2026-06-20T10:00:00Z"
+      }
+    ],
+    "pendingChangeRequests": [],
+    "recentReviews": []
   }
 }
 ```
 
-#### 2.6 Get Public Policy (No auth required)
+Dashboard rules:
+
+- `overduePolicies` means deadline is earlier than the current time.
+- `dueWithin24Hours` excludes already overdue policies.
+- Monthly totals use immutable `legal_review_events` in the current UTC calendar month.
+- Admin and merchant tokens cannot access this endpoint.
+
+#### 2.7 Legal Queue
+Database legal users receive only policies assigned to their account by automatic workload balancing or an Admin override.
+
 ```http
-GET /policies/public/:slug
+GET /legal/submissions
+GET /legal/submissions?status=pending_review
+GET /legal/submissions?status=approved
+GET /legal/submissions?status=rejected
+GET /legal/submissions?status=edited
+Authorization: Bearer <legal_token>
+```
 
 Response 200:
+
+```json
+[
+  {
+    "id": "policy_uuid",
+    "slug": "example-com-privacy-a1b2c3d4",
+    "websiteName": "My Website",
+    "domain": "example.com",
+    "language": "both",
+    "status": "pending_review",
+    "htmlContent": "<!doctype html>...",
+    "htmlContentByLanguage": {
+      "th": "<!doctype html>...",
+      "en": "<!doctype html>..."
+    },
+    "ownerEmail": "contact@example.com",
+    "ownerName": "Example Co., Ltd.",
+    "approvalDeadline": "2026-06-21T10:00:00Z"
+  }
+]
+```
+
+#### 2.8 Legal Detail
+```http
+GET /legal/submissions/:slug
+Authorization: Bearer <legal_token>
+```
+
+Response is one full `SavedPolicy` object and includes `formData`, `htmlContentByLanguage`, review fields, and downloads.
+
+#### 2.9 Legal Change Request Queue
+```http
+GET /legal/change-requests
+GET /legal/change-requests?status=pending_review
+GET /legal/change-requests?policySlug=example-com-privacy-a1b2c3d4
+Authorization: Bearer <legal_token>
+```
+
+Response 200:
+
+```json
+[
+  {
+    "id": "change_request_uuid",
+    "policyId": "policy_uuid",
+    "policySlug": "example-com-privacy-a1b2c3d4",
+    "merchantId": "merchant_uuid",
+    "websiteName": "My Website",
+    "language": "th",
+    "sectionTitle": "3. วัตถุประสงค์ในการประมวลผลข้อมูล",
+    "selectedText": "เราใช้ข้อมูลเพื่อวิเคราะห์การใช้งานเว็บไซต์",
+    "lineStart": 42,
+    "lineEnd": 48,
+    "requestedChange": "Please remove analytics purpose.",
+    "reason": "Business stopped using Google Analytics",
+    "priority": "normal",
+    "status": "pending_review",
+    "createdAt": "2026-06-19T10:00:00Z"
+  }
+]
+```
+
+#### 2.9.1 Legal Change Request Detail
+
+```http
+GET /legal/change-requests/:requestId
+Authorization: Bearer <legal_token>
+```
+
+No body.
+
+Response 200: one change request object plus related policy context.
+
+```json
 {
-  "success": true,
-  "data": {
-    "policy": {
-      "name": "Privacy + Cookies Policy",
-      "type": "privacy",
-      "content": {
-        "th": "...",
-        "en": "..."
-      },
-      "company": {
-        "name": "MyShop",
-        "url": "https://mysite.com",
-        "email": "contact@mysite.com"
-      },
-      "generatedAt": "2026-05-23T10:00:00Z"
+  "id": "change_request_uuid",
+  "policyId": "policy_uuid",
+  "policySlug": "example-com-privacy-a1b2c3d4",
+  "websiteName": "My Website",
+  "language": "th",
+  "sectionTitle": "3. Purposes",
+  "selectedText": "analytics tracking text",
+  "requestedChange": "Please remove analytics purpose.",
+  "reason": "Business stopped using Google Analytics",
+  "priority": "normal",
+  "status": "pending_review",
+  "merchantComment": "Verified by merchant. Please update the policy.",
+  "legalComment": null,
+  "policy": {
+    "id": "policy_uuid",
+    "slug": "example-com-privacy-a1b2c3d4",
+    "status": "approved",
+    "version": 2,
+    "htmlContentByLanguage": {
+      "th": "<!doctype html>...",
+      "en": null
+    },
+    "formData": {}
+  }
+}
+```
+
+#### 2.10 Legal Resolve Change Request
+Legal should first edit policy content with `PATCH /legal/submissions/:slug`, then resolve the request. When status is `resolved`, backend saves the current DB policy content as a new `policy_versions` row, increments `policies.version`, regenerates final exports, and keeps the public page on the same slug.
+
+```http
+PATCH /legal/change-requests/:requestId
+Authorization: Bearer <legal_token>
+Content-Type: application/json
+
+{
+  "status": "resolved",
+  "legalComment": "Removed analytics purpose from Thai policy section 3."
+}
+```
+
+Reject request:
+
+```json
+{
+  "status": "rejected",
+  "legalComment": "Analytics purpose must remain because merchant still uses tracking in submitted form data."
+}
+```
+
+Rules:
+
+- `resolved`: `legalComment` must contain text. Backend creates the next policy version automatically.
+- `rejected`: `legalComment` must contain text.
+
+Response 200:
+
+```json
+{
+  "id": "change_request_uuid",
+  "status": "resolved",
+  "policyId": "policy_uuid",
+  "policySlug": "example-com-privacy-a1b2c3d4",
+  "policyVersion": 3,
+  "legalComment": "Removed analytics purpose from Thai policy section 3.",
+  "resolvedAt": "2026-06-19T12:00:00Z"
+}
+```
+
+Merchant gets the new version through existing endpoints:
+
+```http
+GET /policies/:policyId
+GET /policies
+GET /policies/:policyId/change-requests
+```
+
+`GET /policies/:policyId` returns the updated `version`, `htmlContentByLanguage`, `downloadsByLanguage`, and same public `shareUrls`.
+
+#### 2.11 Legal Update Submission
+Main endpoint for legal portal edits. Use this one endpoint to update deadline, save edited content, approve, reject, or mark as edited.
+
+```http
+PATCH /legal/submissions/:slug
+Authorization: Bearer <legal_token>
+Content-Type: application/json
+```
+
+Update or clear deadline:
+
+```json
+{
+  "approvalDeadline": "2026-06-21T10:00:00Z"
+}
+```
+
+```json
+{
+  "approvalDeadline": null
+}
+```
+
+Save Thai content:
+
+```json
+{
+  "content": {
+    "language": "th",
+    "text": "# Privacy Policy Thai markdown\n\n..."
+  }
+}
+```
+
+Save English content:
+
+```json
+{
+  "content": {
+    "language": "en",
+    "text": "# Privacy Policy\n\n..."
+  }
+}
+```
+
+Save both languages:
+
+```json
+{
+  "content": {
+    "language": "both",
+    "contentTh": "# Privacy Policy Thai markdown\n\n...",
+    "contentEn": "# Privacy Policy\n\n..."
+  }
+}
+```
+
+Approve and export final files from DB content. `reviewComment` can be omitted or `null`:
+
+```json
+{
+  "review": {
+    "status": "approved",
+    "reviewComment": null
+  }
+}
+```
+
+Reject. `reviewComment` is required:
+
+```json
+{
+  "review": {
+    "status": "rejected",
+    "reviewComment": "Please add DPO contact details before legal approval."
+  }
+}
+```
+
+Mark edited and export final files from DB content. `reviewComment` is required:
+
+```json
+{
+  "review": {
+    "status": "edited",
+    "reviewComment": "Legal edited the retention and contact sections in the portal."
+  }
+}
+```
+
+Combined save-and-approve example:
+
+```json
+{
+  "approvalDeadline": "2026-06-21T10:00:00Z",
+  "content": {
+    "language": "both",
+    "contentTh": "# Final Thai policy\n\n...",
+    "contentEn": "# Final English policy\n\n..."
+  },
+  "review": {
+    "status": "approved",
+    "reviewComment": null
+  }
+}
+```
+
+Rules:
+
+- Legal identity is read from the authenticated legal token. Frontend must not send `editedBy`, `reviewedBy`, or `approvedBy`.
+- Saving `content` sets `lastEditedBy` and `lastEditedAt` automatically.
+- Any review decision sets `reviewedBy` and `reviewedAt` automatically.
+- `approved` or `edited` sets `approvedBy` and `approvedAt` automatically.
+- `approved`: `reviewComment` can be `null` or omitted.
+- `rejected`: `reviewComment` must contain text.
+- `edited`: `reviewComment` must contain text.
+- `approved` and `edited`: backend creates final exports based on `exportFormat`.
+- `rejected`: backend clears final export links and keeps the submission private.
+
+Response 200: updated `SavedPolicy` object.
+
+#### 2.12 Compatibility Legal Save Edited Content In DB
+Prefer `PATCH /legal/submissions/:slug`. This old endpoint can remain for older frontend builds.
+
+```http
+PATCH /legal/submissions/:slug/content
+Authorization: Bearer <legal_token>
+Content-Type: application/json
+```
+
+Thai only:
+
+```json
+{
+  "language": "th",
+  "content": "# นโยบายความเป็นส่วนตัว\n\n..."
+}
+```
+
+English only:
+
+```json
+{
+  "language": "en",
+  "content": "# Privacy Policy\n\n..."
+}
+```
+
+Both languages:
+
+```json
+{
+  "language": "both",
+  "contentTh": "# นโยบายความเป็นส่วนตัว\n\n...",
+  "contentEn": "# Privacy Policy\n\n..."
+}
+```
+
+Response 200: updated `SavedPolicy` object.
+
+#### 2.13 Compatibility Legal Review Action
+Prefer `PATCH /legal/submissions/:slug`. This old endpoint can remain for older frontend builds.
+
+```http
+PATCH /legal/submissions/:slug/review
+Authorization: Bearer <legal_token>
+Content-Type: application/json
+```
+
+Approve and export final files from DB content. `reviewComment` can be `null`:
+
+```json
+{
+  "status": "approved",
+  "reviewComment": null,
+  "syncGoogleDoc": false
+}
+```
+
+Reject. `reviewComment` is required:
+
+```json
+{
+  "status": "rejected",
+  "reviewComment": "Please add DPO contact details",
+  "syncGoogleDoc": false
+}
+```
+
+Mark edited and export final files from DB content. `reviewComment` is required:
+
+```json
+{
+  "status": "edited",
+  "reviewComment": "Legal edited content in portal",
+  "syncGoogleDoc": false
+}
+```
+
+When status is `approved` or `edited`, backend creates final exports based on `exportFormat`.
+
+Response 200 after approved/edited:
+
+```json
+{
+  "id": "policy_uuid",
+  "slug": "example-com-privacy-a1b2c3d4",
+  "status": "approved",
+  "shareUrls": {
+    "th": "https://api.flowpdpa.co.th/example-com-privacy-a1b2c3d4",
+    "en": "https://api.flowpdpa.co.th/example-com-privacy-a1b2c3d4/en"
+  },
+  "htmlEmbeds": {
+    "th": "<iframe src=\"https://api.flowpdpa.co.th/example-com-privacy-a1b2c3d4\" width=\"100%\" height=\"800\" loading=\"lazy\"></iframe>",
+    "en": "<iframe src=\"https://api.flowpdpa.co.th/example-com-privacy-a1b2c3d4/en\" width=\"100%\" height=\"800\" loading=\"lazy\"></iframe>"
+  },
+  "downloadsByLanguage": {
+    "th": {
+      "pdf": "signed-private-url-policy-th.pdf",
+      "docx": "signed-private-url-policy-th.docx",
+      "txt": "signed-private-url-policy-th.md",
+      "html": "signed-private-url-policy-th.html"
+    },
+    "en": {
+      "pdf": "signed-private-url-policy-en.pdf",
+      "docx": "signed-private-url-policy-en.docx",
+      "txt": "signed-private-url-policy-en.md",
+      "html": "signed-private-url-policy-en.html"
     }
   }
 }
 ```
 
----
 
+#### 2.15 Delete / Archive Policy (Merchant)
+This endpoint performs a soft delete. It does not physically delete the policy or its legal history from PostgreSQL.
+
+```http
+DELETE /policies/:policyId
+Authorization: Bearer <merchant_token>
+```
+
+Backend behavior:
+
+```text
+policy.status = archived
+-> policy is removed from GET /policies
+-> public policy URLs stop working
+-> generated policy row stays in PostgreSQL
+-> policy_versions rows stay in PostgreSQL
+-> policy_change_requests rows stay in PostgreSQL
+```
+
+Frontend behavior:
+
+- Show a confirmation dialog before calling this endpoint.
+- After success, remove the policy from the merchant's visible policy list.
+- Do not show its share URL or download actions as active.
+- Treat `status = archived` as deleted/inactive, not permanently erased.
+- Do not call the public page after archival; it returns `404 POLICY_NOT_PUBLIC`.
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": {
+    "policyId": "policy_uuid",
+    "status": "archived"
+  }
+}
+```
+
+#### 2.16 Public Policy Page (No auth)
+```http
+GET /policies/public/:slug
+GET /policies/public/:slug/en
+GET /:slug
+GET /:slug/en
+```
+
+Rules:
+- `approved` and `edited` return public HTML.
+- `pending_review`, `rejected`, and `archived` return `POLICY_NOT_PUBLIC`.
+
+---
 ### 3. User Profile APIs
 
 #### 3.1 Get User Profile
@@ -521,25 +1277,27 @@ Response 200:
 {
   "success": true,
   "data": {
-    "profile": {
-      "name": "string",
-      "function": "string",
-      "email": "string",
-      "phone": "string",
-      "mobile": "string",
-      "website": "string",
-      "company_name": "string",
-      "vat": "string",
+    "id": "merchant_uuid",
+    "name": "string",
+    "email": "string",
+    "plan": "Free",
+    "function": "string",
+    "phone": "string",
+    "mobile": "string",
+    "website": "string",
+    "company_name": "string",
+    "vat": "string",
+    "address": {
       "street": "string",
       "street2": "string",
       "city": "string",
-      "state_name": "string",
+      "state": "string",
       "zip": "string",
-      "country_name": "string",
-      "lang": "th_TH" | "en_US",
-      "plan": "Free" | "Premium",
-      "createdAt": "2026-05-23T10:00:00Z"
-    }
+      "country": "string"
+    },
+    "lang": "th_TH",
+    "createdAt": "2026-05-23T10:00:00Z",
+    "updatedAt": "2026-05-23T10:00:00Z"
   }
 }
 ```
@@ -558,23 +1316,18 @@ Content-Type: application/json
   "website": "string",
   "company_name": "string",
   "vat": "string",
-  "street": "string",
-  "street2": "string",
-  "city": "string",
-  "state_name": "string",
-  "zip": "string",
-  "country_name": "string",
+  "address": {
+    "street": "string",
+    "street2": "string",
+    "city": "string",
+    "state": "string",
+    "zip": "string",
+    "country": "string"
+  },
   "lang": "th_TH"
 }
 
-Response 200:
-{
-  "success": true,
-  "data": {
-    "updated": true,
-    "profile": { ... }
-  }
-}
+Response 200 uses the same `data` shape as `GET /profile`.
 ```
 
 #### 3.3 Change Password
@@ -585,98 +1338,197 @@ Content-Type: application/json
 
 {
   "currentPassword": "string",
-  "newPassword": "string (min 6 chars)"
+  "newPassword": "string (min 8 chars)"
 }
 
 Response 200:
 {
   "success": true,
   "data": {
-    "changed": true
+    "message": "Password changed successfully"
   }
 }
 ```
 
 ---
 
-### 4. Helpdesk/Ticket APIs
+### 4. Stripe Billing APIs
 
-#### 4.1 Submit Ticket
+`privacy` is free. The other policy types require independent monthly subscriptions. Prices and free/paid mapping are controlled by the backend; the frontend never submits an amount or Stripe Price ID.
+
+#### 4.1 List Policy Products
 ```http
-POST /tickets
-Authorization: Bearer <token> (Optional)
+GET /billing/products
+Authorization: Bearer <merchant_token>
+```
+
+Response 200:
+
+```json
+[
+  {
+    "policyType": "privacy",
+    "name": "Privacy + Cookies Policy",
+    "billingMode": "free",
+    "interval": null,
+    "checkoutAvailable": true
+  },
+  {
+    "policyType": "dpa",
+    "name": "Data Processing Agreement",
+    "billingMode": "subscription",
+    "interval": "month",
+    "checkoutAvailable": true
+  }
+]
+```
+
+`checkoutAvailable=false` means the backend operator has not configured that policy type's Stripe Price ID yet.
+
+#### 4.2 Create Stripe Checkout Session
+```http
+POST /billing/checkout-sessions
+Authorization: Bearer <merchant_token>
 Content-Type: application/json
 
 {
-  "partner_name": "string (required)",
-  "partner_email": "string (required)",
-  "partner_phone": "string (optional)",
-  "partner_company_name": "string (optional)",
-  "name": "string (required)", // Subject/ticket title
-  "ticket_type_id": "number | null", // Odoo ticket type ID
-  "ticket_type_label": "string", // Label shown in UI
-  "priority": "normal" | "low" | "high" | "urgent",
-  "tag_ids": ["string"], // Category tags (mapped to Odoo tag IDs)
-  "description": "string (required)"
-}
-
-Response 200:
-{
-  "success": true,
-  "data": {
-    "ticketId": "TKT-ABC123",
-    "status": "open",
-    "createdAt": "2026-05-23T10:00:00Z"
-  }
+  "policyType": "dpa"
 }
 ```
 
-#### 4.2 Get Ticket Status
+Response 201:
+
+```json
+{
+  "sessionId": "cs_...",
+  "checkoutUrl": "https://checkout.stripe.com/...",
+  "policyType": "dpa"
+}
+```
+
+Rules:
+
+- Backend chooses the Stripe Price ID from `policyType`.
+- Checkout Session uses recurring subscription mode.
+- Backend sets merchant ID and policy type as Stripe metadata.
+- Success and cancel URLs come from trusted backend configuration, not arbitrary request URLs.
+
+#### 4.3 Get Merchant Subscriptions
 ```http
-GET /tickets/:ticketId
-
-Response 200:
-{
-  "success": true,
-  "data": {
-    "ticket": {
-      "id": "TKT-ABC123",
-      "name": "string",
-      "partner_name": "string",
-      "partner_email": "string",
-      "partner_phone": "string",
-      "partner_company_name": "string",
-      "ticket_type_id": "number | null",
-      "ticket_type_label": "string",
-      "priority": "normal",
-      "tag_ids": ["string"],
-      "description": "string",
-      "status": "open" | "in_progress" | "resolved" | "closed",
-      "createdAt": "2026-05-23T10:00:00Z"
-    }
-  }
-}
+GET /billing/subscriptions
+GET /billing/subscriptions?policyType=dpa
+Authorization: Bearer <merchant_token>
 ```
 
-#### 4.3 List User Tickets
+Response 200:
+
+```json
+[
+  {
+    "id": "subscription_uuid",
+    "policyType": "dpa",
+    "status": "active",
+    "cancelAtPeriodEnd": false,
+    "currentPeriodEnd": "2026-07-19T10:00:00Z"
+  }
+]
+```
+
+#### 4.4 Cancel Monthly Subscription
+Merchant can cancel at any time. Cancellation is scheduled for the end of the current paid period by default.
+
 ```http
-GET /tickets
-Authorization: Bearer <token>
+POST /billing/subscriptions/:subscriptionId/cancel
+Authorization: Bearer <merchant_token>
+Content-Type: application/json
 
-Response 200:
 {
-  "success": true,
-  "data": {
-    "tickets": [ ... ]
-  }
+  "atPeriodEnd": true
 }
 ```
+
+Response 200:
+
+```json
+{
+  "id": "subscription_uuid",
+  "status": "active",
+  "cancelAtPeriodEnd": true,
+  "currentPeriodEnd": "2026-07-19T10:00:00Z"
+}
+```
+
+Cancellation behavior:
+
+- Merchant keeps paid access until `currentPeriodEnd`.
+- Merchant may undo scheduled cancellation before `currentPeriodEnd`.
+- After expiration, existing paid public policy pages return `404 POLICY_NOT_PUBLIC`.
+- After expiration, regeneration and new legal-change requests for that paid product return `402 SUBSCRIPTION_REQUIRED`.
+
+#### 4.5 Resume Scheduled Cancellation
+```http
+POST /billing/subscriptions/:subscriptionId/resume
+Authorization: Bearer <merchant_token>
+```
+
+Response 200 returns the subscription with `cancelAtPeriodEnd = false`.
+
+#### 4.6 Create Stripe Customer Portal Session
+```http
+POST /billing/portal-sessions
+Authorization: Bearer <merchant_token>
+```
+
+Response 201:
+
+```json
+{
+  "portalUrl": "https://billing.stripe.com/..."
+}
+```
+
+#### 4.7 Stripe Webhook
+```http
+POST /webhooks/stripe
+Stripe-Signature: <stripe_signature>
+```
+
+No merchant authentication. Backend verifies the Stripe signature against the raw request body and processes events idempotently.
+
+Required event handling:
+
+- Checkout completed: link Stripe customer/subscription to merchant and policy type.
+- Invoice paid: record successful renewal and keep entitlement active.
+- Invoice payment failed: record failure and update billing status.
+- Subscription updated: sync status, period end, and scheduled cancellation.
+- Subscription deleted: expire entitlement.
+
+Return `200` after successfully processing or safely ignoring an already-processed event.
 
 ---
 
 ### 5. Admin APIs
 
+All routes require `Authorization: Bearer <admin_token>`. This table is the authoritative implemented Admin Portal contract; monetary values are Stripe minor units.
+
+| Portal view | Endpoint | Purpose |
+|---|---|---|
+| Overview | `GET /admin/overview` | KPI, policy workflow totals, recent payments/errors |
+| Merchants | `GET /admin/merchants` | Search/filter/paginate merchant accounts |
+| Merchant detail | `GET /admin/merchants/:merchantId` | Profile, subscriptions, payments, policies |
+| Merchant status | `PUT /admin/merchants/:merchantId/status` | Activate, suspend, set pending/inactive |
+| Subscriptions | `GET /admin/subscriptions` | Read-only Stripe subscription monitoring |
+| Payments | `GET /admin/payments` | Read-only Stripe invoice monitoring |
+| Policies | `GET /admin/policies` | Search/filter/paginate all policy workflows |
+| Policy detail | `GET /admin/policies/:policyId` | Inspect form/review/assignment metadata |
+| Error Logs | `GET /admin/monitoring/logs` | Sanitized operational errors |
+| Analytics | `GET /admin/analytics` | Revenue, growth, churn, policy and risk analytics |
+| Legal Management | `/admin/legal-*`, `/admin/legal-users*` | Legal users, workload, history |
+
+The older sample payloads below are illustrative. Implemented responses use the field descriptions stated under each endpoint and do not include scan quota, LINE, or fictional Starter/Pro plan metrics.
+
 #### 5.1 Admin Overview
+Returns active merchant/subscription counts, Stripe revenue, pending payments, pending and unassigned legal reviews, active errors, policy status totals, and five recent payments/errors.
 ```http
 GET /admin/overview
 Authorization: Bearer <admin_token>
@@ -708,8 +1560,9 @@ Response 200:
 ```
 
 #### 5.2 List Merchants
+Supports `status`, `search`, `page`, and `limit`. Each item includes profile data, policy count, active subscriptions, creation time, and last login.
 ```http
-GET /admin/merchants?status=active&search=query
+GET /admin/merchants?status=active&search=query&page=1&limit=50
 Authorization: Bearer <admin_token>
 
 Response 200:
@@ -735,6 +1588,7 @@ Response 200:
 ```
 
 #### 5.3 Get Merchant Details
+Returns profile data, subscriptions, the latest 50 payments, and latest 50 policies.
 ```http
 GET /admin/merchants/:merchantId
 Authorization: Bearer <admin_token>
@@ -761,13 +1615,14 @@ Response 200:
 ```
 
 #### 5.4 Update Merchant Status
+Allowed values are `active`, `suspended`, `pending`, and `inactive`. Non-active merchants cannot authenticate or continue using an existing token.
 ```http
 PUT /admin/merchants/:merchantId/status
 Authorization: Bearer <admin_token>
 Content-Type: application/json
 
 {
-  "status": "active" | "suspended" | "pending"
+  "status": "suspended"
 }
 
 Response 200:
@@ -780,8 +1635,9 @@ Response 200:
 ```
 
 #### 5.5 List Subscriptions
+Supports `status`, `policyType`, `page`, and `limit`. This is read-only; Stripe webhooks own subscription state.
 ```http
-GET /admin/subscriptions?status=active
+GET /admin/subscriptions?status=active&policyType=dpa&page=1&limit=50
 Authorization: Bearer <admin_token>
 
 Response 200:
@@ -793,29 +1649,10 @@ Response 200:
 }
 ```
 
-#### 5.6 Update Subscription
+#### 5.6 List Payments
+Supports `status`, `page`, and `limit`. Returns Stripe invoice records and collected/pending/failed totals. Admin cannot mark an invoice paid.
 ```http
-PUT /admin/subscriptions/:subscriptionId
-Authorization: Bearer <admin_token>
-Content-Type: application/json
-
-{
-  "action": "activate" | "suspend" | "cancel"
-}
-
-Response 200:
-{
-  "success": true,
-  "data": {
-    "updated": true,
-    "subscription": { ... }
-  }
-}
-```
-
-#### 5.7 List Payments
-```http
-GET /admin/payments?status=pending
+GET /admin/payments?status=paid&page=1&limit=50
 Authorization: Bearer <admin_token>
 
 Response 200:
@@ -827,9 +1664,9 @@ Response 200:
         "id": "PAY001",
         "merchantName": "...",
         "amount": 799,
-        "gateway": "promptpay",
-        "plan": "Pro",
-        "status": "pending",
+        "gateway": "stripe",
+        "policyType": "dpa",
+        "status": "paid",
         "createdAt": "2026-05-23T10:00:00Z"
       }
     ],
@@ -842,24 +1679,21 @@ Response 200:
 }
 ```
 
-#### 5.8 Approve Payment
-```http
-POST /admin/payments/:paymentId/approve
-Authorization: Bearer <admin_token>
+Stripe webhook events update payment/subscription status. Admin endpoints are read-only monitoring APIs and must not manually mark Stripe invoices paid.
 
-Response 200:
-{
-  "success": true,
-  "data": {
-    "approved": true,
-    "payment": { ... }
-  }
-}
+#### 5.6.1 Policies
+```http
+GET /admin/policies?status=pending_review&policyType=privacy&merchantId=:merchantId&search=query&page=1&limit=50
+GET /admin/policies/:policyId
+Authorization: Bearer <admin_token>
 ```
 
-#### 5.9 Error Logs
+Admin can inspect merchant ownership, form metadata, workflow status, assignment, deadline, and review metadata. Admin cannot edit legal policy content.
+
+#### 5.7 Error Logs
+Supports `level`, `service`, `page`, and `limit`. Stored context contains request method/path only; request bodies and authorization headers are not persisted.
 ```http
-GET /admin/monitoring/logs?level=critical
+GET /admin/monitoring/logs?level=critical&service=stripe_billing&page=1&limit=50
 Authorization: Bearer <admin_token>
 
 Response 200:
@@ -885,7 +1719,8 @@ Response 200:
 }
 ```
 
-#### 5.10 Analytics
+#### 5.8 Analytics
+Returns total/current-month Stripe revenue, revenue by policy type, merchant growth, subscription churn, policies by type/status, top merchants, and at-risk subscriptions.
 ```http
 GET /admin/analytics
 Authorization: Bearer <admin_token>
@@ -914,6 +1749,105 @@ Response 200:
 }
 ```
 
+#### 5.9 List Legal Users
+```http
+GET /admin/legal-users?status=active&search=query
+Authorization: Bearer <admin_token>
+```
+
+Returns legal profiles with `pendingReviews`, `approvedCount`, `rejectedCount`, and `editedCount`.
+
+#### 5.10 Create Legal User
+```http
+POST /admin/legal-users
+Authorization: Bearer <admin_token>
+Content-Type: application/json
+
+{
+  "name": "Legal Reviewer",
+  "email": "legal2@flowpdpa.co.th",
+  "password": "securePassword123",
+  "phone": "0812345678",
+  "status": "active"
+}
+```
+
+Creates a `merchants` row with `role = legal`. The backend hashes the password.
+
+#### 5.11 Get Legal User Detail
+```http
+GET /admin/legal-users/:legalUserId
+Authorization: Bearer <admin_token>
+```
+
+Returns profile, workload totals, and the 20 most recent review events.
+
+#### 5.12 Update Legal User
+```http
+PUT /admin/legal-users/:legalUserId
+Authorization: Bearer <admin_token>
+Content-Type: application/json
+
+{
+  "name": "Senior Legal Reviewer",
+  "email": "senior.legal@flowpdpa.co.th",
+  "phone": "0899999999",
+  "roleLevel": "senior"
+}
+```
+
+Fields are optional, but at least one is required. This endpoint cannot change policy content.
+
+#### 5.13 Update Legal User Status
+```http
+PUT /admin/legal-users/:legalUserId/status
+Authorization: Bearer <admin_token>
+Content-Type: application/json
+
+{
+  "status": "suspended"
+}
+```
+
+Allowed values: `active`, `suspended`, `inactive`. Non-active legal users cannot log in, use an existing legal token, or receive assignments.
+
+#### 5.14 Manually Reassign Policy to Legal Reviewer
+```http
+PUT /admin/policies/:policyId/assign-legal
+Authorization: Bearer <admin_token>
+Content-Type: application/json
+
+{
+  "legalUserId": "legal_uuid",
+  "note": "Urgent client. Please review within 24 hours."
+}
+```
+
+Normal submissions are assigned automatically using least pending workload. This endpoint is an optional Admin override for urgent work, staff leave, or workload correction. Only active legal users can receive assignments.
+
+#### 5.15 Legal Workload Overview
+```http
+GET /admin/legal-workload
+Authorization: Bearer <admin_token>
+```
+
+Returns total and active legal users, pending and overdue reviews, monthly approvals, and average review time per reviewer.
+
+#### 5.16 Legal Review History
+```http
+GET /admin/legal-reviews?legalUserId=:legalUserId&status=approved&page=1&limit=50
+Authorization: Bearer <admin_token>
+```
+
+Allowed status filters: `approved`, `rejected`, `edited`. Results come from immutable `legal_review_events`.
+
+Admin Legal Management rules:
+
+- Admin manages legal accounts, status, assignments, workload, and review history.
+- Admin does not edit `content_th` or `content_en` through these endpoints.
+- Legal editor/reviewer identity comes from the authenticated token.
+- Legal content and review decisions remain under `/legal/*`.
+
 ---
 
 ## Database Schema
@@ -929,11 +1863,12 @@ Response 200:
 │  2. merchant_profiles ──── Extended profile information                 │
 │  3. policies         ──── Generated policy records                      │
 │  4. policy_versions  ──── Policy version history                        │
-│  5. tickets          ──── Helpdesk tickets                              │
+│  5. policy_change_requests ──── Merchant-to-legal policy changes        │
 │  6. subscriptions    ──── Subscription records                          │
 │  7. payments         ──── Payment records                               │
-│  8. error_logs       ──── System error logs                             │
-│  9. audit_logs       ──── Audit trail                                   │
+│  8. stripe_webhook_events ──── Stripe webhook idempotency                │
+│  9. error_logs       ──── System error logs                             │
+│ 10. audit_logs       ──── Audit trail                                   │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -948,8 +1883,8 @@ CREATE TABLE merchants (
   password_hash VARCHAR(255) NOT NULL,
   name VARCHAR(255) NOT NULL,
   plan VARCHAR(50) NOT NULL DEFAULT 'Free', -- 'Free', 'Premium'
-  role VARCHAR(50) NOT NULL DEFAULT 'merchant', -- 'merchant', 'admin'
-  status VARCHAR(50) NOT NULL DEFAULT 'active', -- 'active', 'suspended', 'pending'
+  role VARCHAR(50) NOT NULL DEFAULT 'merchant', -- 'merchant', 'admin', 'legal'
+  status VARCHAR(50) NOT NULL DEFAULT 'active', -- 'active', 'suspended', 'inactive', 'pending'
   
   -- OAuth (for future)
   provider VARCHAR(100),
@@ -1010,57 +1945,62 @@ CREATE UNIQUE INDEX idx_merchant_profiles_merchant_id ON merchant_profiles(merch
 #### 3. policies
 ```sql
 CREATE TYPE policy_type AS ENUM ('privacy', 'hr', 'cctv', 'recruitment', 'vendor', 'dpa');
-CREATE TYPE policy_status AS ENUM ('draft', 'active', 'archived');
+CREATE TYPE policy_status AS ENUM ('draft', 'active', 'archived', 'pending_review', 'approved', 'rejected', 'edited');
 
 CREATE TABLE policies (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   merchant_id UUID NOT NULL REFERENCES merchants(id) ON DELETE CASCADE,
-  
+
   -- Policy Info
   name VARCHAR(255) NOT NULL,
   type policy_type NOT NULL DEFAULT 'privacy',
-  status policy_status NOT NULL DEFAULT 'active',
+  status policy_status NOT NULL DEFAULT 'pending_review',
   slug VARCHAR(255) UNIQUE NOT NULL,
-  
-  -- Form Data (JSON)
+
+  -- Original merchant request
   form_data JSONB NOT NULL,
-  /*
-  form_data structure:
-  {
-    policyType: "privacy",
-    agreedToTerms: true,
-    websiteName: "...",
-    websiteUrl: "...",
-    businessType: "...",
-    contactEmail: "...",
-    contactPhone: "...",
-    address: "...",
-    dataTypes: ["name", "email", ...],
-    hasCookies: "ใช่" | "ไม่ใช่",
-    hasUserAccounts: "ใช่" | "ไม่ใช่",
-    purposes: ["service", "order", ...],
-    thirdParties: ["ga", "fb", ...],
-    language: "th" | "en" | "both",
-    exportFormat: ["PDF", "Word", ...],
-    dpoEmail: "...",
-    retentionPeriod: "..."
-  }
-  */
-  
-  -- Generated Content
+
+  -- DB content is the source of truth before and after legal review
   content_th TEXT,
   content_en TEXT,
-  
-  -- Share URL
+
+  -- Public URL base; public page is available only when status is approved/edited
   share_url VARCHAR(500),
-  
-  -- Downloads (CDN URLs)
+
+  -- Final private export object keys / signed download sources (created after approval)
   download_url_pdf VARCHAR(500),
   download_url_docx VARCHAR(500),
   download_url_txt VARCHAR(500),
   html_embed_code TEXT,
-  
-  -- Metadata
+  download_url_pdf_en VARCHAR(500),
+  download_url_docx_en VARCHAR(500),
+  download_url_txt_en VARCHAR(500),
+  html_embed_code_en TEXT,
+
+  -- Template / AI metadata
+  template_id VARCHAR(100) NOT NULL DEFAULT 'legacy',
+  template_version VARCHAR(50) NOT NULL DEFAULT 'legacy',
+  reference_key VARCHAR(500),
+  ai_provider VARCHAR(100),
+  ai_model VARCHAR(100),
+
+  -- Legal review metadata
+  review_comment TEXT,
+  reviewed_at TIMESTAMP WITH TIME ZONE,
+  reviewed_by VARCHAR(255),
+  last_edited_by VARCHAR(255),
+  last_edited_at TIMESTAMP WITH TIME ZONE,
+  approved_by VARCHAR(255),
+  approved_at TIMESTAMP WITH TIME ZONE,
+  assigned_legal_user_id UUID REFERENCES merchants(id),
+  assigned_at TIMESTAMP WITH TIME ZONE,
+  assigned_by UUID REFERENCES merchants(id),
+  assignment_note TEXT,
+  approval_deadline TIMESTAMP WITH TIME ZONE,
+  google_doc_id VARCHAR(255),
+  google_doc_url VARCHAR(1000),
+
+  -- Versioning and timestamps
   version INTEGER NOT NULL DEFAULT 1,
   generated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -1072,8 +2012,8 @@ CREATE INDEX idx_policies_merchant_id ON policies(merchant_id);
 CREATE INDEX idx_policies_slug ON policies(slug);
 CREATE INDEX idx_policies_type ON policies(type);
 CREATE INDEX idx_policies_status ON policies(status);
+CREATE INDEX idx_policies_assigned_legal_user_id ON policies(assigned_legal_user_id);
 ```
-
 #### 4. policy_versions
 ```sql
 CREATE TABLE policy_versions (
@@ -1094,121 +2034,162 @@ CREATE INDEX idx_policy_versions_policy_id ON policy_versions(policy_id);
 CREATE UNIQUE INDEX idx_policy_versions_policy_version ON policy_versions(policy_id, version);
 ```
 
-#### 5. tickets
-```sql
-CREATE TYPE ticket_status AS ENUM ('open', 'in_progress', 'resolved', 'closed');
-CREATE TYPE ticket_type AS ENUM ('technical', 'billing', 'feature', 'other', 'legal');
-CREATE TYPE ticket_priority AS ENUM ('low', 'normal', 'high', 'urgent');
+#### 4.1 legal_review_events
+Immutable audit history. The backend inserts one row for every legal approval, rejection, edit, or resolved change request.
 
-CREATE TABLE tickets (
-  id VARCHAR(50) PRIMARY KEY, -- TKT-XXXXXXXX format
-  merchant_id UUID REFERENCES merchants(id) ON DELETE SET NULL,
-  
-  -- Customer Info (allow guest tickets)
-  partner_name VARCHAR(255) NOT NULL,
-  partner_email VARCHAR(255) NOT NULL,
-  partner_phone VARCHAR(50),
-  partner_company VARCHAR(255),
-  
-  -- Ticket Info
-  name VARCHAR(500) NOT NULL,
-  type ticket_type NOT NULL DEFAULT 'other',
-  priority ticket_priority NOT NULL DEFAULT 'normal',
-  status ticket_status NOT NULL DEFAULT 'open',
-  description TEXT NOT NULL,
-  
-  -- Resolution
-  resolution TEXT,
+```sql
+CREATE TABLE legal_review_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  policy_id UUID NOT NULL REFERENCES policies(id) ON DELETE CASCADE,
+  legal_user_id UUID REFERENCES merchants(id),
+  legal_user_email VARCHAR(255) NOT NULL,
+  action VARCHAR(50) NOT NULL,
+  comment TEXT,
+  reviewed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
+);
+
+CREATE INDEX idx_legal_review_events_policy_id ON legal_review_events(policy_id);
+CREATE INDEX idx_legal_review_events_legal_user_id ON legal_review_events(legal_user_id);
+CREATE INDEX idx_legal_review_events_reviewed_at ON legal_review_events(reviewed_at);
+```
+
+#### 5. policy_change_requests
+```sql
+CREATE TYPE policy_change_request_status AS ENUM ('merchant_review', 'merchant_rejected', 'pending_review', 'resolved', 'rejected');
+CREATE TYPE policy_change_request_priority AS ENUM ('low', 'normal', 'high', 'urgent');
+
+CREATE TABLE policy_change_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  policy_id UUID NOT NULL REFERENCES policies(id) ON DELETE CASCADE,
+  merchant_id UUID NOT NULL REFERENCES merchants(id) ON DELETE CASCADE,
+
+  -- Which policy content should legal edit?
+  policy_slug VARCHAR(255) NOT NULL,
+  language VARCHAR(10) NOT NULL DEFAULT 'th', -- th, en, both
+  section_title VARCHAR(500),
+  selected_text TEXT,
+  line_start INTEGER,
+  line_end INTEGER,
+
+  -- Customer/requester info
+  requester_name VARCHAR(255),
+  requester_email VARCHAR(255),
+
+  -- Customer request
+  requested_change TEXT NOT NULL,
+  reason TEXT,
+  priority policy_change_request_priority NOT NULL DEFAULT 'normal',
+  status policy_change_request_status NOT NULL DEFAULT 'merchant_review',
+
+  -- Merchant review
+  merchant_comment TEXT,
+  merchant_reviewed_at TIMESTAMP WITH TIME ZONE,
+  merchant_reviewed_by UUID REFERENCES merchants(id),
+
+  -- Legal resolution
+  legal_comment TEXT,
+  resolved_policy_version INTEGER,
   resolved_at TIMESTAMP WITH TIME ZONE,
-  
+  resolved_by UUID REFERENCES merchants(id),
+
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Indexes
-CREATE INDEX idx_tickets_merchant_id ON tickets(merchant_id);
-CREATE INDEX idx_tickets_partner_email ON tickets(partner_email);
-CREATE INDEX idx_tickets_status ON tickets(status);
-CREATE INDEX idx_tickets_type ON tickets(type);
+CREATE INDEX idx_policy_change_requests_policy_id ON policy_change_requests(policy_id);
+CREATE INDEX idx_policy_change_requests_merchant_id ON policy_change_requests(merchant_id);
+CREATE INDEX idx_policy_change_requests_status ON policy_change_requests(status);
+CREATE INDEX idx_policy_change_requests_policy_slug ON policy_change_requests(policy_slug);
 ```
 
 #### 6. subscriptions
+Stores one Stripe subscription entitlement per merchant and paid policy type.
+
 ```sql
-CREATE TYPE sub_status AS ENUM ('active', 'suspended', 'cancelled', 'expired');
-CREATE TYPE billing_cycle AS ENUM ('monthly', 'yearly', 'onetime');
+CREATE TYPE sub_status AS ENUM ('incomplete', 'trialing', 'active', 'past_due', 'unpaid', 'paused', 'cancelled');
 
 CREATE TABLE subscriptions (
-  id VARCHAR(50) PRIMARY KEY, -- SUB-XXXXXXXX format
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   merchant_id UUID NOT NULL REFERENCES merchants(id) ON DELETE CASCADE,
-  
-  -- Plan
-  plan VARCHAR(50) NOT NULL, -- 'Pro', 'Starter'
-  status sub_status NOT NULL DEFAULT 'active',
-  billing_cycle billing_cycle NOT NULL DEFAULT 'monthly',
-  amount DECIMAL(10, 2) NOT NULL,
-  
-  -- Dates
-  started_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-  expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  policy_type VARCHAR(50) NOT NULL,
+  stripe_customer_id VARCHAR(255) NOT NULL,
+  stripe_subscription_id VARCHAR(255) NOT NULL UNIQUE,
+  stripe_price_id VARCHAR(255) NOT NULL,
+  status sub_status NOT NULL DEFAULT 'incomplete',
+  cancel_at_period_end BOOLEAN NOT NULL DEFAULT FALSE,
+  current_period_start TIMESTAMP WITH TIME ZONE,
+  current_period_end TIMESTAMP WITH TIME ZONE,
   cancelled_at TIMESTAMP WITH TIME ZONE,
-  
-  -- Quota (for scans)
-  quota INTEGER NOT NULL,
-  used INTEGER NOT NULL DEFAULT 0,
-  
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  ended_at TIMESTAMP WITH TIME ZONE,
+  unit_amount INTEGER NOT NULL,
+  currency VARCHAR(3) NOT NULL DEFAULT 'thb',
+  interval VARCHAR(20) NOT NULL DEFAULT 'month',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
 );
 
--- Indexes
 CREATE INDEX idx_subscriptions_merchant_id ON subscriptions(merchant_id);
+CREATE INDEX idx_subscriptions_policy_type ON subscriptions(policy_type);
 CREATE INDEX idx_subscriptions_status ON subscriptions(status);
-CREATE INDEX idx_subscriptions_expires_at ON subscriptions(expires_at);
+CREATE INDEX idx_subscriptions_period_end ON subscriptions(current_period_end);
 ```
 
 #### 7. payments
+Stores Stripe invoice payment outcomes for subscription renewals.
+
 ```sql
-CREATE TYPE payment_status AS ENUM ('success', 'pending', 'failed', 'refunded');
-CREATE TYPE payment_gateway AS ENUM ('promptpay', 'bank_transfer', 'credit_card', 'free');
+CREATE TYPE payment_status AS ENUM ('pending', 'paid', 'failed', 'refunded', 'void');
 
 CREATE TABLE payments (
-  id VARCHAR(50) PRIMARY KEY, -- PAY-XXXXXXXX format
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   merchant_id UUID NOT NULL REFERENCES merchants(id) ON DELETE CASCADE,
-  subscription_id VARCHAR(50) REFERENCES subscriptions(id),
-  
-  -- Payment Info
-  amount DECIMAL(10, 2) NOT NULL,
-  gateway payment_gateway NOT NULL,
+  subscription_id UUID REFERENCES subscriptions(id) ON DELETE SET NULL,
+  stripe_invoice_id VARCHAR(255) NOT NULL UNIQUE,
+  stripe_payment_intent_id VARCHAR(255),
+  policy_type VARCHAR(50) NOT NULL,
+  amount_due INTEGER NOT NULL,
+  amount_paid INTEGER NOT NULL DEFAULT 0,
+  currency VARCHAR(3) NOT NULL DEFAULT 'thb',
   status payment_status NOT NULL DEFAULT 'pending',
-  
-  -- Reference
-  gateway_ref VARCHAR(255), -- Bank ref, slip ID, etc.
-  slip_image_url VARCHAR(500),
-  
-  -- Approval
-  approved_at TIMESTAMP WITH TIME ZONE,
-  approved_by UUID REFERENCES merchants(id),
-  
-  -- Metadata
-  plan VARCHAR(50) NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  hosted_invoice_url VARCHAR(1000),
+  invoice_pdf_url VARCHAR(1000),
+  period_start TIMESTAMP WITH TIME ZONE,
+  period_end TIMESTAMP WITH TIME ZONE,
+  paid_at TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
 );
 
--- Indexes
 CREATE INDEX idx_payments_merchant_id ON payments(merchant_id);
+CREATE INDEX idx_payments_subscription_id ON payments(subscription_id);
 CREATE INDEX idx_payments_status ON payments(status);
 CREATE INDEX idx_payments_created_at ON payments(created_at);
 ```
 
-#### 8. error_logs
-```sql
-CREATE TYPE log_level AS ENUM ('info', 'warning', 'error', 'critical');
+#### 8. stripe_webhook_events
+Stores processed Stripe event IDs so webhook retries are idempotent.
 
+```sql
+CREATE TABLE stripe_webhook_events (
+  stripe_event_id VARCHAR(255) PRIMARY KEY,
+  event_type VARCHAR(255) NOT NULL,
+  stripe_object_id VARCHAR(255),
+  processing_status VARCHAR(20) NOT NULL DEFAULT 'processed',
+  error_message TEXT,
+  processed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
+);
+
+CREATE INDEX idx_stripe_webhook_events_type ON stripe_webhook_events(event_type);
+CREATE INDEX idx_stripe_webhook_events_processed_at ON stripe_webhook_events(processed_at);
+```
+
+#### 9. error_logs
+```sql
 CREATE TABLE error_logs (
-  id VARCHAR(50) PRIMARY KEY,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   merchant_id UUID REFERENCES merchants(id) ON DELETE SET NULL,
   
-  level log_level NOT NULL,
+  level VARCHAR(20) NOT NULL DEFAULT 'error', -- info, warning, error, critical
   service VARCHAR(100) NOT NULL,
   message TEXT NOT NULL,
   
@@ -1226,7 +2207,7 @@ CREATE INDEX idx_error_logs_created_at ON error_logs(created_at);
 CREATE INDEX idx_error_logs_merchant_id ON error_logs(merchant_id);
 ```
 
-#### 9. audit_logs
+#### 10. audit_logs
 ```sql
 CREATE TYPE audit_action AS ENUM (
   'create', 'update', 'delete', 'login', 'logout', 
@@ -1282,8 +2263,8 @@ CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at);
 │     • Fills in placeholders with client data                           │
 │     • Includes/excludes clauses based on data collected               │
 │     • Adds required sections (e.g., cookie policy, sensitive data)    │
-│     • Ensures legal compliance (PDPA, GDPR if Premium)                 │
-│     • Translates to English if Premium plan                           │
+│     • Applies the legal requirements configured for the product       │
+│     • Translates to English when requested by the policy product      │
 │                                                                         │
 │  4. OUTPUT: Personalized Policy                                        │
 │     └─→ Legal template + Client-specific customization                │
@@ -1530,7 +2511,7 @@ INSTRUCTIONS:
 3. Remove any sections marked as "include if" that don't apply
 4. Keep all legal wording EXACTLY as in the template
 5. Only translate to English if language = 'en' or 'both'
-6. If Premium plan, include additional GDPR compliance clauses
+6. Include additional compliance clauses only when defined by the selected policy product/template
 
 Return the complete customized policy.
 ```
@@ -1540,7 +2521,7 @@ Return the complete customized policy.
 ```typescript
 interface AICustomizedPolicy {
   contentTh: string;      // Customized Thai policy
-  contentEn?: string;     // English version (if Premium)
+  contentEn?: string;     // Included when language is "en" or "both"
   metadata: {
     templateId: string;        // Which template was used
     templateVersion: string;   // Template version
@@ -1554,48 +2535,49 @@ interface AICustomizedPolicy {
 ### Backend Process Flow
 
 ```typescript
-async function generatePolicy(formData: FormData, userPlan: string): Promise<Policy> {
-  
-  // 1. Select appropriate template
-  const template = await loadTemplate(formData.policyType, 'th');
-  
-  // 2. Prepare AI request
-  const aiRequest: AICustomizationRequest = {
-    template: template,
-    formData: formData,
-    plan: userPlan,
-    language: formData.language
-  };
-  
-  // 3. Call AI to customize
-  const aiResponse = await callAIService(aiRequest);
-  
-  // 4. If English requested (Premium only)
-  if (formData.language === 'both' || formData.language === 'en') {
-    const templateEn = await loadTemplate(formData.policyType, 'en');
-    aiResponse.contentEn = await callAIService({
-      ...aiRequest,
-      template: templateEn
-    });
-  }
-  
-  // 5. Generate files
-  const files = await generateFiles(aiResponse);
-  
-  // 6. Save to database
+async function createPolicySubmission(formData: FormData, currentUser: User): Promise<SavedPolicy> {
+  // 1. Load approved legal template/reference
+  const template = await loadTemplate(formData.policyType, 'th', formData.templateVersion);
+  const legalReference = await loadLegalReference('pdpa-framework-v1');
+
+  // 2. AI customizes Thai policy from merchant form data
+  const contentTh = await aiCustomizePolicy(template, legalReference, formData);
+
+  // 3. If English or both is requested, create a separate English version
+  const contentEn = ['en', 'both'].includes(formData.language)
+    ? await aiTranslatePolicyToEnglish(contentTh)
+    : null;
+
+  // 4. Save DB draft only. Do not export files yet.
   const policy = await savePolicy({
-    ...formData,
-    contentTh: aiResponse.contentTh,
-    contentEn: aiResponse.contentEn,
-    files: files,
-    templateId: template.id,
-    templateVersion: template.version
+    merchantId: currentUser.id,
+    formData,
+    contentTh,
+    contentEn,
+    status: 'pending_review',
+    approvalDeadline: addDays(now(), 2)
   });
-  
-  return policy;
+
+  return toSavedPolicy(policy);
+}
+
+async function legalSaveContent(slug: string, body: LegalContentUpdate): Promise<SavedPolicy> {
+  // Legal portal editor saves Markdown directly into DB.
+  return await updatePolicyContent(slug, body.language, body.content, body.contentTh, body.contentEn);
+}
+
+async function legalReview(slug: string, body: LegalReviewRequest): Promise<SavedPolicy> {
+  // Legal can approve/reject/mark edited.
+  // If approved or edited, exports are generated from final DB content.
+  const policy = await updateReviewStatus(slug, body.status, body.reviewComment);
+
+  if (body.status === 'approved' || body.status === 'edited') {
+    await generateFinalExports(policy); // PDF, DOCX, TXT, HTML per language
+  }
+
+  return toSavedPolicy(policy);
 }
 ```
-
 ### AI Service Recommendations
 
 1. **OpenAI GPT-4** - Best for template customization
@@ -1648,7 +2630,9 @@ function customizeTemplateFallback(template: string, data: FormData): string {
 | `UNAUTHORIZED` | 401 | Invalid or missing token |
 | `FORBIDDEN` | 403 | Insufficient permissions |
 | `NOT_FOUND` | 404 | Resource not found |
-| `PREMIUM_FEATURE` | 402 | Feature requires Premium plan |
+| `PAYMENT_REQUIRED` | 402 | Future billing only: selected policy type requires Stripe Checkout |
+| `SUBSCRIPTION_REQUIRED` | 402 | Active monthly subscription required for this paid policy type |
+| `SUBSCRIPTION_PAST_DUE` | 402 | Future billing only: Stripe subscription payment is past due |
 | `RATE_LIMITED` | 429 | Too many requests |
 | `INTERNAL_ERROR` | 500 | Server error |
 
@@ -1668,25 +2652,6 @@ function customizeTemplateFallback(template: string, data: FormData): string {
 | exportFormat | Options: PDF, Word (.docx), TXT, HTML Embed |
 | retentionPeriod | One of: '1 ปี', '2 ปี', '3 ปี', '5 ปี', '7 ปี (ตามกฎหมายภาษี)', '10 ปี', 'ตลอดระยะเวลาการใช้บริการ' |
 
-### File Upload (for payment slips)
-
-```http
-POST /admin/payments/slupload
-Authorization: Bearer <admin_token>
-Content-Type: multipart/form-data
-
-file: [binary]
-
-Response 200:
-{
-  "success": true,
-  "data": {
-    "url": "https://cdn.flowpdpa.co.th/slips/xxx.jpg",
-    "filename": "slip-xxx.jpg"
-  }
-}
-```
-
 ---
 
 ## Deployment Checklist
@@ -1694,6 +2659,10 @@ Response 200:
 - [ ] Set up PostgreSQL database with above schema
 - [ ] Configure JWT secret and expiration
 - [ ] Set up AI service API key (OpenAI/Anthropic)
+- [ ] Configure Stripe secret key and webhook signing secret
+- [ ] Configure one Stripe recurring Price ID for each paid `policyType`
+- [ ] Configure Stripe Checkout success/cancel URLs and Customer Portal return URL
+- [ ] Register Stripe webhook endpoint and required events
 - [ ] Configure CDN for policy downloads (PDF, DOCX)
 - [ ] Set up email service for notifications (optional)
 - [ ] Configure rate limiting
@@ -1706,16 +2675,14 @@ Response 200:
 
 ## Notes for Backend Team
 
-1. **Demo User**: Hardcode `demo@flowpdpa.co.th` / `demo1234` → plan="Premium"
-2. **Admin User**: Hardcode `admin@flowpdpa.co.th` / `admin2025` → role="admin"
-3. **Policy Generation**: Call AI service asynchronously, return job ID if processing takes > 5s
-4. **PDF Generation**: Use libraries like `pdfkit` (Node.js) or `reportlab` (Python)
-5. **Slug Generation**: Use format `{domain-sanitized}-{policy-type}` e.g. `mysite-com-privacy`
-6. **Odoo Integration**: Helpdesk sync is optional, use provided spec if integrating
-7. **Thai Language Support**: Ensure all strings support UTF-8
+1. **Accounts**: Merchant, admin, and legal accounts are database users distinguished by `role`; do not hardcode production credentials.
+2. **Policy Generation**: The current API waits for generation and returns the saved `pending_review` policy.
+3. **Exports**: Generate PDF, DOCX, TXT, and private HTML after legal approval.
+4. **Slug Generation**: Use `{domain-sanitized}-{policy-type}-{short-id}` to avoid collisions.
+5. **Thai Language Support**: Ensure all strings and generated files use UTF-8.
 
 ---
 
-**Document Version:** 1.0  
-**Last Updated:** 2026-05-23  
+**Document Version:** 1.1  
+**Last Updated:** 2026-06-20  
 **Questions?** Contact: tech@flowpdpa.co.th

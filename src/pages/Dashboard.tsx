@@ -1,25 +1,20 @@
 import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, FileText, Plus, Settings, LogOut, Bell,
   ChevronRight, Download, Copy,
   Trash2, CheckCircle, Clock, Globe, Lock, X, ShieldCheck,
-  LifeBuoy, ExternalLink, AlertCircle, Loader, XCircle, ShieldAlert,
+  LifeBuoy, ExternalLink, AlertCircle, Loader, XCircle, MailCheck,
 } from 'lucide-react'
 import { type TicketRecord } from '@/api/helpdesk'
 import { fetchContact, updateContact, defaultProfile, type ContactProfile } from '@/api/contact'
-import { policyStorage, type SavedPolicy } from '@/utils/policyStorage'
+import type { SavedPolicy } from '@/utils/policyStorage'
+import { useAuth } from '@/contexts/AuthContext'
+import { api } from '@/services/api'
+import './Dashboard.css'
 
 // ── Auth helper ───────────────────────────────────────────────
-type AuthUser = { name: string; email: string; plan: string; company?: string; phone?: string }
-
-function getCurrentUser(): AuthUser {
-  try {
-    const raw = localStorage.getItem('flowpdpa_auth')
-    if (raw) return JSON.parse(raw)
-  } catch { /* ignore */ }
-  return { name: 'User', email: '', plan: 'Free' }
-}
+type AuthUser = { name: string; email: string; plan: string; company?: string; phone?: string; emailVerified: boolean }
 
 // ── Policy helpers ───────────────────────────────────────────
 
@@ -29,8 +24,18 @@ const langDisplay: Record<string, string> = {
   both: 'TH + EN',
 }
 
-function getUserPolicies(email: string): SavedPolicy[] {
-  return policyStorage.getAll(email)
+function useMerchantPolicies() {
+  const [policies, setPolicies] = useState<SavedPolicy[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    void api.policies.list().then(response => {
+      setPolicies(response.success && response.data ? response.data : [])
+      setLoading(false)
+    })
+  }, [])
+
+  return { policies, setPolicies, loading }
 }
 
 
@@ -57,7 +62,7 @@ function StatusBadge({ status }: { status: string }) {
   const cfg = statusDisplay[status] ?? { label: status, color: '#64748b', bg: 'rgba(100,116,139,0.1)' }
   return (
     <span
-      className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full"
+      className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded"
       style={{ backgroundColor: cfg.bg, color: cfg.color }}
     >
       <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: cfg.color }} />
@@ -68,7 +73,7 @@ function StatusBadge({ status }: { status: string }) {
 
 // ── Sub-views ─────────────────────────────────────────────────
 function Overview({ setView, user }: { setView: (v: string) => void; user: AuthUser }) {
-  const userPolicies  = getUserPolicies(user.email)
+  const { policies: userPolicies } = useMerchantPolicies()
   const activePolicies = userPolicies.filter(p => p.status === 'approved').length
   const userTickets   = getUserTickets(user.email)
   const openTickets   = userTickets.filter(t => t.status === 'open' || t.status === 'in_progress').length
@@ -83,25 +88,28 @@ function Overview({ setView, user }: { setView: (v: string) => void; user: AuthU
   return (
     <div>
       {/* Welcome */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-black text-gray-900 mb-1">
-          สวัสดี, {user.name} 👋
+      <div className="mb-7 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div>
+        <p className="text-[11px] font-medium uppercase mb-2" style={{ color: '#087a5b', fontFamily: 'IBM Plex Mono, monospace' }}>Merchant workspace</p>
+        <h1 className="text-2xl font-bold text-gray-900 mb-1" style={{ fontFamily: 'Noto Serif Thai, serif' }}>
+          ภาพรวมของ {user.name}
         </h1>
-        <p className="text-sm text-gray-500">นี่คือภาพรวมของ Policy ทั้งหมดในบัญชีของคุณ</p>
+        <p className="text-sm text-gray-500">ติดตามเอกสาร การตรวจสอบ และคำขอจากที่เดียว</p>
+        </div>
+        <Link to="/create/policy" className="btn-green text-sm px-5 py-2.5 flex items-center gap-2 self-start sm:self-auto">
+          <Plus className="w-4 h-4" /> สร้างนโยบาย
+        </Link>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 bg-white border border-gray-100 mb-8" style={{ borderRadius: '6px' }}>
         {stats.map(({ label, value, Icon, color }) => (
-          <div key={label} className="bg-white rounded-xl border border-gray-100 p-5">
-            <div
-              className="w-9 h-9 rounded-lg flex items-center justify-center mb-3"
-              style={{ backgroundColor: color + '15' }}
-            >
-              <Icon className="w-4 h-4" style={{ color }} />
+          <div key={label} className="merchant-stat p-5 flex items-start gap-4">
+            <Icon className="w-4 h-4 mt-1 shrink-0" style={{ color }} />
+            <div>
+              <div className="text-xl font-semibold text-gray-900 mb-0.5" style={{ fontFamily: 'IBM Plex Mono, monospace' }}>{value}</div>
+              <div className="text-xs text-gray-500">{label}</div>
             </div>
-            <div className="text-xl font-black text-gray-900 mb-0.5">{value}</div>
-            <div className="text-xs text-gray-400">{label}</div>
           </div>
         ))}
       </div>
@@ -130,12 +138,7 @@ function Overview({ setView, user }: { setView: (v: string) => void; user: AuthU
             {userPolicies.slice(0, 3).map((p) => (
               <div key={p.id} className="flex items-center justify-between px-6 py-4">
                 <div className="flex items-center gap-3">
-                  <div
-                    className="w-8 h-8 rounded-lg flex items-center justify-center text-sm"
-                    style={{ backgroundColor: '#f8fafc' }}
-                  >
-                    {p.typeIcon}
-                  </div>
+                  <FileText className="w-4 h-4" style={{ color: '#087a5b' }} />
                   <div>
                     <div className="text-sm font-semibold text-gray-900">{p.typeName}</div>
                     <div className="text-xs text-gray-400 flex items-center gap-1">
@@ -177,9 +180,7 @@ function Overview({ setView, user }: { setView: (v: string) => void; user: AuthU
             {userTickets.slice(0, 3).map(t => (
               <div key={t.id} className="flex items-center justify-between px-6 py-3.5">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: '#f1f5f9' }}>
-                    <LifeBuoy className="w-4 h-4 text-gray-400" />
-                  </div>
+                  <LifeBuoy className="w-4 h-4 text-gray-400 shrink-0" />
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-gray-900 truncate">{t.name}</p>
                     <p className="text-xs text-gray-400 font-mono">{t.id}</p>
@@ -202,12 +203,12 @@ function Overview({ setView, user }: { setView: (v: string) => void; user: AuthU
 
       {/* Quick actions */}
       <div
-        className="rounded-xl p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
-        style={{ background: 'linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%)', border: '1px solid rgba(255,255,255,0.06)' }}
+        className="rounded-xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+        style={{ background: '#edf5f2', border: '1px solid #c8ded6' }}
       >
         <div>
-          <p className="text-white font-bold text-sm mb-1">ต้องการนโยบายเพิ่มเติม?</p>
-          <p className="text-xs" style={{ color: '#64748b' }}>เลือกจากนโยบาย 7 ประเภทที่รองรับ PDPA ไทย, GDPR และ CCPA</p>
+          <p className="font-semibold text-sm mb-1" style={{ color: '#074f3e' }}>สร้างเอกสารฉบับถัดไป</p>
+          <p className="text-xs" style={{ color: '#477064' }}>ข้อมูลจะถูกส่งให้ฝ่ายกฎหมายตรวจสอบก่อนเผยแพร่</p>
         </div>
         <Link
           to="/create/policy"
@@ -221,13 +222,9 @@ function Overview({ setView, user }: { setView: (v: string) => void; user: AuthU
   )
 }
 
-function PoliciesList({ user }: { user: AuthUser }) {
-  const [policies, setPolicies] = useState<SavedPolicy[]>([])
+function PoliciesList() {
+  const { policies, setPolicies, loading } = useMerchantPolicies()
   const [copied, setCopied] = useState<string | null>(null)
-
-  useEffect(() => {
-    setPolicies(getUserPolicies(user.email))
-  }, [user.email])
 
   const handleCopy = (p: SavedPolicy) => {
     const url = `${window.location.origin}/p/${p.slug}`
@@ -249,10 +246,10 @@ function PoliciesList({ user }: { user: AuthUser }) {
     URL.revokeObjectURL(url)
   }
 
-  const handleDelete = (p: SavedPolicy) => {
+  const handleDelete = async (p: SavedPolicy) => {
     if (!confirm(`ลบนโยบาย "${p.typeName}" ของ ${p.websiteName}?`)) return
-    policyStorage.delete(p.id, user.email)
-    setPolicies(getUserPolicies(user.email))
+    const response = await api.policies.delete(p.id)
+    if (response.success) setPolicies(current => current.filter(policy => policy.id !== p.id))
   }
 
   return (
@@ -271,14 +268,11 @@ function PoliciesList({ user }: { user: AuthUser }) {
         </Link>
       </div>
 
-      {policies.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-100 p-14 text-center">
-          <div
-            className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4"
-            style={{ backgroundColor: '#f1f5f9' }}
-          >
-            <FileText className="w-6 h-6 text-gray-300" />
-          </div>
+      {loading ? (
+        <div className="py-16 text-center text-sm text-gray-400">Loading policies...</div>
+      ) : policies.length === 0 ? (
+        <div className="merchant-empty bg-white border border-gray-100 p-10 text-center">
+          <FileText className="w-5 h-5 text-gray-400 mx-auto mb-4" />
           <p className="text-sm font-semibold text-gray-500 mb-1">ยังไม่มีนโยบาย</p>
           <p className="text-xs text-gray-400 mb-5">สร้างนโยบาย PDPA สำหรับธุรกิจของคุณใน 5 นาที</p>
           <Link to="/create/policy" className="btn-green text-sm px-6 py-2.5" style={{ borderRadius: '8px' }}>
@@ -305,12 +299,7 @@ function PoliciesList({ user }: { user: AuthUser }) {
             >
               {/* Name */}
               <div className="col-span-2 md:col-span-4 flex items-center gap-3">
-                <div
-                  className="w-9 h-9 rounded-lg flex items-center justify-center text-base shrink-0"
-                  style={{ backgroundColor: '#f1f5f9' }}
-                >
-                  {p.typeIcon}
-                </div>
+                <FileText className="w-4 h-4 shrink-0" style={{ color: '#087a5b' }} />
                 <div>
                   {p.status === 'approved' ? (
                     <a
@@ -409,7 +398,7 @@ function PoliciesList({ user }: { user: AuthUser }) {
           {['TXT', 'HTML Embed (เร็วๆ นี้)', 'PDF (เร็วๆ นี้)', 'Word (เร็วๆ นี้)'].map((f) => (
             <span
               key={f}
-              className="text-xs font-medium px-2.5 py-1 rounded-full border"
+              className="text-xs font-medium px-2.5 py-1 rounded border"
               style={{ borderColor: '#e5e7eb', color: '#6b7280' }}
             >
               {f}
@@ -435,7 +424,7 @@ function TicketStatusBadge({ status }: { status: TicketRecord['status'] }) {
   const s = ticketStatusMap[status]
   return (
     <span
-      className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap"
+      className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded whitespace-nowrap"
       style={{ backgroundColor: s.bg, color: s.color }}
     >
       <s.Icon className="w-3 h-3" />
@@ -477,13 +466,8 @@ function TicketsList({ user }: { user: AuthUser }) {
       </div>
 
       {tickets.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-100 p-14 text-center">
-          <div
-            className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4"
-            style={{ backgroundColor: '#f1f5f9' }}
-          >
-            <LifeBuoy className="w-6 h-6 text-gray-300" />
-          </div>
+        <div className="merchant-empty bg-white border border-gray-100 p-10 text-center">
+          <LifeBuoy className="w-5 h-5 text-gray-400 mx-auto mb-4" />
           <p className="text-sm font-semibold text-gray-500 mb-1">ยังไม่มี Ticket</p>
           <p className="text-xs text-gray-400 mb-5">พบปัญหาหรือต้องการความช่วยเหลือ? ส่งคำขอได้เลย</p>
           <Link to="/helpdesk" className="btn-green text-sm px-6 py-2.5" style={{ borderRadius: '8px' }}>
@@ -554,7 +538,7 @@ function TicketsList({ user }: { user: AuthUser }) {
       )}
 
       {/* Notice */}
-      <div className="mt-4 flex items-start gap-3 px-4 py-3 rounded-xl border border-blue-100 bg-blue-50">
+      <div className="mt-4 flex items-start gap-3 px-4 py-3 rounded border border-blue-100 bg-blue-50">
         <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" style={{ color: 'var(--blue)' }} />
         <p className="text-xs leading-relaxed" style={{ color: '#334155' }}>
           สถานะ Ticket อัปเดตโดยทีมงาน FlowPDPA ·{' '}
@@ -567,7 +551,17 @@ function TicketsList({ user }: { user: AuthUser }) {
   )
 }
 
+function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="merchant-settings-section bg-white border border-gray-100 p-6">
+      <h2 className="text-sm font-bold text-gray-900 mb-5 pb-3 border-b border-gray-100">{title}</h2>
+      {children}
+    </section>
+  )
+}
+
 function AccountSettings({ user }: { user: AuthUser }) {
+  const navigate = useNavigate()
   const [profile,  setProfile]  = useState<ContactProfile>({ ...defaultProfile(), name: user.name, email: user.email })
   const [loading,  setLoading]  = useState(true)
   const [saving,   setSaving]   = useState(false)
@@ -605,17 +599,12 @@ function AccountSettings({ user }: { user: AuthUser }) {
     setPwCurrent(''); setPwNew(''); setPwConfirm('')
   }
 
+  function handleVerifyEmail() {
+    navigate('/register', { state: { verificationEmail: user.email, requestOtp: true } })
+  }
+
   const inputCls = 'w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-green-400 transition-colors bg-white'
   const labelCls = 'block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5'
-
-  function Section({ title, children }: { title: string; children: React.ReactNode }) {
-    return (
-      <div className="bg-white rounded-xl border border-gray-100 p-6">
-        <h2 className="text-sm font-bold text-gray-900 mb-5 pb-3 border-b border-gray-100">{title}</h2>
-        {children}
-      </div>
-    )
-  }
 
   if (loading) {
     return (
@@ -632,10 +621,25 @@ function AccountSettings({ user }: { user: AuthUser }) {
         <p className="text-sm text-gray-400">ข้อมูลของคุณจะถูกซิงค์กับระบบ Odoo เมื่อเชื่อมต่อแล้ว</p>
       </div>
 
+      {!user.emailVerified && (
+        <section className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border p-5" style={{ backgroundColor: '#f0f8f5', borderColor: '#cfe5dc', borderRadius: '8px' }}>
+          <div className="flex items-start gap-3">
+            <MailCheck className="w-5 h-5 shrink-0 mt-0.5" style={{ color: 'var(--green)' }} aria-hidden="true" />
+            <div>
+              <h2 className="text-sm font-bold text-gray-900 mb-1">อีเมลยังไม่ได้รับการยืนยัน</h2>
+              <p className="text-xs text-gray-600">ยืนยัน {user.email} เพื่อเริ่มสร้างและจัดการนโยบาย</p>
+            </div>
+          </div>
+          <button type="button" onClick={handleVerifyEmail} className="btn-green px-5 py-2.5 text-sm shrink-0">
+            ยืนยันอีเมล
+          </button>
+        </section>
+      )}
+
       <form onSubmit={handleSave} className="space-y-4">
 
         {/* ── 1. Personal Info (res.partner: name, function, email, phone, mobile) ── */}
-        <Section title="ข้อมูลส่วนตัว">
+        <SettingsSection title="ข้อมูลส่วนตัว">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>ชื่อ-นามสกุล (Name) <span className="text-red-400 normal-case">*</span></label>
@@ -668,10 +672,10 @@ function AccountSettings({ user }: { user: AuthUser }) {
                 placeholder="https://yoursite.com" className={inputCls} />
             </div>
           </div>
-        </Section>
+        </SettingsSection>
 
         {/* ── 2. Company Info (res.partner: company_name, vat) ── */}
-        <Section title="ข้อมูลบริษัท / องค์กร">
+        <SettingsSection title="ข้อมูลบริษัท / องค์กร">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>ชื่อบริษัท / องค์กร (Company)</label>
@@ -684,10 +688,10 @@ function AccountSettings({ user }: { user: AuthUser }) {
                 placeholder="0-0000-00000-00-0" className={inputCls} />
             </div>
           </div>
-        </Section>
+        </SettingsSection>
 
         {/* ── 3. Address (res.partner: street, street2, city, zip, state_id, country_id) ── */}
-        <Section title="ที่อยู่">
+        <SettingsSection title="ที่อยู่">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2">
               <label className={labelCls}>ที่อยู่ (Street)</label>
@@ -720,10 +724,10 @@ function AccountSettings({ user }: { user: AuthUser }) {
                 placeholder="ประเทศไทย" className={inputCls} />
             </div>
           </div>
-        </Section>
+        </SettingsSection>
 
         {/* ── 4. Preferences (res.partner: lang) ── */}
-        <Section title="การตั้งค่า">
+        <SettingsSection title="การตั้งค่า">
           <div className="max-w-xs">
             <label className={labelCls}>ภาษา (Language)</label>
             <select value={profile.lang} onChange={e => set('lang', e.target.value)} className={inputCls}>
@@ -731,7 +735,7 @@ function AccountSettings({ user }: { user: AuthUser }) {
               <option value="en_US">English</option>
             </select>
           </div>
-        </Section>
+        </SettingsSection>
 
         {/* Save button */}
         <div className="flex items-center gap-3">
@@ -810,24 +814,26 @@ function AccountSettings({ user }: { user: AuthUser }) {
 // ── Main Dashboard ────────────────────────────────────────────
 export default function Dashboard() {
   const navigate = useNavigate()
-  const [activeView, setActiveView] = useState('overview')
+  const { user: sessionUser, logout } = useAuth()
+  const location = useLocation()
+  const requestedView = (location.state as { view?: string } | null)?.view
+  const [activeView, setActiveView] = useState(requestedView === 'settings' ? 'settings' : 'overview')
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  useEffect(() => {
-    if (!localStorage.getItem('flowpdpa_auth')) navigate('/login')
-  }, [navigate])
-
-  const user = getCurrentUser()
+  const user: AuthUser = sessionUser ?? {
+    name: 'User', email: '', plan: 'Free', emailVerified: false,
+  }
 
   const handleLogout = () => {
-    localStorage.removeItem('flowpdpa_auth')
+    logout()
     navigate('/login')
   }
 
   const currentNav = navItems.find(n => n.key === activeView)
+  const initials = user.name.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase() || 'FP'
 
   return (
-    <div className="min-h-screen flex" style={{ backgroundColor: '#f8fafc' }}>
+    <div className="merchant-shell min-h-screen flex">
 
       {/* ── Sidebar ── */}
       <>
@@ -840,27 +846,25 @@ export default function Dashboard() {
         )}
 
         <aside
-          className={`fixed top-0 left-0 h-full z-30 flex flex-col transition-transform duration-300
+          className={`merchant-sidebar fixed top-0 left-0 h-full z-30 flex flex-col transition-transform duration-300
             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}
-          style={{
-            width: '240px',
-            backgroundColor: 'var(--navy)',
-            borderRight: '1px solid rgba(255,255,255,0.06)',
-          }}
         >
           {/* Logo */}
-          <div className="px-6 py-5 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-            <Link to="/" className="flex items-center gap-0.5">
-              <span className="font-black text-lg text-white tracking-tight">Flow</span>
-              <span className="font-black text-lg tracking-tight" style={{ color: 'var(--green)' }}>PDPA</span>
+          <div className="merchant-brand px-5 flex items-center justify-between">
+            <Link to="/" className="flex items-center gap-3">
+              <span className="merchant-brand-mark">FP</span>
+              <span className="font-bold text-base tracking-normal" style={{ color: '#172033' }}>FlowPDPA</span>
             </Link>
-            <button className="lg:hidden text-gray-500 hover:text-white" onClick={() => setSidebarOpen(false)}>
+            <button className="lg:hidden text-gray-500 hover:text-gray-900" onClick={() => setSidebarOpen(false)} aria-label="ปิดเมนู">
               <X className="w-4 h-4" />
             </button>
           </div>
 
           {/* Nav */}
-          <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          <div className="px-5 pt-5 pb-2 text-[11px] font-semibold uppercase" style={{ color: '#98a2b3', fontFamily: 'IBM Plex Mono, monospace' }}>
+            Workspace
+          </div>
+          <nav className="flex-1 px-3 py-1 space-y-1 overflow-y-auto">
             {navItems.map(({ key, label, Icon }) => {
               const active = activeView === key
               return (
@@ -870,20 +874,15 @@ export default function Dashboard() {
                     if (key === 'new') { navigate('/create/policy'); return }
                     setActiveView(key); setSidebarOpen(false)
                   }}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left"
-                  style={{
-                    backgroundColor: active ? 'rgba(5,150,105,0.15)' : 'transparent',
-                    color: active ? 'var(--green)' : '#475569',
-                  }}
-                  onMouseEnter={e => { if (!active) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.04)' }}
-                  onMouseLeave={e => { if (!active) e.currentTarget.style.backgroundColor = 'transparent' }}
+                  className="merchant-nav-item w-full flex items-center gap-3 px-3 py-2.5 text-sm transition-colors text-left"
+                  data-active={active}
                 >
                   <Icon className="w-4 h-4 shrink-0" />
                   {label}
                   {key === 'new' && (
                     <span
-                      className="ml-auto text-xs font-bold px-1.5 py-0.5 rounded"
-                      style={{ backgroundColor: 'rgba(5,150,105,0.2)', color: 'var(--green)' }}
+                      className="ml-auto text-xs font-bold"
+                      style={{ color: '#087a5b' }}
                     >
                       +
                     </span>
@@ -894,35 +893,24 @@ export default function Dashboard() {
           </nav>
 
           {/* User + Logout */}
-          <div className="px-3 py-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <div className="merchant-user px-3 py-4">
             <div className="flex items-center gap-3 px-3 py-2.5 mb-1">
               <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
-                style={{ backgroundColor: 'var(--blue)' }}
+                className="merchant-avatar w-8 h-8 flex items-center justify-center text-xs font-medium shrink-0"
               >
-                DU
+                {initials}
               </div>
               <div className="overflow-hidden">
-                <div className="text-xs font-semibold text-white truncate">{user.name}</div>
-                <div className="text-xs truncate" style={{ color: '#334155' }}>{user.plan}</div>
+                <div className="text-xs font-semibold truncate" style={{ color: '#172033' }}>{user.name}</div>
+                <div className="text-xs truncate" style={{ color: '#98a2b3' }}>{user.plan}</div>
               </div>
             </div>
-            <Link
-              to="/admin"
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mb-0.5"
-              style={{ color: '#475569' }}
-              onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'rgba(220,38,38,0.1)'; e.currentTarget.style.color = '#f87171' }}
-              onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#475569' }}
-            >
-              <ShieldAlert className="w-4 h-4 shrink-0" />
-              Admin Panel
-            </Link>
             <button
               onClick={handleLogout}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
-              style={{ color: '#475569' }}
-              onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = '#ef4444' }}
-              onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#475569' }}
+              style={{ color: '#667085' }}
+              onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#fff1f1'; e.currentTarget.style.color = '#b42318' }}
+              onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#667085' }}
             >
               <LogOut className="w-4 h-4 shrink-0" />
               ออกจากระบบ
@@ -932,13 +920,12 @@ export default function Dashboard() {
       </>
 
       {/* ── Main content ── */}
-      <div className="flex-1 flex flex-col min-w-0" style={{ marginLeft: '0', paddingLeft: '0' }}>
-        <div className="lg:ml-60 flex flex-col min-h-screen">
+      <div className="flex-1 flex flex-col min-w-0">
+        <div className="merchant-main flex flex-col min-h-screen">
 
           {/* Top bar */}
           <header
-            className="sticky top-0 z-10 flex items-center justify-between px-6 py-4"
-            style={{ backgroundColor: 'white', borderBottom: '1px solid #e5e7eb' }}
+            className="merchant-topbar sticky top-0 z-10 flex items-center justify-between px-5 lg:px-8 py-3"
           >
             <div className="flex items-center gap-3">
               {/* Mobile hamburger */}
@@ -951,8 +938,8 @@ export default function Dashboard() {
                 </svg>
               </button>
               <div>
-                <h1 className="text-sm font-bold text-gray-900">{currentNav?.label ?? 'Dashboard'}</h1>
-                <p className="text-xs text-gray-400 hidden sm:block">FlowPDPA Dashboard</p>
+                <h1 className="text-base font-semibold" style={{ color: '#172033' }}>{currentNav?.label ?? 'Dashboard'}</h1>
+                <p className="text-xs hidden sm:block" style={{ color: '#98a2b3' }}>พื้นที่จัดการเอกสารและการตรวจสอบ</p>
               </div>
             </div>
 
@@ -971,10 +958,9 @@ export default function Dashboard() {
                 className="flex items-center gap-2 pl-3 pr-4 py-1.5 rounded-lg transition-colors hover:bg-gray-100"
               >
                 <div
-                  className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold"
-                  style={{ backgroundColor: 'var(--blue)' }}
+                  className="merchant-avatar w-7 h-7 flex items-center justify-center text-xs font-medium"
                 >
-                  DU
+                  {initials}
                 </div>
                 <span className="text-sm font-medium text-gray-700 hidden sm:block">{user.name}</span>
               </button>
@@ -982,9 +968,9 @@ export default function Dashboard() {
           </header>
 
           {/* Page content */}
-          <main className="flex-1 p-6">
+          <main className="merchant-content flex-1 px-5 py-6 lg:px-8 lg:py-8">
             {activeView === 'overview'  && <Overview setView={setActiveView} user={user} />}
-            {activeView === 'policies'  && <PoliciesList user={user} />}
+            {activeView === 'policies'  && <PoliciesList />}
             {activeView === 'tickets'   && <TicketsList user={user} />}
             {activeView === 'settings'  && <AccountSettings user={user} />}
           </main>

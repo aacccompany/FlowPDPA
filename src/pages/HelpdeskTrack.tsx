@@ -77,7 +77,7 @@ export default function HelpdeskTrack() {
     <div style={{ paddingTop: '61px' }}>
 
       {/* Header */}
-      <div className="py-20" style={{ backgroundColor: 'var(--navy)' }}>
+      <div className="public-light-page-header py-20" style={{ backgroundColor: 'var(--navy)' }}>
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.15em] mb-5" style={{ color: 'var(--green)' }}>
             <span className="block w-8 h-px" style={{ backgroundColor: 'var(--green)', opacity: 0.5 }} />

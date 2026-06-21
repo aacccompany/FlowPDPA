@@ -1,10 +1,11 @@
-import { useState } from 'react'
-import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { Eye, EyeOff, ShieldCheck } from 'lucide-react'
-import { storage } from '@/utils/storage'
-
-const DEMO_EMAIL = 'demo@flowpdpa.co.th'
-const DEMO_PASSWORD = 'demo1234'
+import { useEffect, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { AlertCircle, Eye, EyeOff, Loader2, ShieldCheck } from 'lucide-react'
+import { api } from '@/services/api'
+import { normalizeRole, roleHome, storage, type UserRole } from '@/utils/storage'
+import { isValidEmail } from '@/utils/validation'
+import './Register.css'
+import './Login.css'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -14,154 +15,124 @@ export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  useEffect(() => {
+    const auth = storage.auth.get()
+    if (auth?.token) navigate(roleHome(auth.role), { replace: true })
+  }, [navigate])
+
+  const destinationFor = (role: UserRole) => {
+    const canReturnToRequestedPage = (
+      (role === 'admin' && from.startsWith('/admin'))
+      || (role === 'legal' && from.startsWith('/legal'))
+      || (role === 'merchant' && (from === '/dashboard' || from.startsWith('/create/')))
+    )
+    if (canReturnToRequestedPage) return from
+    return roleHome(role)
+  }
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
     setError('')
 
+    if (!isValidEmail(email)) {
+      setError('กรุณากรอกอีเมลให้ถูกต้อง')
+      return
+    }
+
+    const normalizedEmail = email.trim().toLowerCase()
+    setLoading(true)
+
     try {
-      // Demo user login (for development)
-      if (email === DEMO_EMAIL && password === DEMO_PASSWORD) {
-        storage.auth.set({
-          email,
-          name: 'Demo User',
-          plan: 'Premium',
-          token: 'demo-token'
-        })
-        navigate(from)
+      const response = await api.auth.login({ email: normalizedEmail, password })
+      if (!response.success || !response.data) {
+        setError(response.error?.message || 'อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง')
         return
       }
 
-      // Check for stored registration
-      const reg = localStorage.getItem(`flowpdpa_reg_${email}`)
-      if (reg) {
-        try {
-          const registrationData = JSON.parse(reg)
-          if (registrationData.password === password) {
-            storage.auth.set({
-              email,
-              name: registrationData.name,
-              plan: 'Free',
-              token: 'local-token'
-            })
-            navigate(from)
-            return
-          }
-        } catch {
-          // Invalid JSON in storage
-        }
+      const data = response.data as {
+        token?: string
+        access_token?: string
+        refresh_token?: string
+        expires_in?: number
+        user?: { id?: string; email?: string; name?: string; role?: string; plan?: string; company?: string; phone?: string; email_verified?: boolean }
+        email?: string
+        name?: string
+        role?: string
+        plan?: string
+      }
+      const user = data.user ?? data
+      const token = data.token ?? data.access_token
+      if (!token) {
+        setError('ระบบไม่ได้รับ access token จากเซิร์ฟเวอร์')
+        return
       }
 
-      // If we want to connect to real API later:
-      // const response = await api.auth.login({ email, password })
-      // if (response.success && response.data) {
-      //   session.auth.set(response.data)
-      //   navigate('/dashboard')
-      //   return
-      // } else {
-      //   setError(response.error?.message || 'Login failed')
-      // }
-
-      setError('อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง')
-    } catch (err) {
-      console.error('Login error:', err)
-      setError('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง')
+      const role = normalizeRole(user.role)
+      storage.auth.set({
+        id: data.user?.id,
+        email: user.email ?? normalizedEmail,
+        name: user.name ?? '',
+        plan: user.plan ?? 'Free',
+        role,
+        token,
+        refreshToken: data.refresh_token,
+        expiresAt: data.expires_in ? Date.now() + data.expires_in * 1000 : undefined,
+        company: data.user?.company,
+        phone: data.user?.phone,
+        emailVerified: data.user?.email_verified ?? true,
+      })
+      navigate(destinationFor(role), { replace: true })
+    } catch (requestError) {
+      console.error('Login error:', requestError)
+      setError('เชื่อมต่อระบบไม่ได้ กรุณาลองใหม่อีกครั้ง')
+    } finally {
+      setLoading(false)
     }
   }
 
   return (
-    <div
-      className="min-h-screen flex flex-col"
-      style={{ backgroundColor: 'var(--navy)' }}
-    >
-      {/* Background grid pattern */}
-      <div
-        className="fixed inset-0 pointer-events-none"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)',
-          backgroundSize: '40px 40px',
-        }}
-      />
-
-      {/* Top bar */}
-      <div className="relative z-10 px-6 py-5 flex items-center justify-between max-w-7xl mx-auto w-full">
-        <Link to="/" className="flex items-center gap-0.5">
-          <span className="font-black text-xl tracking-tight text-white">Flow</span>
-          <span className="font-black text-xl tracking-tight" style={{ color: 'var(--green)' }}>PDPA</span>
+    <div className="register-shell min-h-screen flex flex-col">
+      <header className="register-topbar px-6 flex items-center justify-between w-full">
+        <Link to="/" className="flex items-center gap-3">
+          <span className="register-brand-mark">FP</span>
+          <span className="font-bold text-base text-gray-900">FlowPDPA</span>
         </Link>
-        <Link
-          to="/support"
-          className="text-xs font-medium transition-colors"
-          style={{ color: '#475569' }}
-          onMouseEnter={e => (e.currentTarget.style.color = '#94a3b8')}
-          onMouseLeave={e => (e.currentTarget.style.color = '#475569')}
-        >
+        <Link to="/support" className="text-xs font-medium text-gray-500 hover:text-gray-900 transition-colors">
           ต้องการความช่วยเหลือ?
         </Link>
-      </div>
+      </header>
 
-      {/* Center card */}
-      <div className="relative z-10 flex-1 flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-md">
-
-          {/* Card */}
-          <div
-            className="rounded-2xl p-8 sm:p-10"
-            style={{
-              backgroundColor: '#0f1f38',
-              border: '1px solid rgba(255,255,255,0.07)',
-              boxShadow: '0 32px 64px -12px rgba(0,0,0,0.5)',
-            }}
-          >
-            {/* Icon */}
-            <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center mb-6"
-              style={{ backgroundColor: 'rgba(5,150,105,0.15)' }}
-            >
-              <ShieldCheck className="w-6 h-6" style={{ color: 'var(--green)' }} />
+      <main className="register-main">
+        <div className="login-layout">
+          <section className="register-card login-card">
+            <div className="register-icon flex items-center justify-center mb-6">
+              <ShieldCheck className="w-5 h-5" style={{ color: 'var(--green)' }} aria-hidden="true" />
             </div>
 
-            <h1 className="text-2xl font-black text-white mb-1">เข้าสู่ระบบ</h1>
-            <p className="text-sm mb-8" style={{ color: '#64748b' }}>
-              ยินดีต้อนรับกลับมา จัดการ Policy ของคุณได้เลย
-            </p>
+            <h1 className="text-2xl font-bold mb-1">เข้าสู่ระบบ</h1>
+            <p className="text-sm mb-8">เข้าสู่พื้นที่จัดการนโยบายและงานตรวจสอบของคุณ</p>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Email */}
+            <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: '#64748b' }}>
-                  อีเมล
-                </label>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">อีเมล</label>
                 <input
                   type="email"
                   required
+                  autoComplete="email"
                   placeholder="email@company.com"
                   value={email}
-                  onChange={e => { setEmail(e.target.value); setError('') }}
-                  className="w-full rounded-lg px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none transition-colors"
-                  style={{
-                    backgroundColor: 'rgba(255,255,255,0.05)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                  }}
-                  onFocus={e => (e.currentTarget.style.borderColor = 'var(--green)')}
-                  onBlur={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)')}
+                  aria-invalid={Boolean(email) && !isValidEmail(email)}
+                  onChange={event => { setEmail(event.target.value.trimStart()); setError('') }}
+                  className="w-full px-4 py-3 text-sm"
                 />
               </div>
 
-              {/* Password */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#64748b' }}>
-                    รหัสผ่าน
-                  </label>
-                  <Link
-                    to="/forgot-password"
-                    className="text-xs transition-colors"
-                    style={{ color: 'var(--green)' }}
-                    onMouseEnter={e => (e.currentTarget.style.opacity = '0.8')}
-                    onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
-                  >
+                  <label className="text-xs font-semibold uppercase tracking-wider text-gray-500">รหัสผ่าน</label>
+                  <Link to="/forgot-password" className="text-xs font-medium hover:underline" style={{ color: 'var(--green)' }}>
                     ลืมรหัสผ่าน?
                   </Link>
                 </div>
@@ -169,129 +140,54 @@ export default function Login() {
                   <input
                     type={showPassword ? 'text' : 'password'}
                     required
-                    placeholder="••••••••"
+                    autoComplete="current-password"
+                    placeholder="รหัสผ่านของคุณ"
                     value={password}
-                    onChange={e => { setPassword(e.target.value); setError('') }}
-                    className="w-full rounded-lg px-4 py-3 pr-11 text-sm text-white placeholder-gray-600 focus:outline-none transition-colors"
-                    style={{
-                      backgroundColor: 'rgba(255,255,255,0.05)',
-                      border: '1px solid rgba(255,255,255,0.08)',
-                    }}
-                    onFocus={e => (e.currentTarget.style.borderColor = 'var(--green)')}
-                    onBlur={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)')}
+                    onChange={event => { setPassword(event.target.value); setError('') }}
+                    className="w-full px-4 py-3 pr-11 text-sm"
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                    style={{ color: '#475569' }}
-                    onMouseEnter={e => (e.currentTarget.style.color = '#94a3b8')}
-                    onMouseLeave={e => (e.currentTarget.style.color = '#475569')}
+                    onClick={() => setShowPassword(current => !current)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-700"
+                    aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
 
-              {/* Error message */}
               {error && (
-                <div
-                  className="text-xs px-4 py-3 rounded-lg"
-                  style={{ backgroundColor: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}
-                >
-                  {error}
+                <div className="register-error flex items-start gap-2 text-xs px-4 py-3 rounded border" role="alert">
+                  <AlertCircle className="w-4 h-4 shrink-0" aria-hidden="true" />
+                  <span>{error}</span>
                 </div>
               )}
 
-              {/* Submit */}
-              <button
-                type="submit"
-                className="btn-green w-full py-3 text-sm mt-2"
-                style={{ borderRadius: '8px' }}
-              >
-                เข้าสู่ระบบ
+              <button type="submit" disabled={loading} className="btn-green w-full py-3 text-sm flex items-center justify-center gap-2 disabled:opacity-60">
+                {loading && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
+                {loading ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}
               </button>
             </form>
 
-            {/* Demo credentials hint */}
-            <div
-              className="mt-5 px-4 py-3 rounded-lg text-xs space-y-0.5"
-              style={{ backgroundColor: 'rgba(5,150,105,0.08)', border: '1px solid rgba(5,150,105,0.15)' }}
-            >
-              <p className="font-semibold" style={{ color: 'var(--green)' }}>Demo Account</p>
-              <p style={{ color: '#475569' }}>Email: <span className="text-white">demo@flowpdpa.co.th</span></p>
-              <p style={{ color: '#475569' }}>Password: <span className="text-white">demo1234</span></p>
-            </div>
-
-            {/* Divider */}
             <div className="flex items-center gap-3 my-6">
-              <span className="flex-1 h-px" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
-              <span className="text-xs" style={{ color: '#334155' }}>หรือ</span>
-              <span className="flex-1 h-px" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
+              <span className="register-divider flex-1 h-px" />
+              <span className="text-xs text-gray-500">ยังไม่มีบัญชี?</span>
+              <span className="register-divider flex-1 h-px" />
             </div>
 
-            {/* Sign up link */}
-            <p className="text-center text-sm" style={{ color: '#475569' }}>
-              ยังไม่มีบัญชี?{' '}
-              <Link
-                to="/register"
-                className="font-semibold transition-colors"
-                style={{ color: 'var(--green)' }}
-                onMouseEnter={e => (e.currentTarget.style.opacity = '0.8')}
-                onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
-              >
-                สมัครสมาชิก
-              </Link>
-            </p>
-
-            {/* Staff links */}
-            <p className="text-center mt-4 flex items-center justify-center gap-5">
-              <Link
-                to="/admin"
-                className="text-xs transition-colors"
-                style={{ color: '#334155' }}
-                onMouseEnter={e => (e.currentTarget.style.color = '#f87171')}
-                onMouseLeave={e => (e.currentTarget.style.color = '#334155')}
-              >
-                Admin Login →
-              </Link>
-              <span className="w-1 h-1 rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.05)' }} />
-              <Link
-                to="/legal"
-                className="text-xs transition-colors"
-                style={{ color: '#334155' }}
-                onMouseEnter={e => (e.currentTarget.style.color = '#60a5fa')}
-                onMouseLeave={e => (e.currentTarget.style.color = '#334155')}
-              >
-                Legal Portal →
-              </Link>
-            </p>
-          </div>
-
-          {/* Footer links */}
-          <div className="flex items-center justify-center gap-5 mt-8">
-            <Link
-              to="/terms"
-              className="text-xs transition-colors"
-              style={{ color: '#334155' }}
-              onMouseEnter={e => (e.currentTarget.style.color = '#64748b')}
-              onMouseLeave={e => (e.currentTarget.style.color = '#334155')}
-            >
-              เงื่อนไขการใช้งาน
+            <Link to="/register" className="register-login-link block w-full py-3 text-sm font-semibold text-center">
+              สมัครสมาชิก
             </Link>
-            <span className="w-1 h-1 rounded-full" style={{ backgroundColor: '#1e293b' }} />
-            <Link
-              to="/privacy-policy"
-              className="text-xs transition-colors"
-              style={{ color: '#334155' }}
-              onMouseEnter={e => (e.currentTarget.style.color = '#64748b')}
-              onMouseLeave={e => (e.currentTarget.style.color = '#334155')}
-            >
-              นโยบายความเป็นส่วนตัว
-            </Link>
-          </div>
+          </section>
+
+          <footer className="register-legal flex items-center justify-center gap-5 mt-6">
+            <Link to="/terms" className="text-xs">เงื่อนไขการใช้งาน</Link>
+            <span className="w-1 h-1 rounded-full" />
+            <Link to="/privacy-policy" className="text-xs">นโยบายความเป็นส่วนตัว</Link>
+          </footer>
         </div>
-      </div>
+      </main>
     </div>
   )
 }

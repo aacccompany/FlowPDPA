@@ -1,27 +1,208 @@
 @import "tailwindcss";
 
 :root {
-  --green: #059669;
-  --green-dark: #047857;
-  --green-light: #d1fae5;
-  --blue: #1e40af;
-  --blue-dark: #1e3a8a;
-  --blue-mid: #2563eb;
-  --blue-light: #dbeafe;
-  --navy: #0f172a;
-  --navy-light: #1e293b;
+  --green: #087a5b;
+  --green-dark: #065f49;
+  --green-light: #dcefe8;
+  --blue: #2457a6;
+  --blue-dark: #183d78;
+  --blue-mid: #3267b7;
+  --blue-light: #e4ecf8;
+  --navy: #17233b;
+  --navy-light: #26344f;
+  --paper: #f4f6f9;
+  --ink: #172033;
+  --muted: #667085;
+  --line: #dce1e8;
+  --amber: #a86207;
 }
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  font-family: 'Sarabun', sans-serif;
-  color: #1e293b;
+  font-family: 'IBM Plex Sans Thai', sans-serif;
+  color: var(--ink);
+  background: var(--paper);
   -webkit-font-smoothing: antialiased;
 }
 
+button, input, select, textarea { font: inherit; }
+
+:focus-visible {
+  outline: 2px solid #2457a6;
+  outline-offset: 2px;
+}
+
 #root { width: 100%; min-height: 100vh; }
+
+/* Public site: quiet light surfaces with green reserved for actions. */
+.public-light-hero,
+.public-light-feature-section,
+.public-light-page-header,
+.public-light-cta {
+  background-color: #f4f6f9 !important;
+}
+
+.public-light-hero {
+  border-bottom: 1px solid var(--line);
+}
+
+.public-light-hero .btn-outline-white {
+  color: var(--ink) !important;
+  border-color: #cbd5e1 !important;
+  background-color: #fff !important;
+}
+
+.public-light-hero .text-white,
+.public-light-feature-section .text-white,
+.public-light-page-header .text-white,
+.public-light-cta .text-white,
+.public-light-contact .text-white,
+.public-light-callout .text-white,
+.public-light-referral .text-white,
+.public-light-footer .text-white,
+.public-light-ticket-id .text-white {
+  color: var(--ink) !important;
+}
+
+.public-light-hero a.btn-green,
+.public-light-hero button.btn-green,
+.public-light-feature-section a.text-white,
+.public-light-cta a.text-white,
+.public-light-callout a.text-white,
+.public-light-referral a.text-white,
+.public-light-footer a.btn-green,
+.public-light-ticket-id svg {
+  color: #fff !important;
+}
+
+.public-light-hero p,
+.public-light-feature-section p,
+.public-light-page-header p,
+.public-light-cta p,
+.public-light-contact p,
+.public-light-referral p {
+  color: var(--muted) !important;
+}
+
+.public-light-hero [style*="var(--navy-light)"],
+.public-light-feature-section [style*="var(--navy-light)"] {
+  background-color: #fff !important;
+  border: 1px solid var(--line) !important;
+  box-shadow: none !important;
+}
+
+.public-light-hero [style*="#0f172a"] {
+  background-color: #eef1f5 !important;
+  border-bottom-color: var(--line) !important;
+}
+
+.public-light-hero [style*="rgba(255,255,255,0.05)"],
+.public-light-hero [style*="rgba(255,255,255,0.06)"] {
+  background-color: #e4e8ee !important;
+}
+
+.public-light-stats {
+  background-color: #fff !important;
+  border-color: var(--line) !important;
+}
+
+.public-light-stats .text-white {
+  color: var(--ink) !important;
+}
+
+.public-light-feature-section .stagger-grid > div {
+  background-color: #fff !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 8px !important;
+}
+
+.public-light-feature-section .stagger-grid > div:hover {
+  background-color: #f8fafc !important;
+}
+
+.public-light-referral {
+  background: #eef7f3 !important;
+  border: 1px solid #cfe5dc;
+  border-radius: 8px !important;
+}
+
+.public-light-referral > .pointer-events-none {
+  display: none;
+}
+
+.public-light-referral > div[style*="rgba(255,255,255"] {
+  background-color: #dcefe8 !important;
+}
+
+.public-light-referral svg:not(a svg) {
+  color: var(--green) !important;
+}
+
+.public-light-contact {
+  background-color: #f4f6f9 !important;
+  border-right: 1px solid var(--line);
+}
+
+.public-light-contact [style*="rgba(255,255,255"] {
+  background-color: #fff !important;
+  border: 1px solid var(--line);
+}
+
+.public-light-contact svg,
+.public-light-contact [class*="text-blue"] {
+  color: var(--green) !important;
+}
+
+.public-light-callout {
+  background-color: #eef7f3 !important;
+  border: 1px solid #cfe5dc;
+}
+
+.public-light-table-head {
+  background-color: #eef1f5 !important;
+}
+
+.public-light-table-head th {
+  color: var(--ink) !important;
+}
+
+.public-light-ticket-id {
+  background-color: #eef7f3 !important;
+  border: 1px solid #cfe5dc;
+}
+
+.public-light-ticket-id .text-white {
+  color: var(--green-dark) !important;
+}
+
+.public-light-footer {
+  background-color: #fff !important;
+  border-top: 1px solid var(--line);
+}
+
+.public-light-footer > div:first-child {
+  background: var(--green) !important;
+}
+
+.public-light-footer > div:nth-child(2) {
+  background-color: #f4f6f9 !important;
+  border-bottom-color: var(--line) !important;
+}
+
+.public-light-footer [style*="rgba(255,255,255,0.06)"] {
+  background-color: #eef1f5 !important;
+  border-color: var(--line) !important;
+}
+
+.public-light-footer a:hover {
+  color: var(--ink) !important;
+}
+
+.public-light-footer [style*="borderTop"] {
+  border-top-color: var(--line) !important;
+}
 
 .btn-green {
   background-color: var(--green);

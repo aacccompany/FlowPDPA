@@ -6,6 +6,7 @@ import {
 import { Link, useNavigate } from 'react-router-dom'
 import FadeUp from '@/components/ui/FadeUp'
 import { submitTicket, type TicketRecord } from '@/api/helpdesk'
+import { storage } from '@/utils/storage'
 
 // ── Category cards (maps to Odoo tag_ids on backend) ───────────────────────
 
@@ -126,9 +127,8 @@ export default function Helpdesk() {
   // Auto-fill from logged-in session
   useEffect(() => {
     try {
-      const raw = localStorage.getItem('flowpdpa_auth')
-      if (!raw) return
-      const auth = JSON.parse(raw)
+      const auth = storage.auth.get()
+      if (!auth) return
       if (auth.name)  setPartnerName(auth.name)
       if (auth.email) setPartnerEmail(auth.email)
     } catch { /* not logged in */ }
@@ -179,7 +179,7 @@ export default function Helpdesk() {
     <div style={{ paddingTop: '61px' }}>
 
       {/* Header */}
-      <div className="py-20" style={{ backgroundColor: 'var(--navy)' }}>
+      <div className="public-light-page-header py-20" style={{ backgroundColor: 'var(--navy)' }}>
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.15em] mb-5" style={{ color: 'var(--green)' }}>
             <span className="block w-8 h-px" style={{ backgroundColor: 'var(--green)', opacity: 0.5 }} />
@@ -220,7 +220,7 @@ export default function Helpdesk() {
                 </div>
                 <h2 className="text-2xl font-black text-gray-900 mb-2">ส่งคำขอสำเร็จ!</h2>
                 <p className="text-gray-400 text-sm mb-6">ทีมงานได้รับคำขอของคุณแล้ว และจะติดต่อกลับตามอีเมลที่ให้ไว้</p>
-                <div className="inline-flex items-center gap-3 px-6 py-3 rounded-xl mb-3" style={{ backgroundColor: 'var(--navy)' }}>
+                <div className="public-light-ticket-id inline-flex items-center gap-3 px-6 py-3 rounded-xl mb-3" style={{ backgroundColor: 'var(--navy)' }}>
                   <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#475569' }}>Ticket ID</span>
                   <span className="text-white font-black text-lg tracking-widest">{ticket.id}</span>
                 </div>

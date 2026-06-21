@@ -100,7 +100,7 @@ export default function About() {
       </div>
 
       {/* CTA */}
-      <div className="py-14 border-t border-gray-100" style={{ backgroundColor: 'var(--blue-dark)' }}>
+      <div className="public-light-cta py-14 border-t border-gray-100" style={{ backgroundColor: 'var(--blue-dark)' }}>
         <div className="max-w-2xl mx-auto px-4 text-center">
           <h2 className="text-2xl font-bold text-white mb-3">พร้อมเริ่มต้นกับ FlowPDPA?</h2>
           <p className="text-blue-200 text-sm mb-6">สร้าง Privacy Policy ที่ถูกต้องตาม PDPA ได้ในไม่กี่นาที</p>

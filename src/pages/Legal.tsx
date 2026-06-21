@@ -1,845 +1,248 @@
-import { useState, useEffect } from 'react'
+import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
-  CheckCircle, Clock, XCircle, ChevronLeft, ChevronRight,
-  LogOut, FileText, Scale, Eye, EyeOff, Pencil, CalendarClock, AlertTriangle,
-  ExternalLink, Link2, Link2Off,
+  AlertTriangle, ArrowLeft, BarChart3, CalendarClock, CheckCircle2,
+  ChevronLeft, ChevronRight, FileEdit, FileText, Inbox, Languages, LogOut, Menu,
+  MessageSquareText, Scale, Search, ShieldCheck, UserRound, XCircle,
 } from 'lucide-react'
-import { policyStorage, type SavedPolicy, type PolicyStatus } from '@/utils/policyStorage'
-import { extractDocId, getDocEditorUrl, getDocShortLabel, getDocPreviewUrl } from '@/utils/googleDocs'
+import { session } from '@/utils/storage'
+import './Portal.css'
 
-// ── Credentials ───────────────────────────────────────────────
-const LEGAL_EMAIL = 'legal@flowpdpa.co.th'
-const LEGAL_PASSWORD = 'legal2025'
+type LegalView = 'dashboard' | 'submissions' | 'changes'
+type PolicyStatus = 'pending_review' | 'approved' | 'edited' | 'rejected'
+type ChangeStatus = 'pending_review' | 'resolved' | 'rejected'
 
-// ── Types ─────────────────────────────────────────────────────
-type ReviewStatus = 'pending_review' | 'approved' | 'rejected' | 'edited'
-type QueueFilter  = 'all' | ReviewStatus
-type ReviewAction = 'approve' | 'reject' | 'edit' | null
-
-// ── Status config (shared with queue + detail) ────────────────
-const statusConfig: Record<ReviewStatus, { label: string; color: string; bg: string; Icon: React.FC<{ className?: string }> }> = {
-  pending_review: { label: 'Review',   color: '#d97706', bg: 'rgba(217,119,6,0.1)',  Icon: Clock },
-  approved:       { label: 'Reviewed', color: '#059669', bg: 'rgba(5,150,105,0.1)',  Icon: CheckCircle },
-  rejected:       { label: 'Rejected', color: '#dc2626', bg: 'rgba(220,38,38,0.1)',  Icon: XCircle },
-  edited:         { label: 'Edited',   color: '#7c3aed', bg: 'rgba(124,58,237,0.1)', Icon: Pencil },
+interface Submission {
+  id: string
+  slug: string
+  websiteName: string
+  domain: string
+  ownerName: string
+  ownerEmail: string
+  language: 'th' | 'en' | 'both'
+  status: PolicyStatus
+  approvalDeadline: string
+  createdAt: string
+  contentTh: string
+  contentEn: string
+  reviewComment: string
 }
 
-// ── Mock fallback (shown when no real submissions exist) ───────
-const MOCK_SUBMISSIONS: SavedPolicy[] = [
+interface ChangeRequest {
+  id: string
+  policySlug: string
+  websiteName: string
+  sectionTitle: string
+  requestedChange: string
+  requesterName: string
+  status: ChangeStatus
+  createdAt: string
+}
+
+const seedSubmissions: Submission[] = [
   {
-    id: 'POL-2026-001', slug: 'mock-myshop-001',
-    type: 'privacy', typeName: 'Privacy + Cookies Policy', typeIcon: '🔒',
-    websiteName: 'MyShop Online', domain: 'myshop.co.th',
-    language: 'both', status: 'pending_review',
-    createdAt: '2026-05-21T09:15:00.000Z', updatedAt: '2026-05-21T09:15:00.000Z',
-    htmlContent: '', ownerEmail: 'somchai@myshop.co.th', ownerName: 'สมชาย มั่นคง',
-    approvalDeadline: '2026-05-23T09:15:00.000Z',
+    id: 'f2ddc823-7fc7-4612-b984-5ecfca8796c7', slug: 'baan-aroon-privacy-f2ddc823',
+    websiteName: 'Baan Aroon Living', domain: 'baanaroon.co.th', ownerName: 'Baan Aroon Co., Ltd.',
+    ownerEmail: 'privacy@baanaroon.co.th', language: 'both', status: 'pending_review',
+    approvalDeadline: '2026-06-22T09:00:00Z', createdAt: '2026-06-20T08:12:00Z',
+    contentTh: '# นโยบายความเป็นส่วนตัว\n\nบริษัท บ้านอรุณ จำกัด ให้ความสำคัญกับการคุ้มครองข้อมูลส่วนบุคคล...',
+    contentEn: '# Privacy Policy\n\nBaan Aroon Co., Ltd. is committed to protecting personal data...', reviewComment: '',
   },
   {
-    id: 'POL-2026-002', slug: 'mock-clinic-002',
-    type: 'privacy', typeName: 'Privacy + Cookies Policy', typeIcon: '🔒',
-    websiteName: 'Clinic Care', domain: 'clinic-care.com',
-    language: 'th', status: 'approved',
-    createdAt: '2026-05-20T14:32:00.000Z', updatedAt: '2026-05-21T08:00:00.000Z',
-    htmlContent: '', ownerEmail: 'wipa@clinic-care.com', ownerName: 'วิภา ดีเสมอ',
-    reviewedAt: '2026-05-21T08:00:00.000Z',
+    id: 'a40c16d5-5598-4565-bcbc-8e780e19cc14', slug: 'northstar-clinic-privacy-a40c16d5',
+    websiteName: 'Northstar Clinic', domain: 'northstarclinic.com', ownerName: 'Northstar Health Co., Ltd.',
+    ownerEmail: 'dpo@northstarclinic.com', language: 'th', status: 'pending_review',
+    approvalDeadline: '2026-06-21T16:30:00Z', createdAt: '2026-06-19T11:40:00Z',
+    contentTh: '# นโยบายความเป็นส่วนตัว\n\nคลินิกเก็บรวบรวมข้อมูลเพื่อให้บริการด้านสุขภาพ...',
+    contentEn: '', reviewComment: '',
   },
   {
-    id: 'POL-2026-003', slug: 'mock-techstart-003',
-    type: 'privacy', typeName: 'Privacy + Cookies Policy', typeIcon: '🔒',
-    websiteName: 'TechStart.io', domain: 'techstart.io',
-    language: 'both', status: 'pending_review',
-    createdAt: '2026-05-19T11:20:00.000Z', updatedAt: '2026-05-20T10:15:00.000Z',
-    htmlContent: '', ownerEmail: 'thanakorn@techstart.io', ownerName: 'ธนกร สุขใจ',
-    approvalDeadline: '2026-06-10T11:20:00.000Z',
+    id: 'e3f4620f-9d57-4218-a749-826f87e23544', slug: 'siam-supply-privacy-e3f4620f',
+    websiteName: 'Siam Supply', domain: 'siamsupply.co.th', ownerName: 'Siam Supply Partnership',
+    ownerEmail: 'contact@siamsupply.co.th', language: 'both', status: 'approved',
+    approvalDeadline: '2026-06-19T10:00:00Z', createdAt: '2026-06-17T07:20:00Z',
+    contentTh: '# นโยบายความเป็นส่วนตัว\n\nฉบับตรวจสอบแล้ว...', contentEn: '# Privacy Policy\n\nReviewed version...', reviewComment: '',
   },
   {
-    id: 'POL-2026-004', slug: 'mock-edu-004',
-    type: 'privacy', typeName: 'Privacy + Cookies Policy', typeIcon: '🔒',
-    websiteName: 'EduSchool', domain: 'edu-school.ac.th',
-    language: 'th', status: 'rejected',
-    createdAt: '2026-05-18T09:00:00.000Z', updatedAt: '2026-05-19T14:00:00.000Z',
-    htmlContent: '', ownerEmail: 'malee@edu-school.ac.th', ownerName: 'มาลี รัตนา',
-    reviewedAt: '2026-05-19T14:00:00.000Z',
-    reviewComment: 'ข้อมูลที่เลือกรวมถึงข้อมูลผู้เยาว์ซึ่งต้องการเงื่อนไขพิเศษตาม PDPA มาตรา 20',
+    id: 'cf50353f-b282-47e8-af26-32c5468ee438', slug: 'paperplane-privacy-cf50353f',
+    websiteName: 'Paperplane Studio', domain: 'paperplane.studio', ownerName: 'Paperplane Studio',
+    ownerEmail: 'hello@paperplane.studio', language: 'en', status: 'rejected',
+    approvalDeadline: '2026-06-18T10:00:00Z', createdAt: '2026-06-16T06:50:00Z',
+    contentTh: '', contentEn: '# Privacy Policy\n\nDraft policy...',
+    reviewComment: 'Please clarify the legal basis for marketing communications.',
   },
 ]
 
-const langLabel: Record<string, string> = { th: 'ภาษาไทย', en: 'English', both: 'ไทย + อังกฤษ' }
+const seedChanges: ChangeRequest[] = [
+  {
+    id: 'cr-9221a410', policySlug: 'siam-supply-privacy-e3f4620f', websiteName: 'Siam Supply',
+    sectionTitle: '3. วัตถุประสงค์ในการประมวลผลข้อมูล',
+    requestedChange: 'Remove analytics because the website no longer uses analytics tools.',
+    requesterName: 'Narin S.', status: 'pending_review', createdAt: '2026-06-20T10:30:00Z',
+  },
+  {
+    id: 'cr-187cad21', policySlug: 'baan-aroon-privacy-f2ddc823', websiteName: 'Baan Aroon Living',
+    sectionTitle: 'Data retention', requestedChange: 'Update retention period from two years to seven years.',
+    requesterName: 'Merchant team', status: 'resolved', createdAt: '2026-06-18T14:10:00Z',
+  },
+]
 
-function formatDate(iso: string) {
-  try {
-    return new Date(iso).toLocaleString('th-TH', {
-      day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
-    })
-  } catch { return iso }
+const statusMeta: Record<PolicyStatus | ChangeStatus, { label: string; color: string; bg: string }> = {
+  pending_review: { label: 'Pending review', color: '#a86207', bg: '#fff6e5' },
+  approved: { label: 'Approved', color: '#087a5b', bg: '#e8f4ef' },
+  edited: { label: 'Edited', color: '#2457a6', bg: '#eaf0fa' },
+  rejected: { label: 'Rejected', color: '#b42318', bg: '#fdf0ef' },
+  resolved: { label: 'Resolved', color: '#087a5b', bg: '#e8f4ef' },
 }
 
-function formatDateShort(iso: string) {
-  try {
-    return new Date(iso).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })
-  } catch { return iso }
+const formatDate = (value: string) => new Date(value).toLocaleString('th-TH', {
+  day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+})
+const MOCK_NOW = new Date('2026-06-21T12:00:00Z').getTime()
+
+function StatusBadge({ status }: { status: PolicyStatus | ChangeStatus }) {
+  const meta = statusMeta[status]
+  return <span className="portal-badge" style={{ color: meta.color, background: meta.bg }}>{meta.label}</span>
 }
 
-type DeadlineInfo = { label: string; subLabel: string; color: string; bg: string; borderColor: string; Icon: React.FC<{ className?: string; style?: React.CSSProperties }> }
+const LEGAL_PAGE_SIZE = 3
 
-function getDeadlineInfo(deadline: string | undefined, status: string): DeadlineInfo {
-  if (status !== 'pending_review') {
-    return { label: '—', subLabel: '', color: '#94a3b8', bg: 'transparent', borderColor: 'transparent', Icon: Clock }
-  }
-  if (!deadline) {
-    return { label: 'ไม่กำหนด', subLabel: '', color: '#94a3b8', bg: '#f1f5f9', borderColor: '#e5e7eb', Icon: CalendarClock }
-  }
-  const diff = new Date(deadline).getTime() - Date.now()
-  if (diff < 0) {
-    const hrs = Math.abs(Math.round(diff / 3600000))
-    return { label: 'เกินกำหนด', subLabel: `${hrs >= 24 ? Math.floor(hrs / 24) + ' วัน' : hrs + ' ชม.'}`, color: '#dc2626', bg: 'rgba(220,38,38,0.08)', borderColor: 'rgba(220,38,38,0.3)', Icon: AlertTriangle }
-  }
-  if (diff < 24 * 3600000) {
-    const hrs = Math.round(diff / 3600000)
-    return { label: 'ใกล้ครบกำหนด', subLabel: `อีก ${hrs} ชม.`, color: '#d97706', bg: 'rgba(217,119,6,0.08)', borderColor: 'rgba(217,119,6,0.3)', Icon: Clock }
-  }
-  const days = Math.floor(diff / 86400000)
-  return { label: formatDateShort(deadline), subLabel: `อีก ${days} วัน`, color: '#059669', bg: 'rgba(5,150,105,0.06)', borderColor: 'rgba(5,150,105,0.2)', Icon: CalendarClock }
+function usePagination<T>(rows: T[], pageSize = LEGAL_PAGE_SIZE) {
+  const [requestedPage, setRequestedPage] = useState(1)
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize))
+  const page = Math.min(requestedPage, pageCount)
+  const pageRows = rows.slice((page - 1) * pageSize, page * pageSize)
+  return { page, pageCount, pageRows, pageSize, setPage: setRequestedPage }
 }
 
-// ── Shared UI ─────────────────────────────────────────────────
-function StatusBadge({ status }: { status: ReviewStatus }) {
-  const cfg = statusConfig[status] ?? { label: status, color: '#64748b', bg: 'rgba(100,116,139,0.1)', Icon: Clock }
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap"
-      style={{ backgroundColor: cfg.bg, color: cfg.color }}
-    >
-      <cfg.Icon className="w-3 h-3" />
-      {cfg.label}
-    </span>
-  )
+function Pagination({ page, pageCount, total, pageSize, setPage }: { page: number; pageCount: number; total: number; pageSize: number; setPage: (page: number) => void }) {
+  const first = total === 0 ? 0 : (page - 1) * pageSize + 1
+  const last = Math.min(page * pageSize, total)
+  return <footer className="portal-pagination"><p className="text-xs text-gray-500">Showing <strong className="text-gray-700">{first}-{last}</strong> of <strong className="text-gray-700">{total}</strong> records</p><div className="portal-pagination-pages"><button className="portal-page-button" disabled={page === 1} onClick={() => setPage(page - 1)} aria-label="Previous page"><ChevronLeft className="w-4 h-4" /></button>{Array.from({ length: pageCount }, (_, index) => index + 1).map(value => <button key={value} className="portal-page-button" data-active={page === value} onClick={() => setPage(value)} aria-label={`Page ${value}`}>{value}</button>)}<button className="portal-page-button" disabled={page === pageCount} onClick={() => setPage(page + 1)} aria-label="Next page"><ChevronRight className="w-4 h-4" /></button></div></footer>
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-start gap-3 py-2.5 border-b border-gray-50 last:border-0">
-      <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider w-32 shrink-0 mt-0.5">{label}</span>
-      <span className="text-sm text-gray-800 leading-snug">{value || <span className="text-gray-300">ไม่ระบุ</span>}</span>
-    </div>
-  )
+function Deadline({ row }: { row: Submission }) {
+  if (row.status !== 'pending_review') return <span className="text-xs text-gray-400">{formatDate(row.approvalDeadline)}</span>
+  const hours = Math.ceil((new Date(row.approvalDeadline).getTime() - MOCK_NOW) / 3600000)
+  const overdue = hours < 0
+  const text = overdue ? 'Overdue ' + Math.abs(hours) + 'h' : hours + 'h remaining'
+  return <span className="inline-flex items-center gap-1.5 text-xs font-semibold" style={{ color: overdue ? '#b42318' : hours <= 24 ? '#a86207' : '#475467' }}>
+    {overdue ? <AlertTriangle className="w-3.5 h-3.5" /> : <CalendarClock className="w-3.5 h-3.5" />}{text}
+  </span>
 }
 
-function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="bg-white rounded-xl border border-gray-100 overflow-hidden mb-4">
-      <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500">{title}</h3>
-      </div>
-      <div className="px-5 py-1">{children}</div>
-    </div>
-  )
-}
-
-// ── Login ─────────────────────────────────────────────────────
-function LoginScreen({ onLogin }: { onLogin: () => void }) {
-  const [email, setEmail] = useState('')
-  const [pw, setPw] = useState('')
-  const [showPw, setShowPw] = useState(false)
-  const [err, setErr] = useState('')
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (email === LEGAL_EMAIL && pw === LEGAL_PASSWORD) {
-      localStorage.setItem('flowpdpa_legal', '1')
-      onLogin()
-    } else {
-      setErr('อีเมลหรือรหัสผ่านไม่ถูกต้อง')
-    }
-  }
-
-  return (
-    <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: '#f0f4ff' }}>
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: '#1d4ed8' }}>
-            <Scale className="w-7 h-7 text-white" />
-          </div>
-          <h1 className="text-xl font-black text-gray-900 mb-1">Legal Review Portal</h1>
-          <p className="text-sm text-gray-500">FlowPDPA — สำหรับทีมตรวจสอบเอกสารกฎหมาย</p>
-        </div>
-
-        <div className="bg-white rounded-2xl border border-gray-100 p-7" style={{ boxShadow: '0 4px 24px rgba(0,0,0,0.07)' }}>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">อีเมล</label>
-              <input
-                type="email" required value={email}
-                onChange={e => { setEmail(e.target.value); setErr('') }}
-                placeholder="legal@flowpdpa.co.th"
-                className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-800 focus:outline-none transition-colors"
-                onFocus={e => (e.currentTarget.style.borderColor = '#2563eb')}
-                onBlur={e => (e.currentTarget.style.borderColor = '#e5e7eb')}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">รหัสผ่าน</label>
-              <div className="relative">
-                <input
-                  type={showPw ? 'text' : 'password'} required value={pw}
-                  onChange={e => { setPw(e.target.value); setErr('') }}
-                  placeholder="••••••••"
-                  className="w-full border border-gray-200 rounded-lg px-4 py-3 pr-11 text-sm text-gray-800 focus:outline-none transition-colors"
-                  onFocus={e => (e.currentTarget.style.borderColor = '#2563eb')}
-                  onBlur={e => (e.currentTarget.style.borderColor = '#e5e7eb')}
-                />
-                <button type="button" onClick={() => setShowPw(v => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
-                  {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-            {err && <p className="text-xs text-red-500">{err}</p>}
-            <button type="submit"
-              className="w-full py-3 text-sm font-bold text-white rounded-lg transition-colors"
-              style={{ backgroundColor: '#1d4ed8' }}
-              onMouseOver={e => (e.currentTarget.style.backgroundColor = '#1e40af')}
-              onMouseOut={e => (e.currentTarget.style.backgroundColor = '#1d4ed8')}>
-              เข้าสู่ระบบ Legal Portal
-            </button>
-          </form>
-          <div className="mt-4 rounded-lg px-3 py-2.5 text-xs" style={{ backgroundColor: 'rgba(37,99,235,0.06)', border: '1px solid rgba(37,99,235,0.12)' }}>
-            <span className="font-semibold" style={{ color: '#2563eb' }}>Demo: </span>
-            <span className="text-gray-500">legal@flowpdpa.co.th / legal2025</span>
-          </div>
-        </div>
-        <p className="text-center text-xs text-gray-400 mt-6">ระบบนี้สำหรับทีมกฎหมายภายในเท่านั้น</p>
-      </div>
-    </div>
-  )
-}
-
-// ── Queue ─────────────────────────────────────────────────────
-function QueueScreen({
-  submissions,
-  onSelect,
-  onLogout,
-}: {
-  submissions: SavedPolicy[]
-  onSelect: (s: SavedPolicy) => void
-  onLogout: () => void
+function Sidebar({ view, changeView, open, close, logout }: {
+  view: LegalView; changeView: (view: LegalView) => void; open: boolean; close: () => void; logout: () => void
 }) {
-  const [filter, setFilter] = useState<QueueFilter>('all')
+  const items = [
+    { id: 'dashboard' as const, label: 'Dashboard', Icon: BarChart3 },
+    { id: 'submissions' as const, label: 'Review queue', Icon: Inbox },
+    { id: 'changes' as const, label: 'Change requests', Icon: MessageSquareText },
+  ]
+  return <>
+    {open && <button className="portal-overlay" onClick={close} aria-label="Close navigation" />}
+    <aside className="portal-sidebar" data-open={open}>
+      <div className="portal-brand"><span className="portal-brand-mark"><Scale className="w-4 h-4" /></span><div><p className="text-sm font-bold">FlowPDPA</p><p className="text-[10px] text-gray-400">LEGAL WORKSPACE</p></div></div>
+      <nav className="portal-nav"><p className="portal-nav-label">Workspace</p>{items.map(({ id, label, Icon }) =>
+        <button key={id} className="portal-nav-item" data-active={view === id} onClick={() => { changeView(id); close() }}><Icon />{label}</button>
+      )}</nav>
+      <div className="portal-account"><div className="flex items-center gap-3 mb-3"><span className="w-8 h-8 grid place-items-center bg-blue-50 text-blue-700 rounded"><UserRound className="w-4 h-4" /></span><div className="min-w-0"><p className="text-xs font-semibold">Legal Reviewer</p><p className="text-[11px] text-gray-400 truncate">legal@flowpdpa.co.th</p></div></div><button className="portal-nav-item" onClick={logout}><LogOut />Sign out</button></div>
+    </aside>
+  </>
+}
 
-  const counts = {
-    all:            submissions.length,
-    pending_review: submissions.filter(s => s.status === 'pending_review').length,
-    approved:       submissions.filter(s => s.status === 'approved').length,
-    rejected:       submissions.filter(s => s.status === 'rejected').length,
-    edited:         submissions.filter(s => s.status === 'edited').length,
-  }
+function SubmissionTable({ rows, select }: { rows: Submission[]; select: (row: Submission) => void }) {
+  if (!rows.length) return <div className="portal-empty"><FileText className="w-7 h-7 mx-auto mb-3" /><p className="text-sm">No submissions in this queue</p></div>
+  return <table className="portal-table"><thead><tr><th>Website / policy</th><th>Merchant</th><th>Language</th><th>Deadline</th><th>Status</th><th /></tr></thead>
+    <tbody>{rows.map(row => <tr key={row.id}>
+      <td><p className="font-semibold">{row.websiteName}</p><p className="text-xs text-gray-400 mt-1">{row.domain} · Privacy + Cookies Policy</p></td>
+      <td><p>{row.ownerName}</p><p className="text-xs text-gray-400">{row.ownerEmail}</p></td>
+      <td><span className="inline-flex items-center gap-1.5 text-xs"><Languages className="w-3.5 h-3.5 text-gray-400" />{row.language.toUpperCase()}</span></td>
+      <td><Deadline row={row} /></td><td><StatusBadge status={row.status} /></td>
+      <td><button className="portal-button" onClick={() => select(row)}>Review <ChevronRight className="w-3.5 h-3.5" /></button></td>
+    </tr>)}</tbody>
+  </table>
+}
 
-  const filtered = filter === 'all' ? submissions : submissions.filter(s => s.status === filter)
-
+function Dashboard({ submissions, changes, openQueue, select }: {
+  submissions: Submission[]; changes: ChangeRequest[]; openQueue: () => void; select: (row: Submission) => void
+}) {
+  const pending = submissions.filter(row => row.status === 'pending_review')
   const stats = [
-    { label: 'All',      value: counts.all,            color: '#64748b', bg: '#f1f5f9' },
-    { label: 'Review',   value: counts.pending_review, color: '#d97706', bg: 'rgba(217,119,6,0.08)' },
-    { label: 'Reviewed', value: counts.approved,       color: '#059669', bg: 'rgba(5,150,105,0.08)' },
-    { label: 'Rejected', value: counts.rejected,       color: '#dc2626', bg: 'rgba(220,38,38,0.08)' },
+    { label: 'Pending reviews', value: pending.length, Icon: CalendarClock, color: '#a86207' },
+    { label: 'Overdue', value: pending.filter(row => new Date(row.approvalDeadline).getTime() < MOCK_NOW).length, Icon: AlertTriangle, color: '#b42318' },
+    { label: 'Approved', value: submissions.filter(row => row.status === 'approved').length, Icon: CheckCircle2, color: '#087a5b' },
+    { label: 'Change requests', value: changes.filter(row => row.status === 'pending_review').length, Icon: MessageSquareText, color: '#2457a6' },
   ]
-
-  const filters: { key: QueueFilter; label: string }[] = [
-    { key: 'all',           label: `All (${counts.all})` },
-    { key: 'pending_review', label: `Review (${counts.pending_review})` },
-    { key: 'approved',      label: `Reviewed (${counts.approved})` },
-    { key: 'edited',        label: `Edited (${counts.edited})` },
-    { key: 'rejected',      label: `Rejected (${counts.rejected})` },
-  ]
-
-  return (
-    <div className="min-h-screen" style={{ backgroundColor: '#f0f4ff' }}>
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 flex items-center justify-between h-14">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#1d4ed8' }}>
-              <Scale className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-black text-gray-900 text-sm">Legal Review Portal</span>
-            {counts.pending_review > 0 && (
-              <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: '#d97706' }}>
-                {counts.pending_review} Review
-              </span>
-            )}
-          </div>
-          <button onClick={onLogout}
-            className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 hover:text-gray-700 transition-colors">
-            <LogOut className="w-3.5 h-3.5" /> ออกจากระบบ
-          </button>
-        </div>
-      </header>
-
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
-        {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-          {stats.map(({ label, value, color, bg }) => (
-            <div key={label} className="bg-white rounded-xl border border-gray-100 p-5">
-              <div className="text-2xl font-black mb-0.5" style={{ color }}>{value}</div>
-              <div className="text-xs text-gray-400">{label}</div>
-              <div className="h-1 rounded-full mt-3" style={{ backgroundColor: bg }}>
-                <div className="h-full rounded-full" style={{ width: `${counts.all ? (value / counts.all) * 100 : 0}%`, backgroundColor: color }} />
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Filter tabs */}
-        <div className="flex gap-1 mb-4 overflow-x-auto pb-1">
-          {filters.map(({ key, label }) => (
-            <button key={key} onClick={() => setFilter(key)}
-              className="px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-all"
-              style={{
-                backgroundColor: filter === key ? '#1d4ed8' : 'white',
-                color: filter === key ? 'white' : '#64748b',
-                border: `1px solid ${filter === key ? '#1d4ed8' : '#e5e7eb'}`,
-              }}>
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* Table */}
-        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-          <div className="hidden md:grid grid-cols-12 gap-4 px-6 py-3 bg-gray-50 border-b border-gray-100 text-xs font-bold uppercase tracking-wider text-gray-400">
-            <div className="col-span-3">เว็บไซต์ / กิจการ</div>
-            <div className="col-span-2">เจ้าของ</div>
-            <div className="col-span-3">Deadline อนุมัติ</div>
-            <div className="col-span-2">สถานะ</div>
-            <div className="col-span-2 text-right">ดู</div>
-          </div>
-
-          {filtered.length === 0 ? (
-            <div className="py-16 text-center">
-              <FileText className="w-10 h-10 text-gray-200 mx-auto mb-3" />
-              <p className="text-sm text-gray-400">ไม่มีเอกสารในหมวดนี้</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-50">
-              {filtered.map((s) => (
-                <div key={s.id}
-                  className="grid grid-cols-2 md:grid-cols-12 gap-4 px-6 py-4 items-center hover:bg-blue-50 transition-colors cursor-pointer"
-                  onClick={() => onSelect(s)}>
-                  <div className="col-span-2 md:col-span-3">
-                    <div className="text-sm font-semibold text-gray-900">{s.websiteName}</div>
-                    <div className="text-xs text-gray-400 mt-0.5">{s.typeIcon} {s.typeName}</div>
-                  </div>
-                  <div className="hidden md:block md:col-span-2 text-sm text-gray-600">
-                    {s.ownerName || s.ownerEmail}
-                  </div>
-                  <div className="hidden md:block md:col-span-3">
-                    {(() => {
-                      const dl = getDeadlineInfo(s.approvalDeadline, s.status)
-                      return s.status === 'pending_review' ? (
-                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border"
-                          style={{ color: dl.color, backgroundColor: dl.bg, borderColor: dl.borderColor }}>
-                          <dl.Icon className="w-3 h-3" />
-                          {dl.label}
-                          {dl.subLabel && <span className="opacity-75 font-normal">· {dl.subLabel}</span>}
-                        </span>
-                      ) : <span className="text-xs text-gray-300">—</span>
-                    })()}
-                  </div>
-                  <div className="col-span-1 md:col-span-2">
-                    <StatusBadge status={s.status as ReviewStatus} />
-                  </div>
-                  <div className="hidden md:flex md:col-span-2 justify-end">
-                    <span className="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors"
-                      style={{ color: '#2563eb', borderColor: '#bfdbfe', backgroundColor: '#eff6ff' }}>
-                      ตรวจสอบ <ChevronRight className="w-3 h-3" />
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </main>
-    </div>
-  )
+  return <><PageTitle eyebrow="LEGAL OPERATIONS" title="Review dashboard" description="Your assigned policies and customer-requested changes." />
+    <section className="portal-kpis">{stats.map(({ label, value, Icon, color }) => <div className="portal-kpi" key={label}><Icon className="w-4 h-4 mb-4" style={{ color }} /><p className="text-2xl font-semibold">{value}</p><p className="text-xs text-gray-500 mt-1">{label}</p></div>)}</section>
+    <section className="portal-panel"><div className="portal-panel-head"><div><h2 className="text-sm font-semibold">Priority queue</h2><p className="text-xs text-gray-400 mt-1">Closest deadlines first</p></div><button className="portal-button" onClick={openQueue}>View all <ChevronRight className="w-3.5 h-3.5" /></button></div><div className="portal-table-wrap"><SubmissionTable rows={pending.slice(0, 4)} select={select} /></div></section>
+  </>
 }
 
-// ── Detail ────────────────────────────────────────────────────
-function DetailScreen({
-  submission,
-  onBack,
-  onAction,
-  onDeadlineUpdate,
-  onGoogleDocUpdate,
-}: {
-  submission: SavedPolicy
-  onBack: () => void
-  onAction: (slug: string, status: PolicyStatus, comment: string) => void
-  onDeadlineUpdate: (slug: string, deadline: string) => void
-  onGoogleDocUpdate: (slug: string, docId: string, docUrl: string) => void
-}) {
-  const [action, setAction] = useState<ReviewAction>(null)
-  const [comment, setComment] = useState(submission.reviewComment ?? '')
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [editingDeadline, setEditingDeadline] = useState(false)
-  const [deadlineValue, setDeadlineValue] = useState(
-    submission.approvalDeadline ? new Date(submission.approvalDeadline).toISOString().slice(0, 16) : ''
-  )
-
-  // Google Docs linking state
-  const [docInput, setDocInput] = useState('')
-  const [linkingDoc, setLinkingDoc] = useState(false)
-  const [docLinkError, setDocLinkError] = useState('')
-
-  const handleLinkDoc = () => {
-    const id = extractDocId(docInput)
-    if (!id) { setDocLinkError('ลิงก์หรือ ID ไม่ถูกต้อง กรุณาวาง URL จาก Google Docs'); return }
-    setLinkingDoc(true)
-    setDocLinkError('')
-    // [NEEDS BACKEND] Replace timeout with: GET /api/google/docs/:id to verify doc exists
-    setTimeout(() => {
-      onGoogleDocUpdate(submission.slug, id, getDocEditorUrl(id))
-      setDocInput('')
-      setLinkingDoc(false)
-    }, 600)
-  }
-
-  const handleUnlinkDoc = () => {
-    onGoogleDocUpdate(submission.slug, '', '')
-  }
-
-  const needsComment    = action === 'reject' || action === 'edit'
-  const alreadyReviewed = submission.status !== 'pending_review'
-
-  const handleConfirm = () => {
-    if (!action) return
-    if (needsComment && !comment.trim()) return
-    setSaving(true)
-    setTimeout(() => {
-      const statusMap = { approve: 'approved', reject: 'rejected', edit: 'edited' } as const
-      onAction(submission.slug, statusMap[action], comment.trim())
-      setSaving(false)
-      setSaved(true)
-    }, 1000)
-  }
-
-  return (
-    <div className="min-h-screen" style={{ backgroundColor: '#f0f4ff' }}>
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 flex items-center justify-between h-14">
-          <button onClick={onBack}
-            className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 hover:text-gray-900 transition-colors">
-            <ChevronLeft className="w-4 h-4" /> กลับ Queue
-          </button>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-mono text-gray-400">{submission.id}</span>
-            <StatusBadge status={submission.status as ReviewStatus} />
-          </div>
-          <div className="w-24" />
-        </div>
-      </header>
-
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
-        <div className="mb-6">
-          <h1 className="text-xl font-black text-gray-900 mb-0.5">{submission.websiteName}</h1>
-          <p className="text-sm text-gray-400">
-            ส่งเมื่อ {formatDate(submission.createdAt)} · {submission.typeIcon} {submission.typeName}
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left */}
-          <div className="lg:col-span-2 space-y-0">
-            <SectionCard title="ข้อมูลเจ้าของ">
-              <InfoRow label="ชื่อ"    value={submission.ownerName || '—'} />
-              <InfoRow label="อีเมล"   value={submission.ownerEmail} />
-            </SectionCard>
-
-            <SectionCard title="ข้อมูล Policy">
-              <InfoRow label="เว็บไซต์"   value={submission.websiteName} />
-              <InfoRow label="Domain"     value={submission.domain} />
-              <InfoRow label="ประเภท"     value={`${submission.typeIcon} ${submission.typeName}`} />
-              <InfoRow label="ภาษา"       value={langLabel[submission.language] || submission.language} />
-            </SectionCard>
-
-            {/* Policy content — Google Docs iframe if linked, HTML fallback if not */}
-            <div className="bg-white rounded-xl border border-gray-100 overflow-hidden mb-4">
-              <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500">
-                  {submission.googleDocId ? 'เนื้อหานโยบาย' : 'เนื้อหานโยบายที่ AI สร้าง'}
-                </h3>
-                {submission.googleDocId && (
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full"
-                      style={{ backgroundColor: 'rgba(26,115,232,0.1)', color: '#1a73e8' }}>
-                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/>
-                        <path d="M14 2v6h6"/>
-                      </svg>
-                      Google Docs
-                    </span>
-                    <a
-                      href={getDocEditorUrl(submission.googleDocId)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs font-semibold transition-colors"
-                      style={{ color: '#1a73e8' }}
-                    >
-                      <ExternalLink className="w-3 h-3" /> เปิด
-                    </a>
-                  </div>
-                )}
-              </div>
-
-              {submission.googleDocId ? (
-                <iframe
-                  key={submission.googleDocId}
-                  src={getDocPreviewUrl(submission.googleDocId)}
-                  className="w-full border-0"
-                  style={{ height: '520px' }}
-                  title="Google Docs Preview"
-                />
-              ) : submission.htmlContent ? (
-                <div
-                  className="px-5 py-4 text-sm text-gray-700 leading-relaxed max-h-96 overflow-y-auto prose prose-sm max-w-none"
-                  dangerouslySetInnerHTML={{ __html: submission.htmlContent }}
-                />
-              ) : (
-                <div className="py-10 text-center text-sm text-gray-400">
-                  <FileText className="w-8 h-8 mx-auto mb-2 text-gray-200" />
-                  <p>ยังไม่มีเนื้อหา</p>
-                  <p className="text-xs mt-1 text-gray-300">เชื่อมต่อ Google Docs ในส่วนด้านล่างเพื่อแสดงเนื้อหา</p>
-                </div>
-              )}
-            </div>
-
-            {/* Google Docs */}
-            <SectionCard title="Google Docs">
-              {submission.googleDocId ? (
-                <div className="py-3 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2" style={{ color: '#059669' }}>
-                      <CheckCircle className="w-4 h-4" />
-                      <span className="text-sm font-semibold">เชื่อมต่อ Google Docs แล้ว</span>
-                    </div>
-                    <button
-                      onClick={handleUnlinkDoc}
-                      className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-500 transition-colors"
-                    >
-                      <Link2Off className="w-3.5 h-3.5" /> ยกเลิก
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-mono text-gray-500"
-                    style={{ backgroundColor: '#f1f5f9' }}>
-                    <FileText className="w-3.5 h-3.5 shrink-0 text-gray-400" />
-                    <span className="truncate">{getDocShortLabel(submission.googleDocId)}</span>
-                  </div>
-                  <a
-                    href={getDocEditorUrl(submission.googleDocId)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 text-sm font-bold px-4 py-2.5 rounded-lg transition-opacity hover:opacity-90"
-                    style={{ backgroundColor: '#1a73e8', color: 'white' }}
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    เปิดใน Google Docs
-                  </a>
-                </div>
-              ) : (
-                <div className="py-3 space-y-2.5">
-                  <p className="text-xs text-gray-400">
-                    วางลิงก์ Google Docs เพื่อเชื่อมต่อกับนโยบายนี้
-                  </p>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={docInput}
-                      onChange={e => { setDocInput(e.target.value); setDocLinkError('') }}
-                      placeholder="https://docs.google.com/document/d/..."
-                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-800 focus:outline-none transition-colors"
-                      onFocus={e => (e.currentTarget.style.borderColor = '#1a73e8')}
-                      onBlur={e => (e.currentTarget.style.borderColor = '#e5e7eb')}
-                      onKeyDown={e => e.key === 'Enter' && handleLinkDoc()}
-                    />
-                    <button
-                      onClick={handleLinkDoc}
-                      disabled={!docInput.trim() || linkingDoc}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white rounded-lg disabled:opacity-40 transition-opacity hover:opacity-90"
-                      style={{ backgroundColor: '#1a73e8' }}
-                    >
-                      <Link2 className="w-3.5 h-3.5" />
-                      {linkingDoc ? 'กำลังเชื่อมต่อ...' : 'เชื่อมต่อ'}
-                    </button>
-                  </div>
-                  {docLinkError && (
-                    <p className="text-xs text-red-500">{docLinkError}</p>
-                  )}
-                  <p className="text-xs text-gray-300">
-                    รองรับ URL เต็มจาก Google Docs หรือ Document ID
-                  </p>
-                </div>
-              )}
-            </SectionCard>
-
-            {/* Review comment if exists */}
-            {submission.reviewComment && (
-              <SectionCard title="หมายเหตุจากทีมกฎหมาย">
-                <div className="py-3 text-sm text-gray-700">{submission.reviewComment}</div>
-              </SectionCard>
-            )}
-          </div>
-
-          {/* Right: Action panel */}
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-xl border border-gray-100 p-5 sticky top-20">
-              <h3 className="font-bold text-gray-900 text-sm mb-4">ผลการตรวจสอบ</h3>
-
-              {alreadyReviewed && !saved && (
-                <div
-                  className="rounded-lg px-4 py-3 mb-4 text-sm"
-                  style={{
-                    backgroundColor: (statusConfig[submission.status as ReviewStatus] ?? statusConfig.pending_review).bg,
-                    color: (statusConfig[submission.status as ReviewStatus] ?? statusConfig.pending_review).color,
-                  }}
-                >
-                  <p className="font-semibold mb-1">{(statusConfig[submission.status as ReviewStatus] ?? statusConfig.pending_review).label}</p>
-                  {submission.reviewedAt && (
-                    <p className="text-xs opacity-75">ตรวจสอบเมื่อ {formatDate(submission.reviewedAt)}</p>
-                  )}
-                  {submission.reviewComment && (
-                    <p className="text-xs mt-2 opacity-90">{submission.reviewComment}</p>
-                  )}
-                </div>
-              )}
-
-              {saved ? (
-                <div className="rounded-lg px-4 py-4 text-center" style={{ backgroundColor: 'rgba(5,150,105,0.08)' }}>
-                  <CheckCircle className="w-8 h-8 mx-auto mb-2" style={{ color: '#059669' }} />
-                  <p className="text-sm font-bold text-gray-900 mb-0.5">บันทึกสำเร็จ</p>
-                  <p className="text-xs text-gray-500">สถานะ Dashboard ลูกค้าอัปเดตแล้ว</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {([
-                    { key: 'approve', label: '✅ Approve',       color: '#059669', bg: 'rgba(5,150,105,0.1)' },
-                    { key: 'edit',    label: '✏️ Edit by Legal', color: '#7c3aed', bg: 'rgba(124,58,237,0.1)' },
-                    { key: 'reject',  label: '❌ Reject',        color: '#dc2626', bg: 'rgba(220,38,38,0.1)' },
-                  ] as const).map(({ key, label, color, bg }) => (
-                    <button key={key}
-                      onClick={() => setAction(a => a === key ? null : key)}
-                      className="w-full py-2.5 px-4 rounded-lg text-sm font-semibold text-left transition-all"
-                      style={{
-                        backgroundColor: action === key ? bg : '#f8fafc',
-                        color: action === key ? color : '#64748b',
-                        border: `1.5px solid ${action === key ? color : '#e5e7eb'}`,
-                      }}>
-                      {label}
-                    </button>
-                  ))}
-
-                  {action === 'edit' && (
-                    <div className="rounded-lg p-3.5 space-y-2.5"
-                      style={{ backgroundColor: 'rgba(124,58,237,0.05)', border: '1px solid rgba(124,58,237,0.15)' }}>
-                      <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#7c3aed' }}>
-                        ขั้นตอนที่ 1 — แก้ไขเอกสาร
-                      </p>
-                      {submission.googleDocId ? (
-                        <a
-                          href={getDocEditorUrl(submission.googleDocId)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center justify-center gap-2 w-full py-2.5 text-sm font-bold rounded-lg transition-opacity hover:opacity-90"
-                          style={{ backgroundColor: '#1a73e8', color: 'white' }}
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                          เปิดแก้ไขใน Google Docs
-                        </a>
-                      ) : (
-                        <div className="rounded-lg px-3 py-2.5 text-xs text-center"
-                          style={{ backgroundColor: 'rgba(217,119,6,0.08)', color: '#d97706', border: '1px solid rgba(217,119,6,0.2)' }}>
-                          ยังไม่ได้เชื่อมต่อ Google Docs<br />
-                          <span className="opacity-75">เชื่อมต่อในส่วน "Google Docs" ด้านล่างก่อน</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {(action === 'reject' || action === 'edit') && (
-                    <div className="pt-1">
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
-                        {action === 'edit' ? 'ขั้นตอนที่ 2 — ' : ''}หมายเหตุถึงลูกค้า
-                        {needsComment && <span className="text-red-400 normal-case font-normal"> *จำเป็น</span>}
-                      </label>
-                      <textarea rows={4} value={comment} onChange={e => setComment(e.target.value)}
-                        placeholder={action === 'edit' ? 'สรุปสิ่งที่แก้ไขใน Google Docs...' : 'อธิบายเหตุผลหรือสิ่งที่ต้องแก้ไข...'}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 focus:outline-none resize-none transition-colors"
-                        onFocus={e => (e.currentTarget.style.borderColor = '#2563eb')}
-                        onBlur={e => (e.currentTarget.style.borderColor = '#e5e7eb')}
-                      />
-                    </div>
-                  )}
-
-                  {action && (
-                    <button onClick={handleConfirm}
-                      disabled={saving || (needsComment && !comment.trim())}
-                      className="w-full py-3 text-sm font-bold text-white rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed mt-1"
-                      style={{ backgroundColor: '#1d4ed8' }}>
-                      {saving ? 'กำลังบันทึก...' : 'ยืนยันผลการตรวจสอบ'}
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* Deadline section */}
-              {submission.status === 'pending_review' && (
-                <div className="mt-5 pt-4 border-t border-gray-100">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-1">
-                      <CalendarClock className="w-3.5 h-3.5" /> Deadline อนุมัติ
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setEditingDeadline(v => !v)}
-                      className="text-xs font-semibold transition-colors"
-                      style={{ color: '#2563eb' }}
-                    >
-                      {editingDeadline ? 'ยกเลิก' : 'แก้ไข'}
-                    </button>
-                  </div>
-
-                  {!editingDeadline ? (
-                    (() => {
-                      const dl = getDeadlineInfo(submission.approvalDeadline, submission.status)
-                      return (
-                        <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border"
-                          style={{ backgroundColor: dl.bg, borderColor: dl.borderColor }}>
-                          <dl.Icon className="w-4 h-4 shrink-0" style={{ color: dl.color }} />
-                          <div>
-                            <p className="text-sm font-bold" style={{ color: dl.color }}>{dl.label}</p>
-                            {dl.subLabel && <p className="text-xs" style={{ color: dl.color, opacity: 0.75 }}>{dl.subLabel}</p>}
-                          </div>
-                        </div>
-                      )
-                    })()
-                  ) : (
-                    <div className="space-y-2">
-                      <input
-                        type="datetime-local"
-                        value={deadlineValue}
-                        onChange={e => setDeadlineValue(e.target.value)}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none transition-colors"
-                        onFocus={e => (e.currentTarget.style.borderColor = '#2563eb')}
-                        onBlur={e => (e.currentTarget.style.borderColor = '#e5e7eb')}
-                      />
-                      <button
-                        type="button"
-                        disabled={!deadlineValue}
-                        onClick={() => {
-                          if (!deadlineValue) return
-                          onDeadlineUpdate(submission.slug, new Date(deadlineValue).toISOString())
-                          setEditingDeadline(false)
-                        }}
-                        className="w-full py-2 text-xs font-bold text-white rounded-lg transition-colors disabled:opacity-40"
-                        style={{ backgroundColor: '#2563eb' }}
-                      >
-                        บันทึก Deadline
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="mt-4 pt-4 border-t border-gray-100 text-xs text-gray-400 space-y-1">
-                <p>ประเภท: {submission.typeName}</p>
-                <p>ภาษา: {langLabel[submission.language] || submission.language}</p>
-                <p>สร้างเมื่อ: {formatDate(submission.createdAt)}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </main>
-    </div>
-  )
+function PageTitle({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
+  return <header className="mb-6"><p className="text-[11px] font-medium text-green-700 mb-2">{eyebrow}</p><h1 className="text-2xl font-bold">{title}</h1><p className="text-sm text-gray-500 mt-1">{description}</p></header>
 }
 
-// ── Main ──────────────────────────────────────────────────────
+function Queue({ submissions, select }: { submissions: Submission[]; select: (row: Submission) => void }) {
+  const [filter, setFilter] = useState<'all' | PolicyStatus>('pending_review')
+  const [query, setQuery] = useState('')
+  const rows = submissions.filter(row => (filter === 'all' || row.status === filter) && (row.websiteName + row.domain + row.ownerName).toLowerCase().includes(query.toLowerCase()))
+  const pagination = usePagination(rows)
+  return <><PageTitle eyebrow="ASSIGNED TO YOU" title="Policy review queue" description="Review AI drafts, edit content, and record a legal decision." />
+    <div className="flex flex-wrap gap-2 mb-4">{(['pending_review', 'approved', 'edited', 'rejected', 'all'] as const).map(item => <button key={item} className="portal-filter" data-active={filter === item} onClick={() => setFilter(item)}>{item === 'all' ? 'All' : statusMeta[item].label}</button>)}<div className="relative ml-auto w-full sm:w-auto"><Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" /><input className="portal-search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search website or merchant" /></div></div>
+    <section className="portal-panel"><div className="portal-table-wrap"><SubmissionTable rows={pagination.pageRows} select={select} /></div><Pagination {...pagination} total={rows.length} /></section>
+  </>
+}
+
+function Changes({ rows, update }: { rows: ChangeRequest[]; update: (id: string, status: ChangeStatus) => void }) {
+  const [filter, setFilter] = useState<'all' | ChangeStatus>('pending_review')
+  const visible = rows.filter(row => filter === 'all' || row.status === filter)
+  const pagination = usePagination(visible)
+  return <><PageTitle eyebrow="MERCHANT ESCALATIONS" title="Change requests" description="Requests verified by merchants and sent to Legal for resolution." />
+    <div className="flex gap-2 mb-4">{(['pending_review', 'resolved', 'rejected', 'all'] as const).map(item => <button key={item} className="portal-filter" data-active={filter === item} onClick={() => setFilter(item)}>{item === 'all' ? 'All' : statusMeta[item].label}</button>)}</div>
+    <section className="portal-panel"><div className="portal-table-wrap"><table className="portal-table"><thead><tr><th>Policy</th><th>Section</th><th>Request</th><th>Requester</th><th>Status</th><th /></tr></thead><tbody>{pagination.pageRows.map(row => <tr key={row.id}>
+      <td><p className="font-semibold">{row.websiteName}</p><p className="text-xs text-gray-400">{row.policySlug}</p></td><td>{row.sectionTitle}</td><td className="max-w-sm">{row.requestedChange}</td><td>{row.requesterName}<p className="text-xs text-gray-400">{formatDate(row.createdAt)}</p></td><td><StatusBadge status={row.status} /></td>
+      <td>{row.status === 'pending_review' && <div className="flex gap-2"><button className="portal-button primary" onClick={() => update(row.id, 'resolved')}>Resolve</button><button className="portal-button danger" onClick={() => update(row.id, 'rejected')}>Reject</button></div>}</td>
+    </tr>)}</tbody></table></div><Pagination {...pagination} total={visible.length} /></section>
+  </>
+}
+
+function Editor({ initial, back, save }: { initial: Submission; back: () => void; save: (row: Submission) => void }) {
+  const [draft, setDraft] = useState(initial)
+  const [language, setLanguage] = useState<'th' | 'en'>(initial.language === 'en' ? 'en' : 'th')
+  const [decision, setDecision] = useState<PolicyStatus | null>(null)
+  const content = language === 'th' ? draft.contentTh : draft.contentEn
+  const setContent = (value: string) => setDraft(current => language === 'th' ? { ...current, contentTh: value } : { ...current, contentEn: value })
+  const submit = () => {
+    if ((decision === 'rejected' || decision === 'edited') && !draft.reviewComment.trim()) return
+    save({ ...draft, status: decision || 'edited' })
+  }
+  return <><button className="portal-button mb-5" onClick={back}><ArrowLeft className="w-4 h-4" />Back to queue</button>
+    <div className="flex flex-col xl:flex-row gap-5"><section className="portal-panel flex-1 min-w-0"><div className="portal-panel-head"><div><p className="text-xs text-gray-400">{draft.slug}</p><h1 className="text-lg font-semibold mt-1">{draft.websiteName}</h1></div><StatusBadge status={draft.status} /></div><div className="p-5"><div className="flex gap-2 mb-4">{(['th', 'en'] as const).filter(item => draft.language === 'both' || draft.language === item).map(item => <button key={item} className="portal-filter" data-active={language === item} onClick={() => setLanguage(item)}><Languages className="w-3.5 h-3.5" />{item === 'th' ? 'Thai' : 'English'}</button>)}</div><textarea className="w-full min-h-[560px] resize-y border border-gray-300 rounded p-5 font-mono text-sm leading-7 focus:border-green-700 focus:outline-none" value={content} onChange={event => setContent(event.target.value)} /></div></section>
+      <aside className="w-full xl:w-80 space-y-4"><section className="portal-panel p-5"><h2 className="text-sm font-semibold mb-4">Submission details</h2>{[['Merchant', draft.ownerName], ['Contact', draft.ownerEmail], ['Domain', draft.domain], ['Created', formatDate(draft.createdAt)]].map(pair => <div className="py-2.5 border-b border-gray-100 last:border-0" key={pair[0]}><p className="text-[10px] text-gray-400 uppercase">{pair[0]}</p><p className="text-xs mt-1 break-words">{pair[1]}</p></div>)}</section>
+        <section className="portal-panel p-5"><h2 className="text-sm font-semibold mb-3">Review decision</h2><div className="grid grid-cols-3 gap-2 mb-4">{[
+          { id: 'approved' as const, label: 'Approve', Icon: ShieldCheck }, { id: 'edited' as const, label: 'Edited', Icon: FileEdit }, { id: 'rejected' as const, label: 'Reject', Icon: XCircle },
+        ].map(({ id, label, Icon }) => <button key={id} className="portal-filter justify-center px-1" data-active={decision === id} onClick={() => setDecision(id)}><Icon className="w-3.5 h-3.5" />{label}</button>)}</div><label className="text-xs font-semibold text-gray-600">Review comment {(decision === 'rejected' || decision === 'edited') && <span className="text-red-600">*</span>}</label><textarea className="w-full min-h-24 mt-2 border border-gray-300 rounded p-3 text-sm" value={draft.reviewComment} onChange={event => setDraft(current => ({ ...current, reviewComment: event.target.value }))} placeholder="Reason, legal notes, or merchant instructions" /><button className="portal-button primary w-full mt-4" onClick={submit}>{decision ? 'Save decision' : 'Save draft'}</button></section>
+      </aside></div>
+  </>
+}
+
 export default function Legal() {
-  const [loggedIn,    setLoggedIn]    = useState(() => localStorage.getItem('flowpdpa_legal') === '1')
-  const [submissions, setSubmissions] = useState<SavedPolicy[]>([])
-  const [selected,    setSelected]    = useState<SavedPolicy | null>(null)
-
-  useEffect(() => {
-    if (!loggedIn) return
-    const real = policyStorage.getAllSubmissions()
-    setSubmissions(real.length > 0 ? real : MOCK_SUBMISSIONS)
-  }, [loggedIn])
-
-  const handleLogout = () => {
-    localStorage.removeItem('flowpdpa_legal')
-    setLoggedIn(false)
-    setSelected(null)
-  }
-
-  const handleDeadlineUpdate = (slug: string, deadline: string) => {
-    policyStorage.updateBySlug(slug, { approvalDeadline: deadline })
-    setSubmissions(prev => prev.map(s => s.slug === slug ? { ...s, approvalDeadline: deadline } : s))
-    setSelected(prev => prev?.slug === slug ? { ...prev, approvalDeadline: deadline } : prev)
-  }
-
-  const handleGoogleDocUpdate = (slug: string, docId: string, docUrl: string) => {
-    policyStorage.updateBySlug(slug, { googleDocId: docId || undefined, googleDocUrl: docUrl || undefined })
-    setSubmissions(prev => prev.map(s => s.slug === slug ? { ...s, googleDocId: docId || undefined, googleDocUrl: docUrl || undefined } : s))
-    setSelected(prev => prev?.slug === slug ? { ...prev, googleDocId: docId || undefined, googleDocUrl: docUrl || undefined } : prev)
-  }
-
-  const handleAction = (slug: string, status: PolicyStatus, comment: string) => {
-    const now = new Date().toISOString()
-
-    // [NEEDS BACKEND] When status === 'edited', the Google Doc already has the updated content
-    // (legal team edited it directly). Optionally fetch the latest content from Google Docs
-    // and sync it back here: GET /api/google/docs/:googleDocId → update htmlContent
-
-    policyStorage.updateBySlug(slug, {
-      status,
-      reviewComment: comment || undefined,
-      reviewedAt: now,
-    })
-
-    setSubmissions(prev =>
-      prev.map(s =>
-        s.slug === slug
-          ? { ...s, status, reviewComment: comment || undefined, reviewedAt: now }
-          : s
-      )
-    )
-
-    if (selected?.slug === slug) {
-      setSelected(prev => prev
-        ? { ...prev, status, reviewComment: comment || undefined, reviewedAt: now }
-        : prev
-      )
-    }
-  }
-
-  if (!loggedIn) return <LoginScreen onLogin={() => setLoggedIn(true)} />
-
-  if (selected) {
-    return (
-      <DetailScreen
-        submission={selected}
-        onBack={() => setSelected(null)}
-        onAction={handleAction}
-        onDeadlineUpdate={handleDeadlineUpdate}
-        onGoogleDocUpdate={handleGoogleDocUpdate}
-      />
-    )
-  }
-
-  return (
-    <QueueScreen
-      submissions={submissions}
-      onSelect={setSelected}
-      onLogout={handleLogout}
-    />
-  )
+  const navigate = useNavigate()
+  const [view, setView] = useState<LegalView>('dashboard')
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [submissions, setSubmissions] = useState(seedSubmissions)
+  const [changes, setChanges] = useState(seedChanges)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const selected = useMemo(() => submissions.find(row => row.id === selectedId) || null, [selectedId, submissions])
+  const select = (row: Submission) => setSelectedId(row.id)
+  const logout = () => { session.logout(); navigate('/login', { replace: true }) }
+  const changeView = (next: LegalView) => { setView(next); setSelectedId(null) }
+  const save = (row: Submission) => { setSubmissions(current => current.map(item => item.id === row.id ? row : item)); changeView('submissions') }
+  const updateChange = (id: string, status: ChangeStatus) => setChanges(current => current.map(row => row.id === id ? { ...row, status } : row))
+  return <div className="portal-shell"><Sidebar view={view} changeView={changeView} open={menuOpen} close={() => setMenuOpen(false)} logout={logout} /><div className="portal-main">
+    <header className="portal-topbar"><div className="flex items-center gap-3"><button className="portal-button portal-mobile-menu px-2" onClick={() => setMenuOpen(true)} aria-label="Open navigation"><Menu className="w-4 h-4" /></button><div><p className="text-sm font-semibold">Legal Review Portal</p><p className="text-[11px] text-gray-400">Assigned workload</p></div></div><span className="inline-flex items-center gap-2 text-xs text-gray-500"><ShieldCheck className="w-4 h-4 text-green-700" />Legal reviewer</span></header>
+    <main className="portal-content portal-content-legal">{selected ? <Editor initial={selected} back={() => setSelectedId(null)} save={save} /> : view === 'dashboard' ? <Dashboard submissions={submissions} changes={changes} openQueue={() => setView('submissions')} select={select} /> : view === 'submissions' ? <Queue submissions={submissions} select={select} /> : <Changes rows={changes} update={updateChange} />}</main>
+  </div></div>
 }

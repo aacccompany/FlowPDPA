@@ -26,7 +26,7 @@ export default function HowItWorks() {
   const { ref, inView } = useInView()
 
   return (
-    <section id="how-it-works" className="py-24" style={{ backgroundColor: 'var(--navy)' }}>
+    <section id="how-it-works" className="public-light-feature-section py-24" style={{ backgroundColor: 'var(--navy)' }}>
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
 
         <FadeUp className="mb-16">

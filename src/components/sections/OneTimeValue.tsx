@@ -1,3 +1,5 @@
+import { Check } from 'lucide-react'
+
 const benefits = [
   { title: 'โฮสติ้งฟรีตลอดชีพ', desc: 'นโยบายของคุณถูกโฮสด์บนเซิร์ฟเวอร์ของเรา พร้อมลิงก์สาธารณะแชร์ได้ทันที' },
   { title: 'HTML Code สำหรับเว็บไซต์', desc: 'นำโค้ดไปวางบนเว็บไซต์ได้เลย รองรับทุกแพลตฟอร์ม' },
@@ -20,7 +22,7 @@ export default function OneTimeValue() {
           <div className="space-y-5">
             {benefits.map(({ title, desc }) => (
               <div key={title} className="flex items-start gap-4">
-                <span className="text-2xl font-bold leading-none mt-0.5" style={{ color: 'var(--green)' }}>✓</span>
+                <Check className="w-5 h-5 mt-0.5 shrink-0" style={{ color: 'var(--green)' }} strokeWidth={2.2} aria-hidden="true" />
                 <div>
                   <p className="font-bold text-gray-900 text-base">{title}</p>
                   {desc && <p className="text-sm text-gray-500 mt-0.5">{desc}</p>}
