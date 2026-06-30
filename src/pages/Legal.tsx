@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   AlertTriangle, ArrowLeft, BarChart3, CalendarClock, CheckCircle2,
   ChevronLeft, ChevronRight, FileEdit, FileText, Inbox, Languages, LogOut, Menu,
-  MessageSquareText, Scale, Search, ShieldCheck, UserRound, XCircle,
+  MessageSquareText, Search, ShieldCheck, UserRound, XCircle,
 } from 'lucide-react'
 import { session } from '@/utils/storage'
 import { api } from '@/services/api'
@@ -177,11 +177,11 @@ function Sidebar({ view, changeView, open, close, logout }: {
   return <>
     {open && <button className="portal-overlay" onClick={close} aria-label="Close navigation" />}
     <aside className="portal-sidebar" data-open={open}>
-      <div className="portal-brand"><span className="portal-brand-mark"><Scale className="w-4 h-4" /></span><div><p className="text-sm font-bold">FlowPDPA</p><p className="text-[10px] text-gray-400">LEGAL WORKSPACE</p></div></div>
+      <div className="portal-brand"><img src="/favicon.svg" alt="FlowPDPA" style={{ width: '32px', height: '32px', filter: 'brightness(0) invert(1)', flexShrink: 0 }} /><div><p className="text-sm font-extrabold" style={{ color: '#ffffff' }}>Flow<span style={{ color: '#4ade80' }}>PDPA</span></p><p className="text-[10px]" style={{ color: '#475569' }}>LEGAL WORKSPACE</p></div></div>
       <nav className="portal-nav"><p className="portal-nav-label">Workspace</p>{items.map(({ id, label, Icon }) =>
         <button key={id} className="portal-nav-item" data-active={view === id} onClick={() => { changeView(id); close() }}><Icon />{label}</button>
       )}</nav>
-      <div className="portal-account"><div className="flex items-center gap-3 mb-3"><span className="w-8 h-8 grid place-items-center bg-blue-50 text-blue-700 rounded"><UserRound className="w-4 h-4" /></span><div className="min-w-0"><p className="text-xs font-semibold">Legal Reviewer</p><p className="text-[11px] text-gray-400 truncate">legal@flowpdpa.co.th</p></div></div><button className="portal-nav-item" onClick={logout}><LogOut />Sign out</button></div>
+      <div className="portal-account"><div className="flex items-center gap-3 mb-3"><span className="w-8 h-8 grid place-items-center rounded" style={{ backgroundColor: 'rgba(8,122,91,0.25)', color: '#4ade80' }}><UserRound className="w-4 h-4" /></span><div className="min-w-0"><p className="text-xs font-semibold" style={{ color: '#e2e8f0' }}>Legal Reviewer</p><p className="text-[11px] truncate" style={{ color: '#475569' }}>legal@flowpdpa.co.th</p></div></div><button className="portal-nav-item" onClick={logout}><LogOut />Sign out</button></div>
     </aside>
   </>
 }

@@ -17,30 +17,27 @@ export default function Contact() {
       <div className="grid grid-cols-1 lg:grid-cols-2" style={{ minHeight: '600px' }}>
 
         {/* Left — info */}
-        <div className="public-light-contact py-16 px-8 lg:px-14" style={{ backgroundColor: 'var(--blue-dark)' }}>
-          <p className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.15em] mb-4" style={{ color: '#6ee7b7' }}>
-            <span className="block w-8 h-px" style={{ backgroundColor: '#6ee7b7', opacity: 0.4 }} />
+        <div className="py-16 px-8 lg:px-14" style={{ backgroundColor: 'var(--navy)' }}>
+          <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--green)' }}>
             Contact Us
           </p>
-          <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3">
+          <h2 className="text-2xl sm:text-3xl font-bold mb-3 text-white">
             ติดต่อทีมงาน FlowPDPA
           </h2>
-          <p className="text-blue-200 text-sm mb-10 leading-relaxed">
+          <p className="text-sm mb-10 leading-relaxed" style={{ color: '#64748b' }}>
             มีคำถามหรือต้องการคำแนะนำ? ทีมงานของเราพร้อมช่วยเหลือและจะติดต่อกลับภายใน 1 วันทำการ
           </p>
 
           <div className="space-y-7">
             {contactInfo.map(({ Icon, label, value }) => (
               <div key={label} className="flex items-start gap-4">
-                <div
-                  className="w-9 h-9 flex items-center justify-center shrink-0 mt-0.5"
-                  style={{ backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: '8px' }}
-                >
-                  <Icon className="w-4 h-4 text-blue-300" />
+                <div className="w-9 h-9 flex items-center justify-center shrink-0 mt-0.5"
+                  style={{ backgroundColor: 'rgba(5,150,105,0.15)', borderRadius: '6px' }}>
+                  <Icon className="w-4 h-4" style={{ color: 'var(--green)' }} />
                 </div>
                 <div>
-                  <div className="text-xs font-semibold uppercase tracking-wider text-blue-400 mb-1">{label}</div>
-                  <div className="text-white text-sm leading-relaxed whitespace-pre-line">{value}</div>
+                  <div className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: '#334155' }}>{label}</div>
+                  <div className="text-sm leading-relaxed whitespace-pre-line text-white">{value}</div>
                 </div>
               </div>
             ))}

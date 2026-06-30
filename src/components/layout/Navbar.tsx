@@ -36,67 +36,68 @@ export default function Navbar() {
     <header
       className="fixed top-0 left-0 right-0 z-50"
       style={{
-        backgroundColor: 'rgba(255,255,255,0.98)',
-        borderBottom: '1px solid #dce1e8',
-        boxShadow: scrolled ? '0 4px 16px rgba(23,32,51,0.06)' : 'none',
-        transition: 'background-color 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease',
+        backgroundColor: '#ffffff',
+        borderBottom: scrolled ? '1px solid #e5e7eb' : '1px solid #f3f4f6',
+        boxShadow: scrolled ? '0 1px 8px rgba(0,0,0,0.06)' : 'none',
+        transition: 'box-shadow 0.25s ease, border-color 0.25s ease',
       }}
     >
-      {/* Brand accent */}
-      <div className="h-0.5" style={{ backgroundColor: 'var(--green)' }} />
-
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between" style={{ height: '60px' }}>
-          <Link to="/" className="flex items-center gap-0.5 shrink-0">
-            <span className="font-black text-xl tracking-tight text-gray-900">Flow</span>
-            <span className="font-black text-xl tracking-tight" style={{ color: 'var(--green)' }}>PDPA</span>
+        <div className="flex items-center justify-between" style={{ height: '68px' }}>
+
+          {/* Logo */}
+          <Link
+            to="/"
+            className="flex items-center gap-2.5 shrink-0"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          >
+            <img src="/favicon.svg" alt="FlowPDPA" className="w-8 h-8" />
+            <span className="font-extrabold text-lg" style={{ color: '#111827', letterSpacing: '-0.01em' }}>
+              Flow<span style={{ color: 'var(--green)' }}>PDPA</span>
+            </span>
           </Link>
 
-          <nav className="hidden lg:flex items-center gap-7">
+          {/* Nav */}
+          <nav className="hidden lg:flex items-center" style={{ gap: '2px' }}>
             {navLinks.map((link) => (
               <Link
                 key={link.href}
                 to={link.href}
-                className="text-sm font-medium whitespace-nowrap transition-colors"
-                style={{ color: '#667085' }}
-                onMouseEnter={e => (e.currentTarget.style.color = '#172033')}
-                onMouseLeave={e => (e.currentTarget.style.color = '#667085')}
+                className="text-sm font-medium px-4 py-2 rounded-md whitespace-nowrap transition-colors"
+                style={{ color: '#4b5563' }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#111827'; e.currentTarget.style.backgroundColor = '#f9fafb' }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#4b5563'; e.currentTarget.style.backgroundColor = 'transparent' }}
               >
                 {link.label}
               </Link>
             ))}
           </nav>
 
-          <div className="flex items-center gap-2">
+          {/* Actions */}
+          <div className="flex items-center gap-1">
             <Link
               to={isLoggedIn ? '/dashboard' : '/login'}
-              className="hidden sm:inline-flex items-center text-sm font-semibold px-4 py-2 transition-all"
-              style={{
-                color: '#374151',
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.color = '#111827'
-                e.currentTarget.style.borderColor = '#9ca3af'
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.color = '#374151'
-                e.currentTarget.style.borderColor = '#d1d5db'
-              }}
+              className="hidden sm:inline-flex items-center text-sm font-medium px-4 py-2 rounded-md transition-colors"
+              style={{ color: '#4b5563' }}
+              onMouseEnter={e => { e.currentTarget.style.color = '#111827'; e.currentTarget.style.backgroundColor = '#f9fafb' }}
+              onMouseLeave={e => { e.currentTarget.style.color = '#4b5563'; e.currentTarget.style.backgroundColor = 'transparent' }}
             >
               {isLoggedIn ? 'Dashboard' : 'เข้าสู่ระบบ'}
             </Link>
             <Link
               to="/get-started"
-              className="hidden sm:inline-flex items-center text-sm font-bold text-white px-5 py-2 transition-opacity hover:opacity-90"
+              className="hidden sm:inline-flex items-center text-sm font-bold text-white px-5 py-2 ml-1 transition-all"
               style={{ backgroundColor: 'var(--green)', borderRadius: '6px' }}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--green-dark)')}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'var(--green)')}
             >
-              Get Started
+              เริ่มต้นใช้งาน
             </Link>
             <button
-              className="lg:hidden p-2 transition-colors"
-              style={{ color: '#667085' }}
+              className="lg:hidden p-2 ml-1 rounded-md transition-colors"
+              style={{ color: '#4b5563' }}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f9fafb')}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
               onClick={() => setOpen(!open)}
             >
               {open ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -105,29 +106,40 @@ export default function Navbar() {
         </div>
       </div>
 
+      {/* Mobile menu */}
       {open && (
-        <div className="lg:hidden bg-white border-t border-gray-100 px-4 py-3 flex flex-col gap-1">
-          {navLinks.map((link) => (
-            <Link
-              key={link.href}
-              to={link.href}
-              className="text-sm font-medium text-gray-600 px-2 py-2.5 rounded hover:bg-gray-50 transition-colors"
-              onClick={() => setOpen(false)}
-            >
-              {link.label}
-            </Link>
-          ))}
-          <div className="pt-2 mt-1 border-t border-gray-100 flex flex-col gap-2">
+        <div style={{ backgroundColor: '#ffffff', borderTop: '1px solid #f3f4f6' }}>
+          <div className="px-4 py-3 flex flex-col gap-0.5">
+            {navLinks.map((link) => (
+              <Link
+                key={link.href}
+                to={link.href}
+                className="text-sm font-medium px-3 py-2.5 rounded-md transition-colors"
+                style={{ color: '#374151' }}
+                onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f9fafb')}
+                onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                onClick={() => setOpen(false)}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
+          <div className="px-4 pb-4 flex flex-col gap-2" style={{ borderTop: '1px solid #f3f4f6' }}>
             <Link
               to={isLoggedIn ? '/dashboard' : '/login'}
-              className="text-sm font-semibold text-gray-700 py-2.5 w-full text-center block border border-gray-200 rounded"
-              style={{ borderRadius: '6px' }}
+              className="text-sm font-semibold py-2.5 w-full text-center block rounded-md transition-colors mt-3"
+              style={{ color: '#374151', border: '1px solid #e5e7eb' }}
               onClick={() => setOpen(false)}
             >
               {isLoggedIn ? 'Dashboard' : 'เข้าสู่ระบบ'}
             </Link>
-            <Link to="/get-started" className="btn-green text-sm py-2.5 w-full text-center block" style={{ borderRadius: '6px' }} onClick={() => setOpen(false)}>
-              Get Started
+            <Link
+              to="/get-started"
+              className="btn-green text-sm py-2.5 w-full text-center block"
+              style={{ borderRadius: '6px' }}
+              onClick={() => setOpen(false)}
+            >
+              เริ่มต้นใช้งาน
             </Link>
           </div>
         </div>

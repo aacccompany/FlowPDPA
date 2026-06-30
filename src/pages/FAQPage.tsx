@@ -89,14 +89,13 @@ export default function FAQPage() {
   return (
     <div style={{ paddingTop: '61px' }}>
       {/* Header */}
-      <div className="py-16 border-b border-gray-100" style={{ backgroundColor: '#fafafa' }}>
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          <p className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.15em] text-gray-400 mb-4">
-            <span className="block w-8 h-px bg-gray-300" />
+      <div style={{ backgroundColor: 'var(--navy)' }}>
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+          <p className="text-xs font-semibold uppercase tracking-widest mb-5" style={{ color: 'var(--green)' }}>
             FAQ
           </p>
-          <h1 className="text-3xl sm:text-4xl font-black text-gray-900 mb-5">คำถามที่พบบ่อย</h1>
-          <p className="text-gray-500 text-base leading-relaxed">
+          <h1 className="text-3xl sm:text-4xl font-black text-white mb-5">คำถามที่พบบ่อย</h1>
+          <p className="text-base leading-relaxed" style={{ color: '#64748b' }}>
             ไม่พบคำตอบที่ต้องการ?{' '}
             <Link to="/#contact" className="font-semibold underline" style={{ color: 'var(--green)' }}>
               ติดต่อทีมงาน

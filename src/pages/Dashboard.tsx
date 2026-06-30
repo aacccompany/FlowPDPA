@@ -800,20 +800,18 @@ export default function Dashboard() {
             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}
         >
           {/* Logo */}
-          <div className="merchant-brand px-5 flex items-center justify-between">
-            <Link to="/" className="flex items-center gap-3">
-              <span className="merchant-brand-mark">FP</span>
-              <span className="font-bold text-base tracking-normal" style={{ color: '#172033' }}>FlowPDPA</span>
+          <div className="merchant-brand flex items-center justify-between">
+            <Link to="/" className="flex items-center gap-3" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+              <img src="/favicon.svg" alt="FlowPDPA" className="w-8 h-8" style={{ filter: 'brightness(0) invert(1)' }} />
+              <span className="font-extrabold text-base" style={{ color: '#ffffff' }}>Flow<span style={{ color: '#4ade80' }}>PDPA</span></span>
             </Link>
-            <button className="lg:hidden text-gray-500 hover:text-gray-900" onClick={() => setSidebarOpen(false)} aria-label="ปิดเมนู">
+            <button className="lg:hidden p-1 rounded" style={{ color: '#94a3b8' }} onClick={() => setSidebarOpen(false)} aria-label="ปิดเมนู">
               <X className="w-4 h-4" />
             </button>
           </div>
 
           {/* Nav */}
-          <div className="px-5 pt-5 pb-2 text-[11px] font-semibold uppercase" style={{ color: '#98a2b3', fontFamily: 'IBM Plex Mono, monospace' }}>
-            Workspace
-          </div>
+          <div className="merchant-nav-label">Workspace</div>
           <nav className="flex-1 px-3 py-1 space-y-1 overflow-y-auto">
             {navItems.map(({ key, label, Icon }) => {
               const active = activeView === key
@@ -830,10 +828,7 @@ export default function Dashboard() {
                   <Icon className="w-4 h-4 shrink-0" />
                   {label}
                   {key === 'new' && (
-                    <span
-                      className="ml-auto text-xs font-bold"
-                      style={{ color: '#087a5b' }}
-                    >
+                    <span className="ml-auto text-xs font-bold" style={{ color: '#4ade80' }}>
                       +
                     </span>
                   )}
@@ -851,16 +846,16 @@ export default function Dashboard() {
                 {initials}
               </div>
               <div className="overflow-hidden">
-                <div className="text-xs font-semibold truncate" style={{ color: '#172033' }}>{user.name}</div>
-                <div className="text-xs truncate" style={{ color: '#98a2b3' }}>{user.plan}</div>
+                <div className="text-xs font-semibold truncate" style={{ color: '#e2e8f0' }}>{user.name}</div>
+                <div className="text-xs truncate" style={{ color: '#475569' }}>{user.plan}</div>
               </div>
             </div>
             <button
               onClick={handleLogout}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
-              style={{ color: '#667085' }}
-              onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#fff1f1'; e.currentTarget.style.color = '#b42318' }}
-              onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#667085' }}
+              style={{ color: '#64748b' }}
+              onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.1)'; e.currentTarget.style.color = '#fca5a5' }}
+              onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#64748b' }}
             >
               <LogOut className="w-4 h-4 shrink-0" />
               ออกจากระบบ

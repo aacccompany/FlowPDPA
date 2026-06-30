@@ -300,15 +300,17 @@ export default function Register() {
     <div className="register-shell min-h-screen flex flex-col">
 
       {/* Top bar */}
-      <div className="register-topbar px-6 flex items-center justify-between w-full">
-        <Link to="/" className="flex items-center gap-3">
-          <span className="register-brand-mark">FP</span>
-          <span className="font-bold text-base text-gray-900">FlowPDPA</span>
+      <div className="register-topbar flex items-center justify-between w-full">
+        <Link to="/" className="flex items-center gap-3" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+          <img src="/favicon.svg" alt="FlowPDPA" className="w-8 h-8" style={{ filter: 'brightness(0) invert(1)' }} />
+          <span className="font-extrabold text-base" style={{ color: '#ffffff' }}>Flow<span style={{ color: '#4ade80' }}>PDPA</span></span>
         </Link>
         <Link
           to="/support"
           className="text-xs font-medium transition-colors"
-          style={{ color: '#667085' }}
+          style={{ color: '#64748b' }}
+          onMouseEnter={e => (e.currentTarget.style.color = '#94a3b8')}
+          onMouseLeave={e => (e.currentTarget.style.color = '#64748b')}
         >
           ต้องการความช่วยเหลือ?
         </Link>

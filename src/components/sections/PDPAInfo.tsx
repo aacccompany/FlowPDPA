@@ -38,8 +38,7 @@ export default function PDPAInfo() {
 
           {/* Right — checklist */}
           <FadeUp delay={120}>
-            <p className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.15em] text-gray-400 mb-4">
-              <span className="block w-8 h-px bg-gray-300" />
+            <p className="text-xs font-semibold uppercase tracking-widest mb-4" style={{ color: 'var(--green)' }}>
               PDPA Requirement
             </p>
             <h2 className="text-2xl sm:text-3xl font-black text-gray-900 mb-8">
@@ -50,7 +49,7 @@ export default function PDPAInfo() {
             </p>
             <div className="space-y-3">
               {requirements.map(({ title, desc }) => (
-                <div key={title} className="flex items-start gap-4 p-4 rounded-xl border border-gray-100 bg-gray-50">
+                <div key={title} className="flex items-start gap-4 p-4" style={{ borderRadius: '10px', border: '1px solid #e5e7eb', backgroundColor: '#f9fafb' }}>
                   <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" style={{ color: 'var(--green)' }} />
                   <div>
                     <p className="font-semibold text-gray-900 text-sm">{title}</p>

@@ -29,49 +29,41 @@ export default function FAQ() {
   const [open, setOpen] = useState<number | null>(null)
 
   return (
-    <section id="faq" className="py-20 bg-gray-50">
+    <section id="faq" className="py-20" style={{ backgroundColor: '#ffffff', borderTop: '1px solid #e5e7eb' }}>
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
         <FadeUp className="mb-12">
-          <p className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.15em] text-gray-400 mb-4">
-            <span className="block w-8 h-px bg-gray-300" />
+          <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--green)' }}>
             FAQ
           </p>
-          <h2 className="text-2xl sm:text-3xl font-black text-gray-900">
+          <h2 className="text-2xl sm:text-3xl font-black" style={{ color: '#111827' }}>
             คำถามที่พบบ่อย
           </h2>
         </FadeUp>
 
         <FadeUp delay={100} className="space-y-2">
           {faqs.map((faq, i) => (
-            <div
-              key={i}
-              className="bg-white border border-gray-100 overflow-hidden"
-              style={{ borderRadius: '10px' }}
-            >
+            <div key={i} style={{ border: '1px solid #e5e7eb', borderRadius: '6px', overflow: 'hidden', backgroundColor: '#ffffff' }}>
               <button
-                className="w-full flex items-start justify-between px-6 py-5 text-left gap-4"
+                className="w-full flex items-start justify-between px-6 py-5 text-left gap-4 transition-colors"
+                style={{ backgroundColor: open === i ? '#f9fafb' : '#ffffff' }}
                 onClick={() => setOpen(open === i ? null : i)}
               >
                 <div className="flex items-start gap-4">
-                  <span
-                    className="text-xs font-mono mt-0.5 shrink-0"
-                    style={{ color: open === i ? 'var(--green)' : '#d1d5db' }}
-                  >
+                  <span className="text-xs font-mono mt-0.5 shrink-0"
+                    style={{ color: open === i ? 'var(--green)' : '#d1d5db' }}>
                     {String(i + 1).padStart(2, '0')}
                   </span>
-                  <span className="text-sm font-semibold text-gray-800 leading-snug">{faq.q}</span>
+                  <span className="text-sm font-semibold leading-snug" style={{ color: '#111827' }}>{faq.q}</span>
                 </div>
                 <span className="shrink-0 mt-0.5" style={{ color: open === i ? 'var(--green)' : '#9ca3af' }}>
-                  {open === i
-                    ? <Minus className="w-4 h-4" />
-                    : <Plus className="w-4 h-4" />
-                  }
+                  {open === i ? <Minus className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
                 </span>
               </button>
 
               {open === i && (
-                <div className="px-6 pb-5 pl-14 text-sm text-gray-500 leading-relaxed border-t border-gray-50 pt-4">
+                <div className="px-6 pb-5 pl-14 text-sm leading-relaxed pt-4"
+                  style={{ color: '#6b7280', borderTop: '1px solid #f3f4f6' }}>
                   {faq.a}
                 </div>
               )}

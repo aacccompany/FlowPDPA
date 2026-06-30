@@ -89,8 +89,9 @@ export default function Services() {
   return (
     <section id="services" className="py-20 bg-white">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <FadeUp>
-          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 text-center mb-8">
+        <FadeUp className="text-center mb-4">
+          <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--green)' }}>บริการของเรา</p>
+          <h2 className="text-2xl sm:text-3xl font-bold mb-8" style={{ color: '#111827' }}>
             นโยบายที่เราช่วยคุณสร้าง
           </h2>
         </FadeUp>
@@ -100,11 +101,11 @@ export default function Services() {
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className="px-4 py-2 rounded text-sm font-medium border transition-all"
+              className="px-4 py-2 text-sm font-medium transition-all"
               style={
                 activeTab === tab
-                  ? { backgroundColor: 'var(--blue)', color: 'white', borderColor: 'var(--blue)' }
-                  : { backgroundColor: 'white', color: '#555', borderColor: '#ddd' }
+                  ? { backgroundColor: 'var(--green)', color: 'white', borderRadius: '6px', border: '1px solid var(--green)' }
+                  : { backgroundColor: 'white', color: '#4b5563', borderRadius: '6px', border: '1px solid #e5e7eb' }
               }
             >
               {tab}
@@ -112,38 +113,42 @@ export default function Services() {
           ))}
         </div>
 
-        <div className="border border-gray-200 rounded-xl overflow-hidden">
-          <div className="bg-white px-8 py-6 text-center border-b border-gray-100">
-            <h3 className="text-xl font-bold mb-2" style={{ color: 'var(--blue)' }}>{info.title}</h3>
-            <p className="text-gray-600 text-sm leading-relaxed mb-2">{info.desc}</p>
-            <a href="/get-started" className="text-sm font-medium" style={{ color: 'var(--green)' }}>
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden' }}>
+          <div className="px-8 py-6 text-center" style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+            <h3 className="text-xl font-bold mb-2" style={{ color: '#111827' }}>{info.title}</h3>
+            <p className="text-sm leading-relaxed mb-2" style={{ color: '#6b7280' }}>{info.desc}</p>
+            <a href="/get-started" className="text-sm font-semibold" style={{ color: 'var(--green)' }}>
               ดูรายละเอียดและตัวอย่างเพิ่มเติม →
             </a>
           </div>
 
-          <table className="w-full">
+          <table className="w-full" style={{ backgroundColor: '#ffffff' }}>
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="text-left px-6 py-4 text-sm text-gray-600 font-semibold w-1/2">
+              <tr style={{ borderBottom: '1px solid #e5e7eb', backgroundColor: '#f9fafb' }}>
+                <th className="text-left px-6 py-4 text-sm font-semibold w-1/2" style={{ color: '#374151' }}>
                   ความครอบคลุมของนโยบาย
-                  <div className="text-xs text-gray-400 font-normal">ราคารวม VAT 7%</div>
+                  <div className="text-xs font-normal mt-0.5" style={{ color: '#9ca3af' }}>ราคารวม VAT 7%</div>
                 </th>
                 <th className="px-4 py-4 text-center w-1/4">
-                  <span className="inline-block px-3 py-1 rounded text-white text-xs font-bold" style={{ backgroundColor: 'var(--blue-mid)' }}>Free</span>
-                  <div className="text-sm font-bold text-gray-900 mt-1">ฟรี</div>
+                  <span className="inline-block px-3 py-1 text-white text-xs font-bold" style={{ backgroundColor: '#6b7280', borderRadius: '4px' }}>Free</span>
+                  <div className="text-sm font-bold mt-1" style={{ color: '#111827' }}>ฟรี</div>
                 </th>
                 <th className="px-4 py-4 text-center w-1/4">
-                  <span className="inline-block px-3 py-1 rounded text-white text-xs font-bold" style={{ backgroundColor: 'var(--green)' }}>Premium</span>
-                  <div className="text-sm font-bold text-gray-900 mt-1">2,500 บาท</div>
+                  <span className="inline-block px-3 py-1 text-white text-xs font-bold" style={{ backgroundColor: 'var(--green)', borderRadius: '4px' }}>Premium</span>
+                  <div className="text-sm font-bold mt-1" style={{ color: '#111827' }}>2,500 บาท</div>
                 </th>
               </tr>
             </thead>
             <tbody>
               {tableRows.map(({ label, sublabel, free, premium }) => (
-                <tr key={label} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors">
+                <tr key={label} className="transition-colors"
+                  style={{ borderBottom: '1px solid #f3f4f6' }}
+                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#fafafa')}
+                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                >
                   <td className="px-6 py-3">
-                    <div className="text-sm text-gray-800">{label}</div>
-                    {sublabel && <div className="text-xs text-gray-400">{sublabel}</div>}
+                    <div className="text-sm" style={{ color: '#374151' }}>{label}</div>
+                    {sublabel && <div className="text-xs mt-0.5" style={{ color: '#9ca3af' }}>{sublabel}</div>}
                   </td>
                   <td className="px-4 py-3">{free ? <GreenCheck /> : <GrayX />}</td>
                   <td className="px-4 py-3">{premium ? <GreenCheck /> : <GrayX />}</td>
@@ -152,11 +157,12 @@ export default function Services() {
             </tbody>
           </table>
 
-          <div className="px-8 py-5 text-center border-t border-gray-100 bg-gray-50">
+          <div className="px-8 py-5 text-center" style={{ borderTop: '1px solid #e5e7eb', backgroundColor: '#f9fafb' }}>
             <p className="text-sm mb-4" style={{ color: 'var(--green)' }}>
               ทุกแพ็กเกจรวมนโยบายทั้งภาษาไทยและภาษาอังกฤษในฉบับเดียว
             </p>
-            <a href="/get-started" className="block w-full py-4 rounded text-white font-bold text-base" style={{ backgroundColor: 'var(--green)' }}>
+            <a href="/get-started" className="block w-full py-4 text-white font-bold text-base"
+              style={{ backgroundColor: 'var(--green)', borderRadius: '6px' }}>
               เริ่มสร้าง Policy ของคุณเดี๋ยวนี้
             </a>
           </div>

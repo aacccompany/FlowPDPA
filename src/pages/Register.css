@@ -1,26 +1,29 @@
 .register-shell {
   min-height: 100vh;
-  background: #f4f6f9 !important;
+  background: #17233b;
   color: #172033;
+  font-family: 'Inter', sans-serif;
 }
 
 .register-topbar {
-  min-height: 64px;
-  border-bottom: 1px solid #dce1e8;
-  background: rgba(255, 255, 255, 0.96);
+  min-height: 68px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  background: rgba(23,35,59,0.98);
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
 }
 
 .register-brand-mark {
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   place-items: center;
-  border: 1px solid #087a5b;
-  border-radius: 4px;
-  color: #087a5b;
-  font-family: 'IBM Plex Mono', monospace;
+  background: #087a5b;
+  border-radius: 6px;
+  color: #ffffff;
   font-size: 10px;
-  font-weight: 500;
+  font-weight: 800;
 }
 
 .register-main {
@@ -38,90 +41,90 @@
 .register-panel { min-width: 0; }
 
 .register-card {
-  padding: 32px !important;
-  border: 1px solid #dce1e8 !important;
-  border-radius: 6px !important;
-  background: #fff !important;
-  box-shadow: none !important;
+  padding: 40px !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25) !important;
 }
 
-.register-card h1 { color: #172033 !important; }
-.register-card > p { color: #667085 !important; }
+.register-card h1 { color: #111827 !important; font-family: 'Inter', sans-serif; }
+.register-card > p { color: #6b7280 !important; }
 
 .register-icon {
-  width: 40px;
-  height: 40px;
-  border: 1px solid #b9d9cf;
-  border-radius: 5px !important;
-  background: #edf5f2 !important;
+  width: 42px;
+  height: 42px;
+  border: 1px solid #c8ded6;
+  border-radius: 8px !important;
+  background: #f0faf5 !important;
 }
 
 .register-section {
   padding: 18px 0 !important;
   border: 0 !important;
-  border-top: 1px solid #eaecf0 !important;
+  border-top: 1px solid #f3f4f6 !important;
   border-radius: 0 !important;
   background: transparent !important;
 }
 
 .register-section:first-of-type { border-top: 0 !important; padding-top: 0 !important; }
-
-.register-section-title { color: #667085 !important; }
+.register-section-title { color: #9ca3af !important; }
 
 .register-shell input {
-  border: 1px solid #d0d5dd !important;
-  border-radius: 4px !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 6px !important;
   background: #fff !important;
-  color: #172033 !important;
+  color: #111827 !important;
   box-shadow: none !important;
+  font-family: 'Inter', sans-serif;
 }
 
-.register-shell input::placeholder { color: #98a2b3; }
+.register-shell input::placeholder { color: #9ca3af; }
 .register-shell input:focus {
   border-color: #087a5b !important;
-  outline: 2px solid rgba(8, 122, 91, 0.12) !important;
+  outline: 2px solid rgba(8,122,91,0.1) !important;
   outline-offset: 0;
 }
 
-.register-shell input[aria-invalid='true'] { border-color: #d92d20 !important; }
+.register-shell input[aria-invalid='true'] { border-color: #ef4444 !important; }
 
 .register-otp {
   width: 52px;
   height: 58px;
-  font-family: 'IBM Plex Mono', monospace;
   font-size: 24px;
-  font-weight: 500;
+  font-weight: 700;
 }
 
 .register-status {
-  border-radius: 4px;
-  border: 1px solid #b9d9cf;
-  background: #edf5f2;
-  color: #075f49;
+  border-radius: 6px;
+  border: 1px solid #c8ded6;
+  background: #f0faf5;
+  color: #087a5b;
 }
 
 .register-error {
-  border-color: #f5b8b2 !important;
+  border-color: #fca5a5 !important;
   background: #fff1f0 !important;
   color: #b42318 !important;
 }
 
-.register-divider { background: #eaecf0 !important; }
+.register-divider { background: #f3f4f6 !important; }
 
 .register-login-link {
-  border: 1px solid #d0d5dd !important;
-  border-radius: 4px !important;
-  color: #344054 !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 6px !important;
+  color: #374151 !important;
   background: #fff;
+  font-family: 'Inter', sans-serif;
 }
+.register-login-link:hover { border-color: #d1d5db !important; color: #111827 !important; background: #f9fafb !important; }
 
-.register-login-link:hover { border-color: #98a2b3 !important; color: #172033 !important; }
-
-.register-legal a { color: #667085 !important; }
-.register-legal > span { background: #d0d5dd !important; }
+.register-legal a { color: #64748b !important; }
+.register-legal a:hover { color: #94a3b8 !important; }
+.register-legal > span { background: #334155 !important; }
 
 @media (max-width: 767px) {
   .register-main { padding: 24px 16px 40px; }
-  .register-card { padding: 24px 18px !important; }
+  .register-card { padding: 28px 20px !important; }
   .register-otp { width: clamp(38px, 12vw, 48px); height: 52px; font-size: 20px; }
 }
