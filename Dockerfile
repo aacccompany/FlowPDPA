@@ -6,7 +6,7 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
-COPY .env.production .env
+COPY .env .
 
 RUN npm run build
 
