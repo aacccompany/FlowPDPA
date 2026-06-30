@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Activity, AlertTriangle, BarChart3, ChevronLeft, ChevronRight,
   CircleDollarSign, CreditCard, FileText, Gauge, Landmark, LogOut,
-  Eye, Languages, Menu, Plus, ReceiptText, Scale, Search,
+  Eye, Languages, Menu, Pencil, Plus, ReceiptText, Scale, Search,
   UserCog, Users, WalletCards, X,
 } from 'lucide-react'
 import { session } from '@/utils/storage'
