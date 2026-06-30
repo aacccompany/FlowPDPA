@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Activity, AlertTriangle, BarChart3, ChevronLeft, ChevronRight,
   CircleDollarSign, CreditCard, FileText, Gauge, Landmark, LogOut,
-  Eye, Languages, Menu, Plus, ReceiptText, Scale, Search, ShieldCheck,
+  Eye, Languages, Menu, Pencil, Plus, ReceiptText, Scale, Search, ShieldCheck,
   UserCog, Users, WalletCards, X,
 } from 'lucide-react'
 import { session } from '@/utils/storage'
@@ -267,9 +267,14 @@ function LegalManagement({ users, setUsers, workload, reviews }: {
   const [tab, setTab] = useState<'users' | 'workload' | 'history'>('users')
   const [creating, setCreating] = useState(false)
   const [draft, setDraft] = useState({ name: '', email: '', password: '', phone: '' })
+  const [editing, setEditing] = useState<LegalUser | null>(null)
+  const [editDraft, setEditDraft] = useState({ name: '', email: '', phone: '' })
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [selectedPolicy, setSelectedPolicy] = useState<AdminPolicyDetail | null>(null)
+  const [contentOpen, setContentOpen] = useState(false)
+  const [contentLoading, setContentLoading] = useState(false)
   const visibleUsers = users.filter(row => `${row.name} ${row.email} ${row.phone || ''}`.toLowerCase().includes(query.toLowerCase()) && (statusFilter === 'all' || row.status === statusFilter))
   const visibleWorkload = workload.filter(row => row.name.toLowerCase().includes(query.toLowerCase()) && (statusFilter !== 'overdue' || row.overdue > 0))
   const visibleReviews = reviews.filter(row => `${row.legalUserEmail} ${row.websiteName} ${row.policySlug} ${row.comment || ''}`.toLowerCase().includes(query.toLowerCase()) && (statusFilter === 'all' || row.status === statusFilter))
@@ -288,19 +293,46 @@ function LegalManagement({ users, setUsers, workload, reviews }: {
     await refreshUsers()
     setDraft({ name: '', email: '', password: '', phone: '' }); setCreating(false)
   }
+  const startEdit = (row: LegalUser) => {
+    setError('')
+    setEditing(row)
+    setEditDraft({ name: row.name, email: row.email, phone: row.phone || '' })
+  }
+  const saveEdit = async () => {
+    if (!editing) return
+    if (!editDraft.name.trim() || !editDraft.email.trim()) { setError('Name and email are required.'); return }
+    setError('')
+    const response = await api.admin.updateLegalUser(editing.id, {
+      name: editDraft.name,
+      email: editDraft.email,
+      phone: editDraft.phone,
+    })
+    if (!response.success || !response.data) { setError(response.error?.message || 'Unable to update legal user.'); return }
+    setUsers(current => current.map(row => row.id === editing.id ? { ...row, ...response.data } : row))
+    setEditing(null)
+  }
   const updateStatus = async (id: string, status: LegalStatus) => {
     setError('')
     const response = await api.admin.updateLegalUserStatus(id, status)
     if (!response.success) { setError(response.error?.message || 'Unable to update legal user.'); return }
     setUsers(current => current.map(row => row.id === id ? { ...row, status } : row))
   }
+  const openContent = async (policyId: string) => {
+    setSelectedPolicy(null); setContentOpen(true); setContentLoading(true); setError('')
+    const response = await api.admin.getPolicy(policyId)
+    setContentLoading(false)
+    if (!response.success || !response.data) { setError(response.error?.message || 'Unable to load policy content.'); return }
+    setSelectedPolicy(response.data.policy)
+  }
   return <><PageTitle eyebrow="LEGAL MANAGEMENT" title="Legal team" description="Manage reviewers, workload, assignments, and review history." action={<button className="portal-button primary" onClick={() => setCreating(true)}><Plus className="w-4 h-4" />Create legal user</button>} />
     <div className="flex flex-wrap items-center gap-2 mb-4">{(['users', 'workload', 'history'] as const).map(value => <button key={value} className="portal-filter" data-active={tab === value} onClick={() => { setTab(value); setStatusFilter('all') }}>{value}</button>)}<div className="sm:ml-auto"><SearchBox value={query} setValue={setQuery} placeholder={tab === 'history' ? 'Search review history' : 'Search legal team'} /></div><select className="portal-filter h-9" value={statusFilter} onChange={event => setStatusFilter(event.target.value)}><option value="all">All {tab === 'history' ? 'actions' : tab === 'workload' ? 'workload' : 'statuses'}</option>{tab === 'users' ? (['active', 'suspended', 'inactive'] as const).map(value => <option key={value} value={value}>{value}</option>) : tab === 'workload' ? <option value="overdue">Overdue only</option> : (['approved', 'rejected', 'edited'] as const).map(value => <option key={value} value={value}>{value}</option>)}</select></div>
     {error && <p className="mb-4 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
-    <section className="portal-panel"><div className="portal-table-wrap">{tab === 'users' ? <table className="portal-table"><thead><tr><th>Legal user</th><th>Phone</th><th>Pending</th><th>Approved</th><th>Rejected</th><th>Status</th><th /></tr></thead><tbody>{userPagination.pageRows.map(row => <tr key={row.id}><td><p className="font-semibold">{row.name}</p><p className="text-xs text-gray-400">{row.email}</p></td><td>{row.phone || '-'}</td><td>{row.pendingReviews}</td><td>{row.approvedCount}</td><td>{row.rejectedCount}</td><td><Badge value={row.status} /></td><td><select className="portal-filter" value={row.status} onChange={event => void updateStatus(row.id, event.target.value as LegalStatus)}>{['active', 'suspended', 'inactive'].map(value => <option key={value}>{value}</option>)}</select></td></tr>)}</tbody></table> :
+    <section className="portal-panel"><div className="portal-table-wrap">{tab === 'users' ? <table className="portal-table"><thead><tr><th>Legal user</th><th>Phone</th><th>Pending</th><th>Approved</th><th>Rejected</th><th>Status</th><th>Manage</th></tr></thead><tbody>{userPagination.pageRows.map(row => <tr key={row.id}><td><p className="font-semibold">{row.name}</p><p className="text-xs text-gray-400">{row.email}</p></td><td>{row.phone || '-'}</td><td>{row.pendingReviews}</td><td>{row.approvedCount}</td><td>{row.rejectedCount}</td><td><Badge value={row.status} /></td><td><div className="flex flex-wrap items-center gap-2"><button type="button" className="portal-button" onClick={() => startEdit(row)}><Pencil className="w-3.5 h-3.5" />Edit</button><select className="portal-filter" value={row.status} onChange={event => void updateStatus(row.id, event.target.value as LegalStatus)} aria-label={`Update ${row.name} status`}>{['active', 'suspended', 'inactive'].map(value => <option key={value}>{value}</option>)}</select></div></td></tr>)}</tbody></table> :
       tab === 'workload' ? <table className="portal-table"><thead><tr><th>Reviewer</th><th>Pending</th><th>Overdue</th><th>Approved this month</th><th>Average review</th><th>Load</th></tr></thead><tbody>{workloadPagination.pageRows.map(row => <tr key={row.legalUserId}><td className="font-semibold">{row.name}</td><td>{row.pending}</td><td>{row.overdue}</td><td>{row.approvedThisMonth}</td><td>{row.averageReviewHours}h</td><td><div className="w-32 h-1.5 bg-gray-100"><div className="h-full bg-green-700" style={{ width: Math.min(100, row.pending * 12) + '%' }} /></div></td></tr>)}</tbody></table> :
-      <table className="portal-table"><thead><tr><th>Reviewer</th><th>Policy</th><th>Action</th><th>Comment</th><th>Reviewed at</th></tr></thead><tbody>{reviewPagination.pageRows.map(row => <tr key={row.reviewId}><td>{row.legalUserEmail}</td><td><p className="font-semibold">{row.websiteName}</p><p className="text-xs text-gray-400">{row.policySlug}</p></td><td><Badge value={row.status} /></td><td>{row.comment || '-'}</td><td>{formatDate(row.reviewedAt)}</td></tr>)}</tbody></table>}</div>{tab === 'users' ? <Pagination {...userPagination} total={visibleUsers.length} /> : tab === 'workload' ? <Pagination {...workloadPagination} total={visibleWorkload.length} /> : <Pagination {...reviewPagination} total={visibleReviews.length} />}</section>
+      <table className="portal-table"><thead><tr><th>Reviewer</th><th>Policy</th><th>Action</th><th>Comment</th><th>Reviewed at</th><th>Content</th></tr></thead><tbody>{reviewPagination.pageRows.map(row => <tr key={row.reviewId}><td>{row.legalUserEmail}</td><td><p className="font-semibold">{row.websiteName}</p><p className="text-xs text-gray-400">{row.policySlug}</p></td><td><Badge value={row.status} /></td><td>{row.comment || '-'}</td><td>{formatDate(row.reviewedAt)}</td><td><button type="button" className="portal-button" onClick={() => void openContent(row.policyId)}><Eye className="w-3.5 h-3.5" />View</button></td></tr>)}</tbody></table>}</div>{tab === 'users' ? <Pagination {...userPagination} total={visibleUsers.length} /> : tab === 'workload' ? <Pagination {...workloadPagination} total={visibleWorkload.length} /> : <Pagination {...reviewPagination} total={visibleReviews.length} />}</section>
     {creating && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/30 p-4"><div className="portal-panel w-full max-w-md"><div className="portal-panel-head"><h2 className="text-sm font-semibold">Create legal user</h2><button className="portal-button px-2" onClick={() => setCreating(false)} aria-label="Close"><X className="w-4 h-4" /></button></div><div className="p-5 space-y-4">{(['name', 'email', 'password', 'phone'] as const).map(field => <label className="block text-xs font-semibold text-gray-600 capitalize" key={field}>{field}<input className="mt-2 w-full h-10 border border-gray-300 rounded px-3 text-sm font-normal" type={field === 'password' ? 'password' : field === 'email' ? 'email' : 'text'} value={draft[field]} onChange={event => setDraft(current => ({ ...current, [field]: event.target.value }))} /></label>)}<button className="portal-button primary w-full" onClick={() => void create()}>Create account</button></div></div></div>}
+    {editing && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/30 p-4"><div className="portal-panel w-full max-w-md"><div className="portal-panel-head"><h2 className="text-sm font-semibold">Edit legal user</h2><button className="portal-button px-2" onClick={() => setEditing(null)} aria-label="Close"><X className="w-4 h-4" /></button></div><div className="p-5 space-y-4">{(['name', 'email', 'phone'] as const).map(field => <label className="block text-xs font-semibold text-gray-600 capitalize" key={field}>{field}<input className="mt-2 w-full h-10 border border-gray-300 rounded px-3 text-sm font-normal" type={field === 'email' ? 'email' : 'text'} value={editDraft[field]} onChange={event => setEditDraft(current => ({ ...current, [field]: event.target.value }))} /></label>)}<button className="portal-button primary w-full" onClick={() => void saveEdit()}>Save changes</button></div></div></div>}
+    {contentOpen && <PolicyContentModal policy={selectedPolicy} loading={contentLoading} close={() => { setContentOpen(false); setSelectedPolicy(null) }} />}
   </>
 }
 
