@@ -15,48 +15,34 @@ export default function WhyChoose() {
   const { ref, inView } = useInView()
 
   return (
-    <section id="why" className="public-light-feature-section py-20" style={{ backgroundColor: 'var(--navy)' }}>
+    <section id="why" className="py-20" style={{ backgroundColor: 'var(--navy)' }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <FadeUp className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 mb-14">
           <div>
-            <p
-              className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.15em] mb-4"
-              style={{ color: 'var(--green)' }}
-            >
-              <span className="block w-8 h-px" style={{ backgroundColor: 'var(--green)', opacity: 0.5 }} />
+            <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--green)' }}>
               Why FlowPDPA
             </p>
             <h2 className="text-2xl sm:text-3xl font-black text-white">
               ทำไมธุรกิจไทยเลือก FlowPDPA
             </h2>
           </div>
-          <a href="/get-started" className="btn-green text-sm px-7 py-3 shrink-0">
+          <a href="/get-started" className="btn-green text-sm px-7 py-3 shrink-0" style={{ borderRadius: '6px' }}>
             เริ่มสร้าง Policy
           </a>
         </FadeUp>
 
-        <div
-          ref={ref}
-          className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 stagger-grid ${inView ? 'in-view' : ''}`}
-        >
+        <div ref={ref} className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 stagger-grid ${inView ? 'in-view' : ''}`}>
           {features.map(({ Icon, num, title, desc }) => (
-            <div
-              key={num}
-              className="p-8 rounded-xl transition-colors"
-              style={{ backgroundColor: 'var(--navy-light)' }}
-              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#253347')}
-              onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'var(--navy-light)')}
+            <div key={num} className="p-7 transition-all"
+              style={{ backgroundColor: 'var(--navy-light)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '12px' }}
+              onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#2a3a54'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)' }}
+              onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'var(--navy-light)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)' }}
             >
-              <div className="flex items-start justify-between mb-5">
-                <div
-                  className="w-10 h-10 flex items-center justify-center"
-                  style={{ backgroundColor: 'rgba(5,150,105,0.15)', borderRadius: '8px' }}
-                >
-                  <Icon className="w-5 h-5" style={{ color: 'var(--green)' }} />
-                </div>
-                <span className="text-xs font-mono" style={{ color: '#334155' }}>{num}</span>
+              <div className="w-10 h-10 flex items-center justify-center mb-5"
+                style={{ backgroundColor: 'rgba(5,150,105,0.15)', borderRadius: '10px' }}>
+                <Icon className="w-5 h-5" style={{ color: 'var(--green)' }} />
               </div>
-              <h3 className="font-bold text-white text-sm mb-2 leading-snug">{title}</h3>
+              <h3 className="font-bold mb-2 leading-snug text-white" style={{ fontSize: '15px' }}>{title}</h3>
               <p className="text-sm leading-relaxed" style={{ color: '#64748b' }}>{desc}</p>
             </div>
           ))}

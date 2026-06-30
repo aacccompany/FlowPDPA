@@ -17,8 +17,7 @@ export default function CheckWebsite() {
 
           {/* Left */}
           <div>
-            <p className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.15em] text-gray-400 mb-4">
-              <span className="block w-8 h-px bg-gray-300" />
+            <p className="text-xs font-semibold uppercase tracking-widest mb-4" style={{ color: 'var(--green)' }}>
               Free PDPA Audit
             </p>
             <h2 className="text-2xl sm:text-3xl font-black text-gray-900 mb-4 leading-snug">

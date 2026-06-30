@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Activity, AlertTriangle, BarChart3, ChevronLeft, ChevronRight,
   CircleDollarSign, CreditCard, FileText, Gauge, Landmark, LogOut,
-  Eye, Languages, Menu, Pencil, Plus, ReceiptText, Scale, Search, ShieldCheck,
+  Eye, Languages, Menu, Plus, ReceiptText, Scale, Search,
   UserCog, Users, WalletCards, X,
 } from 'lucide-react'
 import { session } from '@/utils/storage'
@@ -72,9 +72,9 @@ function Sidebar({ view, change, open, close, logout }: { view: AdminView; chang
     { label: 'Operations', items: [{ id: 'assignments' as const, text: 'Review assignments', Icon: FileText }, { id: 'legal' as const, text: 'Legal management', Icon: Scale }, { id: 'logs' as const, text: 'Error logs', Icon: AlertTriangle }, { id: 'analytics' as const, text: 'Analytics', Icon: BarChart3 }] },
   ]
   return <>{open && <button className="portal-overlay" onClick={close} aria-label="Close navigation" />}<aside className="portal-sidebar" data-open={open}>
-    <div className="portal-brand"><span className="portal-brand-mark"><ShieldCheck className="w-4 h-4" /></span><div><p className="text-sm font-bold">FlowPDPA</p><p className="text-[10px] text-gray-400">ADMIN CONSOLE</p></div></div>
+    <div className="portal-brand"><img src="/favicon.svg" alt="FlowPDPA" style={{ width: '32px', height: '32px', filter: 'brightness(0) invert(1)', flexShrink: 0 }} /><div><p className="text-sm font-extrabold" style={{ color: '#ffffff' }}>Flow<span style={{ color: '#4ade80' }}>PDPA</span></p><p className="text-[10px]" style={{ color: '#475569' }}>ADMIN CONSOLE</p></div></div>
     <nav className="portal-nav flex-1 overflow-y-auto">{groups.map(group => <div key={group.label}><p className="portal-nav-label">{group.label}</p>{group.items.map(({ id, text, Icon }) => <button key={id} className="portal-nav-item" data-active={view === id} onClick={() => { change(id); close() }}><Icon />{text}</button>)}</div>)}</nav>
-    <div className="portal-account"><div className="flex items-center gap-3 mb-3"><span className="w-8 h-8 grid place-items-center rounded bg-green-50 text-green-700"><UserCog className="w-4 h-4" /></span><div><p className="text-xs font-semibold">Platform Admin</p><p className="text-[11px] text-gray-400">admin@flowpdpa.co.th</p></div></div><button className="portal-nav-item" onClick={logout}><LogOut />Sign out</button></div>
+    <div className="portal-account"><div className="flex items-center gap-3 mb-3"><span className="w-8 h-8 grid place-items-center rounded" style={{ backgroundColor: 'rgba(8,122,91,0.25)', color: '#4ade80' }}><UserCog className="w-4 h-4" /></span><div><p className="text-xs font-semibold" style={{ color: '#e2e8f0' }}>Platform Admin</p><p className="text-[11px]" style={{ color: '#475569' }}>admin@flowpdpa.co.th</p></div></div><button className="portal-nav-item" onClick={logout}><LogOut />Sign out</button></div>
   </aside></>
 }
 
