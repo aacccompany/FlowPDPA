@@ -5,6 +5,9 @@ import path from 'path'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  preview: {
+    allowedHosts: ['flowpdpa-test.aacc-ai.com'],
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
