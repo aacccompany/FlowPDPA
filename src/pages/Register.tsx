@@ -79,6 +79,7 @@ export default function Register() {
     if (formData.password !== formData.confirm) { setError('รหัสผ่านไม่ตรงกัน'); return }
 
     const normalizedEmail = formData.email.trim().toLowerCase()
+    storage.auth.clear()
     setEmail(normalizedEmail)
     setOtpReady(false)
     setInitiating(true)
@@ -99,26 +100,6 @@ export default function Register() {
       setOtpReady(true)
       setExpiryCountdown(300)
       startResendCooldown(60)
-
-      const data = response.data
-      const token = data?.token ?? data?.access_token
-      if (token && data?.user) {
-        const role = normalizeRole(data.user.role)
-        storage.auth.set({
-          id: data.user.id,
-          email: data.user.email ?? normalizedEmail,
-          name: data.user.name ?? formData.name.trim(),
-          plan: data.user.plan ?? 'Free',
-          role,
-          token,
-          refreshToken: data.refresh_token,
-          expiresAt: data.expires_in ? Date.now() + data.expires_in * 1000 : undefined,
-          company: formData.company,
-          phone: formData.phone,
-          emailVerified: false,
-        })
-        navigate(roleHome(role), { replace: true })
-      }
 
     } catch (err) {
       console.error('Registration error:', err)

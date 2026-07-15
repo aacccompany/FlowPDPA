@@ -36,10 +36,13 @@ export default function ForgotPassword() {
     }
 
     const normalizedEmail = email.trim().toLowerCase()
-    setStep('reset')
+    setEmail(normalizedEmail)
     setSendingCode(true)
     setCooldown(60)
-    const response = await api.auth.passwordReset.request({ email: normalizedEmail })
+    const request = api.auth.passwordReset.request({ email: normalizedEmail })
+    setStep('reset')
+
+    const response = await request
     setSendingCode(false)
     if (!response.success) {
       setCooldown(0)
@@ -47,7 +50,6 @@ export default function ForgotPassword() {
       return
     }
 
-    setEmail(normalizedEmail)
     setCooldown(response.data?.canResendIn ?? 60)
   }
 

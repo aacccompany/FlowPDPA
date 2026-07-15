@@ -38,6 +38,15 @@ function ProtectedRoute({ children, roles }: { children: React.ReactNode; roles:
   }
 
   const role = auth.role
+  if (role === 'merchant' && auth.emailVerified === false) {
+    return (
+      <Navigate
+        to="/register"
+        replace
+        state={{ verificationEmail: auth.email, requestOtp: true }}
+      />
+    )
+  }
   if (!roles.includes(role)) return <Navigate to={roleHome(role)} replace />
   return children
 }
