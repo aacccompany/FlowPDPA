@@ -77,6 +77,46 @@ export interface AdminMerchant {
   lastLoginAt: string | null
 }
 
+export interface AdminMerchantDetail {
+  id: string
+  name: string
+  email: string
+  status: AdminMerchantStatus
+  profile: {
+    companyName: string | null
+    phone: string | null
+    website: string | null
+  }
+  subscriptions: AdminSubscription[]
+  paymentHistory: AdminPayment[]
+  policies: AdminPolicy[]
+  createdAt: string | null
+  lastLoginAt?: string | null
+  plan?: string | null
+}
+
+export interface AdminMerchantCreate {
+  name: string
+  email: string
+  password: string
+  companyName?: string
+  phone?: string
+  website?: string
+  status: AdminMerchantStatus
+  plan: string
+}
+
+export interface AdminMerchantUpdate {
+  name?: string
+  email?: string
+  companyName?: string
+  phone?: string
+  website?: string
+  status?: AdminMerchantStatus
+  plan?: string
+  password?: string
+}
+
 export interface AdminErrorLog {
   id: string
   level: 'info' | 'warning' | 'error' | 'critical'

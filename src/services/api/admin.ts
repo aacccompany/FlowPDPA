@@ -2,7 +2,7 @@ import { apiRequest } from './client'
 import { API_ENDPOINTS } from './endpoints'
 import type {
   AdminAnalytics, AdminErrorLog, AdminLegalReview, AdminLegalStatus, AdminLegalUser,
-  AdminLegalWorkload, AdminMerchant, AdminMerchantStatus, AdminOverview, AdminPagination,
+  AdminLegalWorkload, AdminMerchant, AdminMerchantCreate, AdminMerchantDetail, AdminMerchantStatus, AdminMerchantUpdate, AdminOverview, AdminPagination,
   AdminPayment, AdminPolicy, AdminPolicyDetail, AdminSubscription,
 } from './adminTypes'
 
@@ -17,9 +17,15 @@ export const adminApi = {
   overview: () => apiRequest<AdminOverview>(API_ENDPOINTS.admin.overview),
   listMerchants: (params: { status?: string; search?: string; page?: number; limit?: number } = {}) =>
     apiRequest<{ merchants: AdminMerchant[]; pagination: AdminPagination }>(`${API_ENDPOINTS.admin.merchants}${query(params)}`),
-  getMerchant: (id: string) => apiRequest<{ merchant: AdminMerchant & { subscriptions: AdminSubscription[]; paymentHistory: AdminPayment[]; policies: AdminPolicy[] } }>(API_ENDPOINTS.admin.merchant(id)),
+  getMerchant: (id: string) => apiRequest<{ merchant: AdminMerchantDetail }>(API_ENDPOINTS.admin.merchant(id)),
+  createMerchant: (data: AdminMerchantCreate) =>
+    apiRequest<{ merchant: AdminMerchant }>(API_ENDPOINTS.admin.merchants, { method: 'POST', body: data }),
+  updateMerchant: (id: string, data: AdminMerchantUpdate) =>
+    apiRequest<{ merchant: AdminMerchant }>(API_ENDPOINTS.admin.merchant(id), { method: 'PUT', body: data }),
   updateMerchantStatus: (id: string, status: AdminMerchantStatus) =>
     apiRequest<{ id: string; status: AdminMerchantStatus; updated: boolean }>(API_ENDPOINTS.admin.merchantStatus(id), { method: 'PUT', body: { status } }),
+  deleteMerchant: (id: string) =>
+    apiRequest<{ id: string; status: 'inactive'; deletedAt: string; archivedPolicyIds: string[] }>(API_ENDPOINTS.admin.merchant(id), { method: 'DELETE' }),
   listSubscriptions: (params: { status?: string; policyType?: string; page?: number; limit?: number } = {}) =>
     apiRequest<{ subscriptions: AdminSubscription[]; pagination: AdminPagination }>(`${API_ENDPOINTS.admin.subscriptions}${query(params)}`),
   listPayments: (params: { status?: string; page?: number; limit?: number } = {}) =>
@@ -40,6 +46,8 @@ export const adminApi = {
     apiRequest<AdminLegalUser>(API_ENDPOINTS.admin.legalUser(id), { method: 'PUT', body: data }),
   updateLegalUserStatus: (id: string, status: AdminLegalStatus) =>
     apiRequest<{ id: string; status: AdminLegalStatus }>(API_ENDPOINTS.admin.legalUserStatus(id), { method: 'PUT', body: { status } }),
+  deleteLegalUser: (id: string) =>
+    apiRequest<{ id: string; status: 'inactive'; deletedAt: string; reassignedPolicyIds: string[] }>(API_ENDPOINTS.admin.legalUser(id), { method: 'DELETE' }),
   legalWorkload: () => apiRequest<{ summary: { totalLegalUsers: number; activeLegalUsers: number; totalPendingReviews: number; overdueReviews: number }; workload: AdminLegalWorkload[] }>(API_ENDPOINTS.admin.legalWorkload),
   legalReviews: (params: { legalUserId?: string; status?: string; page?: number; limit?: number } = {}) =>
     apiRequest<{ reviews: AdminLegalReview[]; pagination: AdminPagination }>(`${API_ENDPOINTS.admin.legalReviews}${query(params)}`),
