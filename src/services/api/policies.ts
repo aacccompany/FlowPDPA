@@ -3,6 +3,7 @@ import { API_ENDPOINTS } from './endpoints'
 import type {
   ArchivePolicyResult,
   ChangeRequestStatus,
+  PolicyActivityLog,
   PolicyChangeRequest,
   PolicyChangeRequestCreate,
   PolicyQuestionnaire,
@@ -24,6 +25,16 @@ export const policiesApi = {
   },
   getChangeRequest: (policyId: string, requestId: string) =>
     apiRequest<PolicyChangeRequest>(API_ENDPOINTS.policies.changeRequest(policyId, requestId)),
+  listActivityLogs: (policyId: string) =>
+    apiRequest<PolicyActivityLog[]>(API_ENDPOINTS.policies.activityLogs(policyId)),
+  recordPublicConsent: (slug: string) =>
+    apiRequest<{ id: string; consentedAt: string }>(API_ENDPOINTS.policies.publicConsent(slug), {
+      method: 'POST', body: { consentVersion: 'v1' }, authenticated: false,
+    }),
+  recordPublicAcknowledgement: (slug: string) =>
+    apiRequest<{ id: string; acknowledgedAt: string }>(API_ENDPOINTS.policies.publicAcknowledgement(slug), {
+      method: 'POST', body: { acknowledgementVersion: 'v1' }, authenticated: false,
+    }),
   // Compatibility aliases for current callers.
   update: (id: string, data: PolicyQuestionnaire) => policiesApi.regenerate(id, data),
   delete: (id: string) => policiesApi.archive(id),

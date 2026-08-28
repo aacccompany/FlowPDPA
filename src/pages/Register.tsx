@@ -2,6 +2,7 @@ import { useCallback, useState, useEffect, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { AlertCircle, ArrowLeft, Clock3, UserPlus, Mail, RefreshCw, CheckCircle, Loader2 } from 'lucide-react'
 import { api } from '@/services/api'
+import type { ApiError } from '@/services/api'
 import { normalizeRole, roleHome, storage } from '@/utils/storage'
 import { isValidEmail, isValidThaiPhone, sanitizeThaiPhone } from '@/utils/validation'
 import './Register.css'
@@ -23,6 +24,33 @@ const formatCooldown = (seconds: number) => {
   return hours > 0
     ? `${hours}:${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
     : `${minutes}:${String(remainingSeconds).padStart(2, '0')}`
+}
+
+const registrationErrorMessage = (error?: ApiError) => {
+  if (!error) return 'ไม่สามารถสมัครสมาชิกได้ กรุณาลองใหม่อีกครั้ง'
+
+  const code = error.code.toUpperCase()
+  const message = error.message.toLowerCase()
+  const duplicateEmail = error.status === 409
+    || ['EMAIL_ALREADY_EXISTS', 'DUPLICATE_EMAIL', 'ACCOUNT_EXISTS', 'CONFLICT'].includes(code)
+    || /(email|อีเมล).*(already exists|already registered|duplicate|ถูกใช้|มีอยู่แล้ว)/i.test(error.message)
+
+  if (duplicateEmail) return 'อีเมลนี้ถูกสมัครใช้งานแล้ว กรุณาเข้าสู่ระบบหรือใช้อีเมลอื่น'
+  if (error.status === 400 || error.status === 422 || code.includes('VALIDATION')) return 'ข้อมูลสมัครสมาชิกไม่ถูกต้อง กรุณาตรวจสอบข้อมูลแล้วลองใหม่'
+  if (error.status === 429 || code.includes('RATE_LIMIT')) return 'ส่งคำขอหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่'
+  if (code === 'TIMEOUT') return 'เซิร์ฟเวอร์ใช้เวลาตอบสนองนานเกินไป กรุณาลองใหม่'
+  if (code === 'NETWORK_ERROR') return 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่'
+
+  const generic = message.startsWith('request failed with status') || message === 'internal server error'
+  const containsInternalDetail = /(traceback|sqlalchemy|asyncpg|integrityerror|uniqueviolation|constraint|\[sql:|\[parameters:|password_hash|otp_hash|\/app\/|\.py", line)/i.test(error.message)
+  const safeBackendMessage = !generic && !containsInternalDetail && error.message.length <= 300
+
+  if ((error.status ?? 0) >= 500) {
+    return safeBackendMessage
+      ? `ระบบไม่สามารถดำเนินการได้: ${error.message}`
+      : 'ระบบสมัครสมาชิกขัดข้องชั่วคราว กรุณาลองใหม่ภายหลัง'
+  }
+  return safeBackendMessage ? error.message : 'ไม่สามารถสมัครสมาชิกได้ กรุณาลองใหม่อีกครั้ง'
 }
 
 export default function Register() {
@@ -93,7 +121,8 @@ export default function Register() {
         company: formData.company,
       })
       if (!response.success) {
-        setError(response.error?.message || 'ไม่สามารถสมัครสมาชิกได้')
+        setStep('form')
+        setError(registrationErrorMessage(response.error))
         return
       }
 
@@ -103,7 +132,8 @@ export default function Register() {
 
     } catch (err) {
       console.error('Registration error:', err)
-      setError('ส่งรหัสไม่สำเร็จ กรุณากลับไปตรวจสอบข้อมูลแล้วลองใหม่')
+      setStep('form')
+      setError('เกิดข้อผิดพลาดที่ไม่คาดคิด กรุณาลองใหม่อีกครั้ง')
     } finally {
       setInitiating(false)
     }

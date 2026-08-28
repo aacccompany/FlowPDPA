@@ -1271,6 +1271,61 @@ Rules:
 - `approved` and `edited` return public HTML.
 - `pending_review`, `rejected`, and `archived` return `POLICY_NOT_PUBLIC`.
 
+#### 2.17 Record Public Document Consent (No auth)
+
+The public document is displayed behind a blocking consent dialog. The backend derives IP address and user agent from the HTTP request; the frontend must not supply or trust those values.
+
+```http
+POST /policies/public/:slug/consent
+Content-Type: application/json
+
+{ "consentVersion": "v1" }
+```
+
+Response 201:
+
+```json
+{
+  "success": true,
+  "data": { "id": "activity_uuid", "consentedAt": "2026-08-24T10:00:00Z" }
+}
+```
+
+The backend appends a `customer_consent` event. Repeated consent creates a new event; previous events are never updated.
+
+#### 2.18 List Policy Activity Logs
+
+```http
+GET /policies/:policyId/activity-logs
+Authorization: Bearer <merchant_token>
+```
+
+Returns newest first. A merchant can only read logs for a policy it owns.
+
+```json
+{
+  "success": true,
+  "data": [{
+    "id": "activity_uuid",
+    "policyId": "policy_uuid",
+    "type": "customer_consent",
+    "relatedType": "consent",
+    "relatedId": null,
+    "relatedField": "document",
+    "description": "Customer consented before viewing the public document.",
+    "createdAt": "2026-08-24T10:00:00Z"
+  }]
+}
+```
+
+Supported event types:
+
+- `customer_consent`: inserted after public consent succeeds.
+- `merchant_change_requested`: inserted in the same transaction that creates a policy change request.
+- `legal_document_updated`: inserted in the same transaction that legal edits or resolves the document.
+
+There are no create, update, or delete activity-log endpoints. Events are appended only by the related backend workflow.
+
 ---
 ### 3. User Profile APIs
 
@@ -2057,6 +2112,49 @@ CREATE TABLE legal_review_events (
 CREATE INDEX idx_legal_review_events_policy_id ON legal_review_events(policy_id);
 CREATE INDEX idx_legal_review_events_legal_user_id ON legal_review_events(legal_user_id);
 CREATE INDEX idx_legal_review_events_reviewed_at ON legal_review_events(reviewed_at);
+```
+
+#### 4.2 policy_activity_logs
+
+Unified immutable history for customer consent, merchant-to-legal change requests, and legal document updates.
+
+```sql
+CREATE TYPE policy_activity_type AS ENUM (
+  'customer_consent',
+  'merchant_change_requested',
+  'legal_document_updated'
+);
+
+CREATE TABLE policy_activity_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  policy_id UUID NOT NULL REFERENCES policies(id) ON DELETE CASCADE,
+  type policy_activity_type NOT NULL,
+  related_type VARCHAR(50) NOT NULL,
+  related_id UUID,
+  related_field VARCHAR(255),
+  description TEXT NOT NULL,
+  ip_address INET,
+  user_agent TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
+);
+
+CREATE INDEX idx_policy_activity_logs_policy_created
+  ON policy_activity_logs(policy_id, created_at DESC);
+
+CREATE OR REPLACE FUNCTION reject_policy_activity_mutation()
+RETURNS trigger AS $$
+BEGIN
+  RAISE EXCEPTION 'policy_activity_logs is append-only';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER policy_activity_logs_no_update
+BEFORE UPDATE ON policy_activity_logs
+FOR EACH ROW EXECUTE FUNCTION reject_policy_activity_mutation();
+
+CREATE TRIGGER policy_activity_logs_no_delete
+BEFORE DELETE ON policy_activity_logs
+FOR EACH ROW EXECUTE FUNCTION reject_policy_activity_mutation();
 ```
 
 #### 5. policy_change_requests
