@@ -5,7 +5,7 @@ import { PolicyTypeIcon } from '@/components/policy/PolicyTypeIcon'
 import { isValidEmail, isValidThaiPhone, isValidWebsiteUrl, normalizeWebsiteUrl, sanitizeThaiPhone } from '@/utils/validation'
 import { storage } from '@/utils/storage'
 import { api } from '@/services/api'
-import type { PolicyQuestionnaire } from '@/services/api'
+import type { PolicyQuestionnaire, UserProfile } from '@/services/api'
 
 // ── Thai RD Company Lookup ────────────────────────────────────
 // Replace with real Thai RD VAT API calls via your backend proxy
@@ -805,25 +805,28 @@ function Step5({ data, setData }: { data: FormData; setData: (d: Partial<FormDat
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
-              อีเมลเจ้าหน้าที่คุ้มครองข้อมูล (DPO)
+              อีเมลเจ้าหน้าที่คุ้มครองข้อมูล (DPO) <span className="text-red-500">*</span>
             </label>
             <input
               type="email"
+              required
               placeholder="dpo@company.com"
               value={data.dpoEmail}
               onChange={e => setData({ dpoEmail: e.target.value })}
+              aria-invalid={Boolean(data.dpoEmail) && !isValidEmail(data.dpoEmail)}
               className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-800 focus:outline-none transition-colors"
               onFocus={e => (e.currentTarget.style.borderColor = 'var(--green)')}
               onBlur={e => (e.currentTarget.style.borderColor = '#e5e7eb')}
             />
-            <p className="text-xs text-gray-400 mt-1">หากไม่มี DPO ระบบจะใช้อีเมลติดต่อจากขั้นตอนก่อนหน้า</p>
+            <p className="text-xs text-gray-400 mt-1">จำเป็นต้องระบุอีเมล DPO ที่ถูกต้อง</p>
           </div>
 
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
-              ระยะเวลาการเก็บรักษาข้อมูล
+              ระยะเวลาการเก็บรักษาข้อมูล <span className="text-red-500">*</span>
             </label>
             <select
+              required
               value={data.retentionPeriod}
               onChange={e => setData({ retentionPeriod: e.target.value })}
               className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-800 focus:outline-none bg-white transition-colors"
@@ -1045,21 +1048,69 @@ const initialData: FormData = {
   exportFormat: ['PDF'],
 }
 
+function profileAddress(profile: UserProfile) {
+  return [
+    profile.address.street,
+    profile.address.street2,
+    profile.address.city,
+    profile.address.state,
+    profile.address.zip,
+    profile.address.country,
+  ].map(value => value.trim()).filter(Boolean).join(', ')
+}
+
+function prefillFromProfile(current: FormData, profile: UserProfile): FormData {
+  const companyName = profile.company_name.trim()
+  return {
+    ...current,
+    ownerType: companyName && !current.ownerFullName && !current.companyName ? 'company' : current.ownerType,
+    ownerFullName: current.ownerFullName || profile.name.trim(),
+    companyName: current.companyName || companyName,
+    companyRegNumber: current.companyRegNumber || profile.vat.trim(),
+    websiteName: current.websiteName || companyName,
+    websiteUrl: current.websiteUrl || profile.website.trim(),
+    contactEmail: current.contactEmail || profile.email.trim(),
+    contactPhone: current.contactPhone || profile.phone.trim() || profile.mobile.trim(),
+    address: current.address || profileAddress(profile),
+  }
+}
+
+function initialDataFromSession(): FormData {
+  const auth = storage.auth.get()
+  return {
+    ...initialData,
+    ownerFullName: auth?.name || '',
+    contactEmail: auth?.email || '',
+    contactPhone: auth?.phone || '',
+    companyName: auth?.company || '',
+  }
+}
+
 export default function CreatePolicy() {
   const navigate = useNavigate()
   const [step, setStep] = useState(1)
   const [done, setDone] = useState(false)
   const [generating, setGenerating] = useState(false)
-  const [data, setDataRaw] = useState<FormData>(initialData)
+  const [data, setDataRaw] = useState<FormData>(initialDataFromSession)
   const [savedSlug, setSavedSlug] = useState('')
   const [generationError, setGenerationError] = useState('')
 
   const setData = useCallback((partial: Partial<FormData>) => setDataRaw(prev => ({ ...prev, ...partial })), [])
 
   useEffect(() => {
-    if (!storage.auth.get()?.token) {
+    const auth = storage.auth.get()
+    if (!auth?.token) {
       navigate('/login', { state: { from: '/create/policy' } })
+      return
     }
+
+    let active = true
+    void api.profile.get().then(response => {
+      if (active && response.success && response.data) {
+        setDataRaw(current => prefillFromProfile(current, response.data!))
+      }
+    })
+    return () => { active = false }
   }, [navigate])
 
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }) }, [step])
@@ -1074,7 +1125,7 @@ export default function CreatePolicy() {
     }
     if (step === 3) return data.dataTypes.length > 0
     if (step === 4) return data.purposes.length > 0
-    if (step === 5) return data.language !== ''
+    if (step === 5) return data.language !== '' && isValidEmail(data.dpoEmail) && data.retentionPeriod !== ''
     return true
   }
 
@@ -1084,6 +1135,11 @@ export default function CreatePolicy() {
     if (!data.policyType || !data.agreedToTerms) {
       setGenerating(false)
       setGenerationError('Please select a policy type and accept the terms.')
+      return
+    }
+    if (!isValidEmail(data.dpoEmail) || !data.retentionPeriod) {
+      setGenerating(false)
+      setGenerationError('Please enter a valid DPO email and select a data retention period.')
       return
     }
     setDone(true)

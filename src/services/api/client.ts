@@ -19,6 +19,10 @@ const parseError = (payload: unknown, status: number): ApiError => {
     code: typeof nested.code === 'string' ? nested.code : `HTTP_${status}`,
     message: typeof nested.message === 'string'
       ? nested.message
+      : typeof body.detail === 'string'
+        ? body.detail
+      : typeof body.error === 'string'
+        ? body.error
       : typeof body.message === 'string'
         ? body.message
         : `Request failed with status ${status}`,

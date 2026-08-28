@@ -5,6 +5,8 @@ import { profileApi } from './profile'
 import { uploadFile } from './upload'
 import { legalApi } from './legal'
 import { adminApi } from './admin'
+import { consentsApi } from './consents'
+import { templatesApi } from './templates'
 
 export const api = {
   auth: authApi,
@@ -14,6 +16,8 @@ export const api = {
   upload: uploadFile,
   legal: legalApi,
   admin: adminApi,
+  consents: consentsApi,
+  templates: templatesApi,
 }
 
 export { apiRequest } from './client'
@@ -22,5 +26,7 @@ export { useApiLoading } from './useApiLoading'
 export type * from './types'
 export type * from './policyTypes'
 export type * from './adminTypes'
+export type * from './consents'
+export type * from './templates'
 
 export default api
