@@ -26,6 +26,8 @@ import {
   ChevronLeft,
   FileEdit,
   Activity,
+  CreditCard,
+  ReceiptText,
 } from "lucide-react";
 import {
   fetchContact,
@@ -40,6 +42,7 @@ import type {
   ConsentPurpose,
   PolicyActivityLog,
   PolicyActivityType,
+  MerchantBillingHistory,
 } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/services/api";
@@ -105,7 +108,10 @@ const merchantNavGroups = [
   },
   {
     label: "บัญชี",
-    items: [{ key: "settings", label: "ตั้งค่าบัญชี", Icon: Settings }],
+    items: [
+      { key: "billing", label: "แพ็กเกจและการชำระเงิน", Icon: CreditCard },
+      { key: "settings", label: "ตั้งค่าบัญชี", Icon: Settings },
+    ],
   },
 ];
 
@@ -1414,6 +1420,242 @@ function ActivityLogsView() {
   );
 }
 
+function MerchantBillingView() {
+  const [history, setHistory] = useState<MerchantBillingHistory | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [paymentPage, setPaymentPage] = useState(1);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [canceling, setCanceling] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void api.billing.history().then((response) => {
+      if (!active) return;
+      if (response.success && response.data) setHistory(response.data);
+      else setError(response.error?.message ?? "ไม่สามารถโหลดข้อมูลการชำระเงินได้");
+      setLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const subscriptions = history?.subscriptions ?? [];
+  const payments = history?.payments ?? [];
+  const pageSize = 10;
+  const paymentPages = Math.max(1, Math.ceil(payments.length / pageSize));
+  const visiblePayments = payments.slice(
+    (paymentPage - 1) * pageSize,
+    paymentPage * pageSize,
+  );
+  const current = subscriptions.find((item) =>
+    ["active", "trialing", "past_due", "unpaid"].includes(item.status),
+  );
+  const overduePayment = payments
+    .filter((item) => item.status === "failed")
+    .at(-1);
+  const overdueDays = overduePayment?.createdAt
+    ? Math.max(
+        1,
+        Math.floor(
+          (Date.now() - new Date(overduePayment.createdAt).getTime()) /
+            86_400_000,
+        ) + 1,
+      )
+    : null;
+  const graceDaysLeft = overdueDays
+    ? Math.max(0, 15 - overdueDays)
+    : null;
+  const formatDate = (value?: string | null) =>
+    value
+      ? new Intl.DateTimeFormat("th-TH", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }).format(new Date(value))
+      : "—";
+  const planLabel = current?.plan
+    ? current.plan.charAt(0).toUpperCase() + current.plan.slice(1)
+    : "ยังไม่มีแพ็กเกจ";
+
+  const cancelPlan = async () => {
+    if (!current || canceling) return;
+    setCanceling(true);
+    const response = await api.billing.cancelSubscription(current.id);
+    setCanceling(false);
+    setCancelOpen(false);
+    if (!response.success || !response.data) {
+      setError(response.error?.message ?? "ไม่สามารถยกเลิกแพ็กเกจได้");
+      return;
+    }
+    setHistory((previous) =>
+      previous
+        ? {
+            ...previous,
+            subscriptions: previous.subscriptions.map((item) =>
+              item.id === current.id ? response.data! : item,
+            ),
+          }
+        : previous,
+    );
+  };
+
+  if (loading) {
+    return (
+      <div className="grid min-h-64 place-items-center rounded-xl border border-gray-100 bg-white">
+        <Loader className="h-5 w-5 animate-spin text-emerald-700" />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <ConfirmDialog
+        open={cancelOpen}
+        title="ยกเลิกการต่ออายุแพ็กเกจหรือไม่?"
+        description={`แพ็กเกจ ${planLabel} ยังใช้งานได้จนถึง ${formatDate(current?.currentPeriodEnd)} และจะไม่ต่ออายุในรอบถัดไป`}
+        confirmLabel={canceling ? "กำลังยกเลิก..." : "ยกเลิกเมื่อสิ้นสุดรอบ"}
+        cancelLabel="ใช้แพ็กเกจต่อ"
+        onConfirm={() => void cancelPlan()}
+        onCancel={() => !canceling && setCancelOpen(false)}
+      />
+      <div className="mb-6">
+        <p className="mb-2 font-mono text-[11px] uppercase tracking-wider text-emerald-700">
+          Billing account
+        </p>
+        <h1 className="text-2xl font-bold text-gray-900">แพ็กเกจและการชำระเงิน</h1>
+        <p className="mt-1 text-sm text-gray-500">
+          ตรวจสอบรอบบริการ สถานะแพ็กเกจ และประวัติการชำระเงินของบัญชีคุณ
+        </p>
+      </div>
+
+      {error ? (
+        <div className="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+      ) : (
+        <>
+          {current && ["past_due", "unpaid"].includes(current.status) ? (
+            <div className="mb-5 border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              <p className="font-bold">
+                {graceDaysLeft === 0
+                  ? "แพ็กเกจถูกหยุดใช้งานเนื่องจากค้างชำระ"
+                  : "แพ็กเกจถูกจำกัดเนื่องจากค้างชำระ"}
+              </p>
+              <p className="mt-1 text-xs leading-5">
+                {graceDaysLeft === 0
+                  ? "คุณยังเข้าสู่ระบบและดูประวัติการชำระเงินได้ แต่ฟีเจอร์ในแพ็กเกจและเอกสารสาธารณะถูกหยุดแล้ว"
+                  : "ยังดูข้อมูลและเอกสารเดิมได้ แต่สร้างหรือแก้ไข Policy ไม่ได้"}
+                {graceDaysLeft !== null && graceDaysLeft > 0
+                  ? ` · เหลือ ${graceDaysLeft} วันก่อนหยุดสิทธิ์แพ็กเกจอัตโนมัติ`
+                  : graceDaysLeft === null
+                    ? " · กรุณาชำระภายใน 14 วันเพื่อป้องกันการหยุดสิทธิ์แพ็กเกจ"
+                    : ""}
+              </p>
+            </div>
+          ) : null}
+          <section className="mb-6 overflow-hidden rounded-xl border border-emerald-200 bg-white">
+            <div className="grid gap-6 bg-[linear-gradient(110deg,#073f33,#0b6b52)] p-6 text-white md:grid-cols-[1fr_auto] md:items-end">
+              <div>
+                <p className="text-xs text-emerald-100">แพ็กเกจปัจจุบัน</p>
+                <p className="mt-2 text-3xl font-black tracking-tight">{planLabel}</p>
+                <p className="mt-2 text-xs text-emerald-100">
+                  {current?.billingCycle === "annual" ? "เรียกเก็บรายปี" : current ? "เรียกเก็บรายเดือน" : "เลือกแพ็กเกจเมื่อสร้างนโยบาย"}
+                </p>
+              </div>
+              <div className="text-left md:text-right">
+                <p className="text-xs text-emerald-100">รอบบริการถัดไป</p>
+                <p className="mt-1 font-mono text-sm font-semibold">{formatDate(current?.currentPeriodEnd)}</p>
+                {current && !current.cancelAtPeriodEnd ? (
+                  <button
+                    type="button"
+                    onClick={() => setCancelOpen(true)}
+                    className="mt-4 rounded-md border border-white/40 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                  >
+                    ยกเลิกการต่ออายุ
+                  </button>
+                ) : current?.cancelAtPeriodEnd ? (
+                  <p className="mt-4 text-xs font-semibold text-amber-200">กำหนดยกเลิกเมื่อสิ้นสุดรอบแล้ว</p>
+                ) : null}
+              </div>
+            </div>
+            <div className="grid divide-y divide-gray-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+              {[
+                ["สถานะ", current?.status ?? "ไม่มีรายการ"],
+                ["เริ่มรอบปัจจุบัน", formatDate(current?.currentPeriodStart)],
+                ["การยกเลิก", current?.cancelAtPeriodEnd ? "สิ้นสุดเมื่อครบรอบ" : "ต่ออายุอัตโนมัติ"],
+              ].map(([label, value]) => (
+                <div key={label} className="p-4">
+                  <p className="text-[11px] text-gray-400">{label}</p>
+                  <p className="mt-1 text-sm font-semibold text-gray-800">{value}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="overflow-hidden rounded-xl border border-gray-100 bg-white">
+            <header className="flex items-center gap-3 border-b border-gray-100 px-5 py-4">
+              <span className="grid h-9 w-9 place-items-center rounded-lg bg-emerald-50 text-emerald-700">
+                <ReceiptText className="h-4 w-4" />
+              </span>
+              <div>
+                <h2 className="text-sm font-bold text-gray-900">ประวัติการชำระเงิน</h2>
+                <p className="text-xs text-gray-400">แสดงสูงสุด 100 รายการล่าสุด</p>
+              </div>
+            </header>
+            {payments.length ? (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[680px] text-left text-sm">
+                  <thead className="bg-slate-50 text-[11px] text-gray-500">
+                    <tr><th className="px-5 py-3">เลขอ้างอิงใบแจ้งหนี้</th><th className="px-5 py-3">วันที่</th><th className="px-5 py-3">ยอดชำระ</th><th className="px-5 py-3">สถานะ</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {visiblePayments.map((payment) => (
+                      <tr key={payment.id} className="hover:bg-slate-50/70">
+                        <td className="px-5 py-4 font-mono text-xs text-gray-600">{payment.invoiceReference}</td>
+                        <td className="px-5 py-4 text-gray-600">{formatDate(payment.paidAt ?? payment.createdAt)}</td>
+                        <td className="px-5 py-4 font-semibold text-gray-900">{new Intl.NumberFormat("th-TH", { style: "currency", currency: payment.currency.toUpperCase() }).format(payment.amountPaid / 100)}</td>
+                        <td className="px-5 py-4"><StatusBadge status={payment.status} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="px-5 py-12 text-center text-sm text-gray-400">ยังไม่มีประวัติการชำระเงินที่บันทึกจาก Stripe</div>
+            )}
+            {payments.length > pageSize ? (
+              <footer className="flex items-center justify-between border-t border-gray-100 px-5 py-3">
+                <p className="text-xs text-gray-400">
+                  แสดง {(paymentPage - 1) * pageSize + 1}–{Math.min(paymentPage * pageSize, payments.length)} จาก {payments.length} รายการ
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    aria-label="หน้าก่อนหน้า"
+                    disabled={paymentPage === 1}
+                    onClick={() => setPaymentPage((page) => Math.max(1, page - 1))}
+                    className="grid h-8 w-8 place-items-center rounded border border-gray-200 text-gray-600 disabled:opacity-30"
+                  ><ChevronLeft className="h-4 w-4" /></button>
+                  <span className="min-w-14 text-center font-mono text-xs text-gray-500">{paymentPage} / {paymentPages}</span>
+                  <button
+                    type="button"
+                    aria-label="หน้าถัดไป"
+                    disabled={paymentPage === paymentPages}
+                    onClick={() => setPaymentPage((page) => Math.min(paymentPages, page + 1))}
+                    className="grid h-8 w-8 place-items-center rounded border border-gray-200 text-gray-600 disabled:opacity-30"
+                  ><ChevronRight className="h-4 w-4" /></button>
+                </div>
+              </footer>
+            ) : null}
+          </section>
+        </>
+      )}
+    </div>
+  );
+}
+
 function AccountSettings({ user }: { user: AuthUser }) {
   const navigate = useNavigate();
   const { updateUser } = useAuth();
@@ -1902,7 +2144,8 @@ export default function Dashboard() {
       requestedView === "policies" ||
       requestedView === "activity" ||
       requestedView === "consents" ||
-      requestedView === "templates"
+      requestedView === "templates" ||
+      requestedView === "billing"
       ? requestedView
       : "overview",
   );
@@ -2136,6 +2379,7 @@ export default function Dashboard() {
             {activeView === "activity" && <ActivityLogsView />}
             {activeView === "consents" && <ConsentManagement />}
             {activeView === "templates" && <DocumentTemplates />}
+            {activeView === "billing" && <MerchantBillingView />}
             {activeView === "settings" && <AccountSettings user={user} />}
           </main>
         </div>

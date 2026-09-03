@@ -89,6 +89,10 @@ export const adminApi = {
       summary: { totalCollected: number; pending: number; failed: number };
       pagination: AdminPagination;
     }>(`${API_ENDPOINTS.admin.payments}${query(params)}`),
+  getPayment: (paymentId: string) =>
+    apiRequest<{ payment: import("./adminTypes").AdminPaymentDetail }>(
+      API_ENDPOINTS.admin.payment(paymentId),
+    ),
   listPolicies: (
     params: {
       status?: string;
