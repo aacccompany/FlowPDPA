@@ -14,6 +14,16 @@ export const API_ENDPOINTS = {
     changePassword: '/profile/change-password',
   },
   templates: { root: '/templates' },
+  billing: {
+    checkoutSessions: '/billing/checkout-sessions',
+    checkoutSession: (sessionId: string) =>
+      `/billing/checkout-sessions/${encodeURIComponent(sessionId)}`,
+    subscriptions: '/billing/subscriptions',
+    history: '/billing/history',
+    portalSessions: '/billing/portal-sessions',
+    cancelSubscription: (subscriptionId: string) =>
+      `/billing/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`,
+  },
   consents: {
     forms: '/consents/forms',
     form: (formId: string) => `/consents/forms/${encodeURIComponent(formId)}`,
@@ -49,6 +59,8 @@ export const API_ENDPOINTS = {
     merchantStatus: (merchantId: string) => `/admin/merchants/${encodeURIComponent(merchantId)}/status`,
     subscriptions: '/admin/subscriptions',
     payments: '/admin/payments',
+    payment: (paymentId: string) =>
+      `/admin/payments/${encodeURIComponent(paymentId)}`,
     policies: '/admin/policies',
     policy: (policyId: string) => `/admin/policies/${encodeURIComponent(policyId)}`,
     assignLegal: (policyId: string) => `/admin/policies/${encodeURIComponent(policyId)}/assign-legal`,

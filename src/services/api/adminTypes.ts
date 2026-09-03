@@ -28,6 +28,10 @@ export interface AdminSubscription {
   currentPeriodStart: string | null;
   currentPeriodEnd: string | null;
   createdAt: string | null;
+  plan?: string | null;
+  billingCycle?: string | null;
+  stripeSubscriptionId?: string | null;
+  stripePriceId?: string | null;
 }
 
 export interface AdminPayment {
@@ -43,6 +47,36 @@ export interface AdminPayment {
   status: string;
   paidAt: string | null;
   createdAt: string | null;
+  plan?: string | null;
+  billingCycle?: string | null;
+  stripeSubscriptionId?: string | null;
+}
+
+export interface AdminPaymentDetail extends AdminPayment {
+  invoiceNumber: string | null;
+  customerEmail: string | null;
+  customerName: string | null;
+  stripeCustomerId: string | null;
+  collectionMethod: string | null;
+  subtotal: number;
+  total: number;
+  amountDue: number;
+  amountRemaining: number;
+  periodStart: string | null;
+  periodEnd: string | null;
+  dueDate: string | null;
+  hostedInvoiceUrl: string | null;
+  invoicePdf: string | null;
+  description: string | null;
+  lines: Array<{
+    id: string;
+    description: string | null;
+    quantity: number | null;
+    amount: number;
+    currency: string;
+    periodStart: string | null;
+    periodEnd: string | null;
+  }>;
 }
 
 export interface AdminPolicy {

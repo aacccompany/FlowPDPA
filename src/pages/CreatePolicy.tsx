@@ -1,338 +1,641 @@
-import { useState, useCallback, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { Check, ChevronRight, ChevronLeft, X, Clock, CheckCircle, ShieldCheck, Search, Loader2, Building2, AlertCircle, UserRound, Languages } from 'lucide-react'
-import { PolicyTypeIcon } from '@/components/policy/PolicyTypeIcon'
-import { isValidEmail, isValidThaiPhone, isValidWebsiteUrl, normalizeWebsiteUrl, sanitizeThaiPhone } from '@/utils/validation'
-import { storage } from '@/utils/storage'
-import { api } from '@/services/api'
-import type { PolicyQuestionnaire, UserProfile } from '@/services/api'
+import { useState, useCallback, useEffect, useRef } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  Check,
+  ChevronRight,
+  ChevronLeft,
+  X,
+  Clock,
+  CheckCircle,
+  ShieldCheck,
+  Search,
+  Loader2,
+  Building2,
+  AlertCircle,
+  UserRound,
+  Languages,
+  CreditCard,
+} from "lucide-react";
+import { PolicyTypeIcon } from "@/components/policy/PolicyTypeIcon";
+import {
+  isValidEmail,
+  isValidThaiPhone,
+  isValidWebsiteUrl,
+  normalizeWebsiteUrl,
+  sanitizeThaiPhone,
+} from "@/utils/validation";
+import { storage } from "@/utils/storage";
+import { api } from "@/services/api";
+import type { PolicyQuestionnaire, UserProfile } from "@/services/api";
 
 // ── Thai RD Company Lookup ────────────────────────────────────
 // Replace with real Thai RD VAT API calls via your backend proxy
 // (https://rdws.rd.go.th/serviceRD3/vatregistrationRI.asmx)
-type RDSearchType = 'taxId' | 'name'
+type RDSearchType = "taxId" | "name";
 
 async function lookupThaiCompany(
   query: string,
   type: RDSearchType,
 ): Promise<{ name: string; taxId?: string; address: string } | null> {
-  await new Promise(r => setTimeout(r, 1400))
-  if (type === 'taxId') {
-    const clean = query.replace(/\D/g, '')
+  await new Promise((r) => setTimeout(r, 1400));
+  if (type === "taxId") {
+    const clean = query.replace(/\D/g, "");
     if (clean.length === 13) {
-      return { name: 'บริษัท ตัวอย่าง จำกัด', taxId: clean, address: '123/45 ถนนสุขุมวิท แขวงคลองเตย เขตคลองเตย กรุงเทพมหานคร 10110' }
+      return {
+        name: "บริษัท ตัวอย่าง จำกัด",
+        taxId: clean,
+        address:
+          "123/45 ถนนสุขุมวิท แขวงคลองเตย เขตคลองเตย กรุงเทพมหานคร 10110",
+      };
     }
   } else {
     if (query.trim().length >= 3) {
-      return { name: query.trim(), taxId: '0105565012345', address: '123/45 ถนนสุขุมวิท แขวงคลองเตย เขตคลองเตย กรุงเทพมหานคร 10110' }
+      return {
+        name: query.trim(),
+        taxId: "0105565012345",
+        address:
+          "123/45 ถนนสุขุมวิท แขวงคลองเตย เขตคลองเตย กรุงเทพมหานคร 10110",
+      };
     }
   }
-  return null
+  return null;
 }
 
 // ── Types ─────────────────────────────────────────────────────
-type PolicyType = 'privacy' | 'hr' | 'cctv' | 'recruitment' | 'vendor' | 'dpa'
+type PolicyType = "privacy" | "hr" | "cctv" | "recruitment" | "vendor" | "dpa";
+type CheckoutPackage = "personal" | "business" | "enterprise";
+type BillingCycle = "monthly" | "annual";
 
 interface FormData {
-  policyType: PolicyType | null
-  agreedToTerms: boolean
+  policyType: PolicyType | null;
+  agreedToTerms: boolean;
   // Step 2
-  ownerType: 'person' | 'company'
-  ownerFullName: string
-  ownerIdCard: string
-  companyName: string
-  companyRegNumber: string
-  businessType: string
-  websiteName: string
-  websiteUrl: string
-  contactEmail: string
-  contactPhone: string
-  address: string
+  ownerType: "person" | "company";
+  ownerFullName: string;
+  ownerIdCard: string;
+  companyName: string;
+  companyRegNumber: string;
+  businessType: string;
+  websiteName: string;
+  websiteUrl: string;
+  contactEmail: string;
+  contactPhone: string;
+  address: string;
   // Step 3
-  dataTypes: string[]
+  dataTypes: string[];
   // Step 4
-  purposes: string[]
-  thirdParties: string[]
+  purposes: string[];
+  thirdParties: string[];
   // Step 5
-  language: string
-  dpoEmail: string
-  retentionPeriod: string
-  exportFormat: string[]
+  language: string;
+  dpoEmail: string;
+  retentionPeriod: string;
+  exportFormat: string[];
 }
 
 // ── Constants ─────────────────────────────────────────────────
 const policyTypes = [
-  { key: 'privacy',     label: 'Privacy + Cookies Policy',       price: 'ฟรี',       free: true,  comingSoon: false },
-  { key: 'hr',          label: 'HR Privacy Policy',              price: '1,199 ฿',   free: false, comingSoon: true },
-  { key: 'cctv',        label: 'CCTV Policy',                    price: '899 ฿',     free: false, comingSoon: true },
-  { key: 'recruitment', label: 'Recruitment Privacy Policy',     price: '1,299 ฿',   free: false, comingSoon: true },
-  { key: 'vendor',      label: 'Vendor Privacy Policy',          price: '1,299 ฿',   free: false, comingSoon: true },
-  { key: 'dpa',         label: 'Data Processing Agreement',      price: '1,499 ฿',   free: false, comingSoon: true },
-]
+  {
+    key: "privacy",
+    label: "Privacy + Cookies Policy",
+    price: "เริ่มต้น 590 ฿/เดือน",
+    free: false,
+    comingSoon: false,
+  },
+  {
+    key: "hr",
+    label: "HR Privacy Policy",
+    price: "1,199 ฿",
+    free: false,
+    comingSoon: true,
+  },
+  {
+    key: "cctv",
+    label: "CCTV Policy",
+    price: "899 ฿",
+    free: false,
+    comingSoon: true,
+  },
+  {
+    key: "recruitment",
+    label: "Recruitment Privacy Policy",
+    price: "1,299 ฿",
+    free: false,
+    comingSoon: true,
+  },
+  {
+    key: "vendor",
+    label: "Vendor Privacy Policy",
+    price: "1,299 ฿",
+    free: false,
+    comingSoon: true,
+  },
+  {
+    key: "dpa",
+    label: "Data Processing Agreement",
+    price: "1,499 ฿",
+    free: false,
+    comingSoon: true,
+  },
+];
 
 const businessTypes = [
-  'ร้านค้าออนไลน์ (E-Commerce)',
-  'บริษัทจำกัด / บริษัทมหาชน',
-  'SME / วิสาหกิจขนาดกลางและเล็ก',
-  'สตาร์ทอัป (Startup)',
-  'ฟรีแลนซ์ / บุคคลธรรมดา',
-  'หน่วยงานราชการ / NGO',
-  'คลินิก / โรงพยาบาล',
-  'สถาบันการศึกษา',
-  'อื่นๆ',
-]
+  "ร้านค้าออนไลน์ (E-Commerce)",
+  "บริษัทจำกัด / บริษัทมหาชน",
+  "SME / วิสาหกิจขนาดกลางและเล็ก",
+  "สตาร์ทอัป (Startup)",
+  "ฟรีแลนซ์ / บุคคลธรรมดา",
+  "หน่วยงานราชการ / NGO",
+  "คลินิก / โรงพยาบาล",
+  "สถาบันการศึกษา",
+  "อื่นๆ",
+];
 
 const dataTypeOptions = [
-  { key: 'name',       label: 'ชื่อ-นามสกุล' },
-  { key: 'email',      label: 'อีเมล' },
-  { key: 'phone',      label: 'เบอร์โทรศัพท์' },
-  { key: 'address',    label: 'ที่อยู่' },
-  { key: 'payment',    label: 'ข้อมูลการชำระเงิน (บัตรเครดิต/โอน)' },
-  { key: 'idcard',     label: 'เลขบัตรประชาชน / หนังสือเดินทาง' },
-  { key: 'dob',        label: 'วันเดือนปีเกิด / อายุ' },
-  { key: 'location',   label: 'ข้อมูลตำแหน่งที่ตั้ง (GPS)' },
-  { key: 'behavior',   label: 'พฤติกรรมการใช้งานเว็บไซต์' },
-  { key: 'ip',         label: 'IP Address / Device Info' },
-  { key: 'health',     label: 'ข้อมูลสุขภาพ (ข้อมูลอ่อนไหว)', sensitive: true },
-  { key: 'religion',   label: 'ศาสนา / ความเชื่อ (ข้อมูลอ่อนไหว)', sensitive: true },
-  { key: 'biometric',  label: 'ข้อมูลชีวมิติ (ลายนิ้วมือ, ใบหน้า)', sensitive: true },
-]
+  { key: "name", label: "ชื่อ-นามสกุล" },
+  { key: "email", label: "อีเมล" },
+  { key: "phone", label: "เบอร์โทรศัพท์" },
+  { key: "address", label: "ที่อยู่" },
+  { key: "payment", label: "ข้อมูลการชำระเงิน (บัตรเครดิต/โอน)" },
+  { key: "idcard", label: "เลขบัตรประชาชน / หนังสือเดินทาง" },
+  { key: "dob", label: "วันเดือนปีเกิด / อายุ" },
+  { key: "location", label: "ข้อมูลตำแหน่งที่ตั้ง (GPS)" },
+  { key: "behavior", label: "พฤติกรรมการใช้งานเว็บไซต์" },
+  { key: "ip", label: "IP Address / Device Info" },
+  { key: "health", label: "ข้อมูลสุขภาพ (ข้อมูลอ่อนไหว)", sensitive: true },
+  {
+    key: "religion",
+    label: "ศาสนา / ความเชื่อ (ข้อมูลอ่อนไหว)",
+    sensitive: true,
+  },
+  {
+    key: "biometric",
+    label: "ข้อมูลชีวมิติ (ลายนิ้วมือ, ใบหน้า)",
+    sensitive: true,
+  },
+];
 
 const purposeOptions = [
-  { key: 'service',    label: 'ให้บริการหลักแก่ผู้ใช้งาน' },
-  { key: 'order',      label: 'ดำเนินการคำสั่งซื้อและจัดส่งสินค้า' },
-  { key: 'contact',    label: 'ติดต่อกลับและตอบคำถามลูกค้า' },
-  { key: 'payment',    label: 'ดำเนินการชำระเงิน' },
-  { key: 'marketing',  label: 'ส่งข้อเสนอและข่าวสารการตลาด (ต้องได้รับความยินยอม)' },
-  { key: 'analytics',  label: 'วิเคราะห์และปรับปรุงคุณภาพบริการ' },
-  { key: 'legal',      label: 'ปฏิบัติตามข้อกำหนดทางกฎหมาย' },
-  { key: 'security',   label: 'ป้องกันการทุจริตและรักษาความปลอดภัย' },
-]
+  { key: "service", label: "ให้บริการหลักแก่ผู้ใช้งาน" },
+  { key: "order", label: "ดำเนินการคำสั่งซื้อและจัดส่งสินค้า" },
+  { key: "contact", label: "ติดต่อกลับและตอบคำถามลูกค้า" },
+  { key: "payment", label: "ดำเนินการชำระเงิน" },
+  {
+    key: "marketing",
+    label: "ส่งข้อเสนอและข่าวสารการตลาด (ต้องได้รับความยินยอม)",
+  },
+  { key: "analytics", label: "วิเคราะห์และปรับปรุงคุณภาพบริการ" },
+  { key: "legal", label: "ปฏิบัติตามข้อกำหนดทางกฎหมาย" },
+  { key: "security", label: "ป้องกันการทุจริตและรักษาความปลอดภัย" },
+];
 
 const thirdPartyOptions = [
-  { key: 'ga',         label: 'Google Analytics' },
-  { key: 'gtm',        label: 'Google Tag Manager' },
-  { key: 'gads',       label: 'Google Ads' },
-  { key: 'fb',         label: 'Facebook Pixel / Meta Ads' },
-  { key: 'line',       label: 'LINE Official Account' },
-  { key: 'stripe',     label: 'Stripe (การชำระเงิน)' },
-  { key: 'omise',      label: 'Omise / GB Prime Pay (การชำระเงิน)' },
-  { key: 'aws',        label: 'AWS / Google Cloud (Hosting)' },
-  { key: 'mailchimp',  label: 'Mailchimp / Klaviyo (Email Marketing)' },
-  { key: 'zendesk',    label: 'Zendesk / Freshdesk (Customer Support)' },
-  { key: 'none',       label: 'ไม่มีบุคคลที่สาม' },
-]
+  { key: "ga", label: "Google Analytics" },
+  { key: "gtm", label: "Google Tag Manager" },
+  { key: "gads", label: "Google Ads" },
+  { key: "fb", label: "Facebook Pixel / Meta Ads" },
+  { key: "line", label: "LINE Official Account" },
+  { key: "stripe", label: "Stripe (การชำระเงิน)" },
+  { key: "omise", label: "Omise / GB Prime Pay (การชำระเงิน)" },
+  { key: "aws", label: "AWS / Google Cloud (Hosting)" },
+  { key: "mailchimp", label: "Mailchimp / Klaviyo (Email Marketing)" },
+  { key: "zendesk", label: "Zendesk / Freshdesk (Customer Support)" },
+  { key: "none", label: "ไม่มีบุคคลที่สาม" },
+];
 
 const retentionOptions = [
-  '1 ปี', '2 ปี', '3 ปี', '5 ปี', '7 ปี (ตามกฎหมายภาษี)', '10 ปี', 'ตลอดระยะเวลาการใช้บริการ'
-]
+  "1 ปี",
+  "2 ปี",
+  "3 ปี",
+  "5 ปี",
+  "7 ปี (ตามกฎหมายภาษี)",
+  "10 ปี",
+  "ตลอดระยะเวลาการใช้บริการ",
+];
 
 // ── Step labels ───────────────────────────────────────────────
 const steps = [
-  { num: 1, label: 'เลือกประเภท' },
-  { num: 2, label: 'ข้อมูลธุรกิจ' },
-  { num: 3, label: 'ข้อมูลที่เก็บ' },
-  { num: 4, label: 'วัตถุประสงค์' },
-  { num: 5, label: 'การตั้งค่า' },
-  { num: 6, label: 'ตรวจสอบ' },
-]
+  { num: 1, label: "เลือกประเภท" },
+  { num: 2, label: "ข้อมูลธุรกิจ" },
+  { num: 3, label: "ข้อมูลที่เก็บ" },
+  { num: 4, label: "วัตถุประสงค์" },
+  { num: 5, label: "การตั้งค่า" },
+  { num: 6, label: "ตรวจสอบ" },
+];
+
+const checkoutPackages: Array<{
+  id: CheckoutPackage;
+  name: string;
+  audience: string;
+  monthlyPrice: number;
+  annualPrice: number;
+  annualMonthlyAverage: number;
+  description: string;
+  features: string[];
+  recommended?: boolean;
+}> = [
+  {
+    id: "personal",
+    name: "Personal",
+    audience: "บุคคลธรรมดา / Freelancer / ร้านเล็ก",
+    monthlyPrice: 590,
+    annualPrice: 5900,
+    annualMonthlyAverage: 492,
+    description: "สำหรับผู้ประกอบการรายบุคคลและธุรกิจขนาดเล็ก",
+    features: [
+      "สร้างและเผยแพร่นโยบาย",
+      "Consent Management",
+      "บันทึกกิจกรรมและหลักฐาน",
+    ],
+  },
+  {
+    id: "business",
+    name: "Business",
+    audience: "นิติบุคคล รายได้ไม่เกิน 50 ล้านบาท/ปี",
+    monthlyPrice: 1990,
+    annualPrice: 19900,
+    annualMonthlyAverage: 1658,
+    description: "สำหรับธุรกิจที่ต้องจัดการเอกสารและ Consent อย่างต่อเนื่อง",
+    features: [
+      "นโยบายสูงสุด 10 ฉบับ",
+      "Consent Management และหลักฐาน",
+      "ส่งตรวจฝ่ายกฎหมาย",
+      "ส่งออก PDF และ DOCX",
+    ],
+    recommended: true,
+  },
+  {
+    id: "enterprise",
+    name: "Enterprise",
+    audience: "นิติบุคคล รายได้มากกว่า 50 ล้านบาท/ปี",
+    monthlyPrice: 4990,
+    annualPrice: 49900,
+    annualMonthlyAverage: 4158,
+    description: "สำหรับองค์กรที่มีเอกสารและกระบวนการหลายรูปแบบ",
+    features: [
+      "นโยบายไม่จำกัด",
+      "ทุกฟีเจอร์ใน Business",
+      "ตรวจสอบด้านกฎหมายแบบเร่งด่วน",
+      "บันทึกกิจกรรมขั้นสูง",
+    ],
+  },
+];
 
 // ── Shared input styles ───────────────────────────────────────
-const inputCls = "w-full border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-800 focus:outline-none transition-colors"
-const onInputFocus = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
-  (e.currentTarget.style.borderColor = 'var(--green)')
-const onInputBlur  = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
-  (e.currentTarget.style.borderColor = '#e5e7eb')
+const inputCls =
+  "w-full border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-800 focus:outline-none transition-colors";
+const onInputFocus = (
+  e: React.FocusEvent<
+    HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+  >,
+) => (e.currentTarget.style.borderColor = "var(--green)");
+const onInputBlur = (
+  e: React.FocusEvent<
+    HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+  >,
+) => (e.currentTarget.style.borderColor = "#e5e7eb");
 
-function FormField({ label, value, onChange, type = 'text', placeholder = '', required = false }: {
-  label: string; value: string; onChange: (v: string) => void
-  type?: string; placeholder?: string; required?: boolean
+function FormField({
+  label,
+  value,
+  onChange,
+  type = "text",
+  placeholder = "",
+  required = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+  placeholder?: string;
+  required?: boolean;
 }) {
   return (
     <div>
       <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
-        {label} {required && <span className="text-red-400 normal-case font-normal ml-1">*</span>}
+        {label}{" "}
+        {required && (
+          <span className="text-red-400 normal-case font-normal ml-1">*</span>
+        )}
       </label>
       <input
-        type={type} value={value} placeholder={placeholder}
-        onChange={e => onChange(e.target.value)}
-        className={inputCls} onFocus={onInputFocus} onBlur={onInputBlur}
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        className={inputCls}
+        onFocus={onInputFocus}
+        onBlur={onInputBlur}
       />
     </div>
-  )
+  );
 }
 
 // ── Reusable UI ───────────────────────────────────────────────
 function CheckboxCard({
-  label, checked, onChange, tag,
-}: { label: string; checked: boolean; onChange: () => void; tag?: string }) {
+  label,
+  checked,
+  onChange,
+  tag,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: () => void;
+  tag?: string;
+}) {
   return (
     <label
       onClick={onChange}
       className="flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all select-none"
       style={{
-        borderColor: checked ? 'var(--green)' : '#e5e7eb',
-        backgroundColor: checked ? 'rgba(5,150,105,0.04)' : 'white',
+        borderColor: checked ? "var(--green)" : "#e5e7eb",
+        backgroundColor: checked ? "rgba(5,150,105,0.04)" : "white",
       }}
     >
       <span
         className="w-4 h-4 rounded flex items-center justify-center shrink-0 transition-colors"
-        style={{ backgroundColor: checked ? 'var(--green)' : 'white', border: checked ? 'none' : '1.5px solid #d1d5db' }}
+        style={{
+          backgroundColor: checked ? "var(--green)" : "white",
+          border: checked ? "none" : "1.5px solid #d1d5db",
+        }}
       >
         {checked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
       </span>
       <span className="text-sm text-gray-700 leading-snug flex-1">{label}</span>
       {tag && (
-        <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: '#fef9c3', color: '#92400e' }}>
+        <span
+          className="text-xs font-semibold px-2 py-0.5 rounded-full"
+          style={{ backgroundColor: "#fef9c3", color: "#92400e" }}
+        >
           {tag}
         </span>
       )}
     </label>
-  )
+  );
 }
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
     <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-2">
-      <span className="block w-4 h-px bg-gray-300" />{children}
+      <span className="block w-4 h-px bg-gray-300" />
+      {children}
     </h3>
-  )
+  );
 }
 
-function ReviewRow({ label, value }: { label: string; value: React.ReactNode }) {
+function ReviewRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
   return (
     <div className="flex items-start gap-4 py-3 border-b border-gray-50 last:border-0">
-      <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider w-36 shrink-0 mt-0.5">{label}</span>
-      <span className="text-sm text-gray-800">{value || <span className="text-gray-300">ไม่ระบุ</span>}</span>
+      <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider w-36 shrink-0 mt-0.5">
+        {label}
+      </span>
+      <span className="text-sm text-gray-800">
+        {value || <span className="text-gray-300">ไม่ระบุ</span>}
+      </span>
     </div>
-  )
+  );
 }
 
 // ── Steps ─────────────────────────────────────────────────────
-function Step1({ data, setData }: { data: FormData; setData: (d: Partial<FormData>) => void }) {
+function Step1({
+  data,
+  setData,
+}: {
+  data: FormData;
+  setData: (d: Partial<FormData>) => void;
+}) {
   return (
     <div>
-      <h2 className="text-xl font-black text-gray-900 mb-1">เลือก Policy ที่ต้องการสร้าง</h2>
-      <p className="text-sm text-gray-400 mb-6">เลือกประเภทนโยบายที่ตรงกับความต้องการของธุรกิจคุณ</p>
+      <h2 className="text-xl font-black text-gray-900 mb-1">
+        เลือก Policy ที่ต้องการสร้าง
+      </h2>
+      <p className="text-sm text-gray-400 mb-6">
+        เลือกประเภทนโยบายที่ตรงกับความต้องการของธุรกิจคุณ
+      </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
         {policyTypes.map(({ key, label, price, free, comingSoon }) => {
-          const selected = data.policyType === key
+          const selected = data.policyType === key;
           return (
             <button
               key={key}
               type="button"
               disabled={comingSoon}
-              onClick={() => !comingSoon && setData({ policyType: key as PolicyType })}
+              onClick={() =>
+                !comingSoon && setData({ policyType: key as PolicyType })
+              }
               className="text-left p-5 rounded-xl border-2 transition-all relative overflow-hidden"
               style={{
-                borderColor: comingSoon ? '#e5e7eb' : selected ? 'var(--green)' : '#e5e7eb',
-                backgroundColor: comingSoon ? '#fafafa' : selected ? 'rgba(5,150,105,0.04)' : 'white',
-                boxShadow: selected ? '0 0 0 3px rgba(5,150,105,0.1)' : 'none',
+                borderColor: comingSoon
+                  ? "#e5e7eb"
+                  : selected
+                    ? "var(--green)"
+                    : "#e5e7eb",
+                backgroundColor: comingSoon
+                  ? "#fafafa"
+                  : selected
+                    ? "rgba(5,150,105,0.04)"
+                    : "white",
+                boxShadow: selected ? "0 0 0 3px rgba(5,150,105,0.1)" : "none",
                 opacity: comingSoon ? 0.6 : 1,
-                cursor: comingSoon ? 'not-allowed' : 'pointer',
+                cursor: comingSoon ? "not-allowed" : "pointer",
               }}
             >
               <div className="flex items-start justify-between mb-3">
                 <span
                   className="w-9 h-9 flex items-center justify-center rounded border"
                   style={{
-                    color: comingSoon ? '#98a2b3' : selected ? 'var(--green)' : '#475467',
-                    borderColor: comingSoon ? '#e4e7ec' : selected ? '#a9d5c8' : '#d0d5dd',
-                    backgroundColor: comingSoon ? '#f9fafb' : selected ? '#edf5f2' : '#ffffff',
+                    color: comingSoon
+                      ? "#98a2b3"
+                      : selected
+                        ? "var(--green)"
+                        : "#475467",
+                    borderColor: comingSoon
+                      ? "#e4e7ec"
+                      : selected
+                        ? "#a9d5c8"
+                        : "#d0d5dd",
+                    backgroundColor: comingSoon
+                      ? "#f9fafb"
+                      : selected
+                        ? "#edf5f2"
+                        : "#ffffff",
                   }}
                 >
                   <PolicyTypeIcon type={key} className="w-4.5 h-4.5" />
                 </span>
                 {comingSoon ? (
-                  <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: '#f1f5f9', color: '#64748b' }}>
+                  <span
+                    className="text-xs font-bold px-2 py-0.5 rounded-full"
+                    style={{ backgroundColor: "#f1f5f9", color: "#64748b" }}
+                  >
                     Coming Soon
                   </span>
                 ) : (
                   <span
                     className="text-xs font-bold px-2 py-0.5 rounded-full"
                     style={{
-                      backgroundColor: free ? 'rgba(5,150,105,0.1)' : '#f3f4f6',
-                      color: free ? 'var(--green)' : '#374151',
+                      backgroundColor: free ? "rgba(5,150,105,0.1)" : "#f3f4f6",
+                      color: free ? "var(--green)" : "#374151",
                     }}
                   >
                     {price}
                   </span>
                 )}
               </div>
-              <div className="font-bold text-sm mb-1 leading-snug" style={{ color: comingSoon ? '#9ca3af' : '#111827' }}>{label}</div>
+              <div
+                className="font-bold text-sm mb-1 leading-snug"
+                style={{ color: comingSoon ? "#9ca3af" : "#111827" }}
+              >
+                {label}
+              </div>
               {selected && !comingSoon && (
-                <div className="flex items-center gap-1 text-xs font-semibold mt-2" style={{ color: 'var(--green)' }}>
+                <div
+                  className="flex items-center gap-1 text-xs font-semibold mt-2"
+                  style={{ color: "var(--green)" }}
+                >
                   <CheckCircle className="w-3.5 h-3.5" /> เลือกแล้ว
                 </div>
               )}
             </button>
-          )
+          );
         })}
       </div>
 
-      <label className="flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition-colors" style={{ borderColor: data.agreedToTerms ? 'var(--green)' : '#e5e7eb', backgroundColor: data.agreedToTerms ? 'rgba(5,150,105,0.03)' : '#fafafa' }}>
+      <label
+        className="flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition-colors"
+        style={{
+          borderColor: data.agreedToTerms ? "var(--green)" : "#e5e7eb",
+          backgroundColor: data.agreedToTerms
+            ? "rgba(5,150,105,0.03)"
+            : "#fafafa",
+        }}
+      >
         <span
           className="w-5 h-5 rounded flex items-center justify-center shrink-0 mt-0.5 transition-colors"
-          style={{ backgroundColor: data.agreedToTerms ? 'var(--green)' : 'white', border: data.agreedToTerms ? 'none' : '1.5px solid #d1d5db' }}
+          style={{
+            backgroundColor: data.agreedToTerms ? "var(--green)" : "white",
+            border: data.agreedToTerms ? "none" : "1.5px solid #d1d5db",
+          }}
         >
-          {data.agreedToTerms && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+          {data.agreedToTerms && (
+            <Check className="w-3 h-3 text-white" strokeWidth={3} />
+          )}
         </span>
-        <input type="checkbox" className="hidden" checked={data.agreedToTerms} onChange={e => setData({ agreedToTerms: e.target.checked })} />
+        <input
+          type="checkbox"
+          className="hidden"
+          checked={data.agreedToTerms}
+          onChange={(e) => setData({ agreedToTerms: e.target.checked })}
+        />
         <span className="text-sm text-gray-600 leading-relaxed">
-          ฉันยอมรับ{' '}
-          <Link to="/terms" className="underline font-semibold" style={{ color: 'var(--green)' }}>เงื่อนไขการใช้งาน</Link>
-          {' '}และ{' '}
-          <Link to="/privacy-policy" className="underline font-semibold" style={{ color: 'var(--green)' }}>นโยบายความเป็นส่วนตัว</Link>
-          {' '}ของ FlowPDPA
+          ฉันยอมรับ{" "}
+          <Link
+            to="/terms"
+            className="underline font-semibold"
+            style={{ color: "var(--green)" }}
+          >
+            เงื่อนไขการใช้งาน
+          </Link>{" "}
+          และ{" "}
+          <Link
+            to="/privacy-policy"
+            className="underline font-semibold"
+            style={{ color: "var(--green)" }}
+          >
+            นโยบายความเป็นส่วนตัว
+          </Link>{" "}
+          ของ FlowPDPA
         </span>
       </label>
     </div>
-  )
+  );
 }
 
 // ── Company Consent Modal ─────────────────────────────────────
-function CompanyConsentModal({ onAccept, onDecline }: { onAccept: () => void; onDecline: () => void }) {
-  const [checked, setChecked] = useState(false)
+function CompanyConsentModal({
+  onAccept,
+  onDecline,
+}: {
+  onAccept: () => void;
+  onDecline: () => void;
+}) {
+  const [checked, setChecked] = useState(false);
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
+      style={{
+        backgroundColor: "rgba(0,0,0,0.5)",
+        backdropFilter: "blur(4px)",
+      }}
     >
       <div
         className="w-full max-w-lg rounded-2xl overflow-hidden"
-        style={{ backgroundColor: 'white', boxShadow: '0 32px 64px -12px rgba(0,0,0,0.3)' }}
+        style={{
+          backgroundColor: "white",
+          boxShadow: "0 32px 64px -12px rgba(0,0,0,0.3)",
+        }}
       >
         {/* Header */}
         <div className="px-6 pt-6 pb-4 border-b border-gray-100">
           <div className="flex items-center gap-3 mb-1">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: 'rgba(5,150,105,0.1)' }}>
-              <Building2 className="w-5 h-5" style={{ color: 'var(--green)' }} />
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+              style={{ backgroundColor: "rgba(5,150,105,0.1)" }}
+            >
+              <Building2
+                className="w-5 h-5"
+                style={{ color: "var(--green)" }}
+              />
             </div>
             <div>
-              <h2 className="font-black text-gray-900 text-base">ยืนยันการสร้างนโยบายในนามนิติบุคคล</h2>
-              <p className="text-xs text-gray-400 mt-0.5">กรุณาอ่านและยืนยันก่อนดำเนินการต่อ</p>
+              <h2 className="font-black text-gray-900 text-base">
+                ยืนยันการสร้างนโยบายในนามนิติบุคคล
+              </h2>
+              <p className="text-xs text-gray-400 mt-0.5">
+                กรุณาอ่านและยืนยันก่อนดำเนินการต่อ
+              </p>
             </div>
           </div>
         </div>
 
         {/* Body */}
         <div className="px-6 py-5 space-y-4">
-          <div className="rounded-xl p-4 space-y-2.5 text-sm text-gray-700" style={{ backgroundColor: '#f8fafc', border: '1px solid #e5e7eb' }}>
+          <div
+            className="rounded-xl p-4 space-y-2.5 text-sm text-gray-700"
+            style={{ backgroundColor: "#f8fafc", border: "1px solid #e5e7eb" }}
+          >
             <p className="font-semibold text-gray-900 flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" style={{ color: 'var(--green)' }} />
+              <AlertCircle
+                className="w-4 h-4 shrink-0"
+                style={{ color: "var(--green)" }}
+              />
               ข้อกำหนดการใช้งานสำหรับนิติบุคคล
             </p>
             <ul className="space-y-2 text-xs text-gray-600 list-none pl-1">
               {[
-                'ข้าพเจ้ามีอำนาจหน้าที่ในการดำเนินการด้านนโยบายความเป็นส่วนตัวในนามของบริษัท / องค์กรนี้',
-                'ข้อมูลบริษัทที่กรอกถูกต้องตามความเป็นจริงและตรงกับเอกสารจดทะเบียนนิติบุคคล',
-                'นโยบายที่สร้างขึ้นจะถูกนำไปใช้งานจริงกับเว็บไซต์หรือแอปพลิเคชันของบริษัท',
-                'บริษัทยินยอมให้ FlowPDPA จัดเก็บข้อมูลที่กรอกเพื่อจัดทำและส่งมอบนโยบาย PDPA',
+                "ข้าพเจ้ามีอำนาจหน้าที่ในการดำเนินการด้านนโยบายความเป็นส่วนตัวในนามของบริษัท / องค์กรนี้",
+                "ข้อมูลบริษัทที่กรอกถูกต้องตามความเป็นจริงและตรงกับเอกสารจดทะเบียนนิติบุคคล",
+                "นโยบายที่สร้างขึ้นจะถูกนำไปใช้งานจริงกับเว็บไซต์หรือแอปพลิเคชันของบริษัท",
+                "บริษัทยินยอมให้ FlowPDPA จัดเก็บข้อมูลที่กรอกเพื่อจัดทำและส่งมอบนโยบาย PDPA",
               ].map((item, i) => (
                 <li key={i} className="flex items-start gap-2">
-                  <span className="w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold text-white" style={{ backgroundColor: 'var(--green)', minWidth: '1rem' }}>{i + 1}</span>
+                  <span
+                    className="w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold text-white"
+                    style={{
+                      backgroundColor: "var(--green)",
+                      minWidth: "1rem",
+                    }}
+                  >
+                    {i + 1}
+                  </span>
                   {item}
                 </li>
               ))}
@@ -342,16 +645,22 @@ function CompanyConsentModal({ onAccept, onDecline }: { onAccept: () => void; on
           {/* Checkbox */}
           <label
             className="flex items-start gap-3 cursor-pointer select-none"
-            onClick={() => setChecked(v => !v)}
+            onClick={() => setChecked((v) => !v)}
           >
             <span
               className="w-5 h-5 rounded flex items-center justify-center shrink-0 mt-0.5 transition-colors"
-              style={{ backgroundColor: checked ? 'var(--green)' : 'white', border: checked ? 'none' : '1.5px solid #d1d5db' }}
+              style={{
+                backgroundColor: checked ? "var(--green)" : "white",
+                border: checked ? "none" : "1.5px solid #d1d5db",
+              }}
             >
-              {checked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+              {checked && (
+                <Check className="w-3 h-3 text-white" strokeWidth={3} />
+              )}
             </span>
             <span className="text-sm text-gray-700 leading-relaxed">
-              ข้าพเจ้าได้อ่านและยอมรับข้อกำหนดข้างต้นทุกข้อ และมีอำนาจในการดำเนินการในนามองค์กร
+              ข้าพเจ้าได้อ่านและยอมรับข้อกำหนดข้างต้นทุกข้อ
+              และมีอำนาจในการดำเนินการในนามองค์กร
             </span>
           </label>
         </div>
@@ -362,9 +671,15 @@ function CompanyConsentModal({ onAccept, onDecline }: { onAccept: () => void; on
             type="button"
             onClick={onDecline}
             className="flex-1 py-3 text-sm font-semibold rounded-lg border transition-colors"
-            style={{ borderColor: '#e5e7eb', color: '#6b7280' }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = '#d1d5db'; e.currentTarget.style.color = '#374151' }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.color = '#6b7280' }}
+            style={{ borderColor: "#e5e7eb", color: "#6b7280" }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = "#d1d5db";
+              e.currentTarget.style.color = "#374151";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = "#e5e7eb";
+              e.currentTarget.style.color = "#6b7280";
+            }}
           >
             ยกเลิก
           </button>
@@ -373,99 +688,145 @@ function CompanyConsentModal({ onAccept, onDecline }: { onAccept: () => void; on
             disabled={!checked}
             onClick={onAccept}
             className="flex-1 py-3 text-sm font-bold text-white rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ backgroundColor: 'var(--green)', borderRadius: '8px' }}
+            style={{ backgroundColor: "var(--green)", borderRadius: "8px" }}
           >
             ยืนยันและดำเนินการต่อ
           </button>
         </div>
       </div>
     </div>
-  )
+  );
 }
 
-function Step2({ data, setData }: { data: FormData; setData: (d: Partial<FormData>) => void }) {
-  const isPerson = data.ownerType === 'person'
-  const [rdState, setRdState] = useState<'idle' | 'loading' | 'found' | 'error'>('idle')
-  const [rdError, setRdError] = useState('')
-  const [searchType, setSearchType] = useState<RDSearchType>('taxId')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [showConsent, setShowConsent] = useState(false)
+function Step2({
+  data,
+  setData,
+}: {
+  data: FormData;
+  setData: (d: Partial<FormData>) => void;
+}) {
+  const isPerson = data.ownerType === "person";
+  const [rdState, setRdState] = useState<
+    "idle" | "loading" | "found" | "error"
+  >("idle");
+  const [rdError, setRdError] = useState("");
+  const [searchType, setSearchType] = useState<RDSearchType>("taxId");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showConsent, setShowConsent] = useState(false);
 
-  const resetRd = () => { setRdState('idle'); setRdError(''); setSearchQuery('') }
+  const resetRd = () => {
+    setRdState("idle");
+    setRdError("");
+    setSearchQuery("");
+  };
 
   const handleLookup = async () => {
     if (!searchQuery.trim()) {
-      setRdError(searchType === 'taxId' ? 'กรุณากรอกเลขทะเบียนก่อนค้นหา' : 'กรุณากรอกชื่อบริษัทก่อนค้นหา')
-      setRdState('error')
-      return
+      setRdError(
+        searchType === "taxId"
+          ? "กรุณากรอกเลขทะเบียนก่อนค้นหา"
+          : "กรุณากรอกชื่อบริษัทก่อนค้นหา",
+      );
+      setRdState("error");
+      return;
     }
-    setRdState('loading')
-    setRdError('')
+    setRdState("loading");
+    setRdError("");
     try {
-      const result = await lookupThaiCompany(searchQuery, searchType)
+      const result = await lookupThaiCompany(searchQuery, searchType);
       if (result) {
         setData({
           companyName: result.name,
           address: result.address,
           ...(result.taxId ? { companyRegNumber: result.taxId } : {}),
-        })
-        setRdState('found')
+        });
+        setRdState("found");
       } else {
-        setRdState('error')
-        setRdError('ไม่พบข้อมูลบริษัท กรุณาตรวจสอบและลองใหม่')
+        setRdState("error");
+        setRdError("ไม่พบข้อมูลบริษัท กรุณาตรวจสอบและลองใหม่");
       }
     } catch {
-      setRdState('error')
-      setRdError('เชื่อมต่อฐานข้อมูลภาษีไม่ได้ กรุณาลองใหม่ภายหลัง')
+      setRdState("error");
+      setRdError("เชื่อมต่อฐานข้อมูลภาษีไม่ได้ กรุณาลองใหม่ภายหลัง");
     }
-  }
+  };
 
   return (
     <div>
-      <h2 className="text-xl font-black text-gray-900 mb-1">ข้อมูลผู้ควบคุมข้อมูล</h2>
-      <p className="text-sm text-gray-400 mb-6">ข้อมูลเหล่านี้จะถูกระบุในนโยบาย PDPA ของคุณ</p>
+      <h2 className="text-xl font-black text-gray-900 mb-1">
+        ข้อมูลผู้ควบคุมข้อมูล
+      </h2>
+      <p className="text-sm text-gray-400 mb-6">
+        ข้อมูลเหล่านี้จะถูกระบุในนโยบาย PDPA ของคุณ
+      </p>
 
       <div className="space-y-5">
-
         {/* Type toggle */}
         <div>
           <SectionHeading>ประเภทผู้ควบคุมข้อมูล</SectionHeading>
           {showConsent && (
             <CompanyConsentModal
-              onAccept={() => { setShowConsent(false); setData({ ownerType: 'company' }); resetRd() }}
+              onAccept={() => {
+                setShowConsent(false);
+                setData({ ownerType: "company" });
+                resetRd();
+              }}
               onDecline={() => setShowConsent(false)}
             />
           )}
 
           <div className="grid grid-cols-2 gap-3">
-            {([
-              { key: 'company', Icon: Building2, label: 'นิติบุคคล', desc: 'บริษัท / ห้างหุ้นส่วน / องค์กร' },
-              { key: 'person',  Icon: UserRound, label: 'บุคคลธรรมดา', desc: 'ฟรีแลนซ์ / บุคคลทั่วไป' },
-            ] as const).map(({ key, Icon, label, desc }) => (
+            {(
+              [
+                {
+                  key: "company",
+                  Icon: Building2,
+                  label: "นิติบุคคล",
+                  desc: "บริษัท / ห้างหุ้นส่วน / องค์กร",
+                },
+                {
+                  key: "person",
+                  Icon: UserRound,
+                  label: "บุคคลธรรมดา",
+                  desc: "ฟรีแลนซ์ / บุคคลทั่วไป",
+                },
+              ] as const
+            ).map(({ key, Icon, label, desc }) => (
               <button
-                key={key} type="button"
+                key={key}
+                type="button"
                 onClick={() => {
-                  if (key === 'company' && data.ownerType !== 'company') {
-                    setShowConsent(true)
-                  } else if (key === 'person') {
-                    setData({ ownerType: 'person' }); resetRd()
+                  if (key === "company" && data.ownerType !== "company") {
+                    setShowConsent(true);
+                  } else if (key === "person") {
+                    setData({ ownerType: "person" });
+                    resetRd();
                   }
                 }}
                 className="flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all"
                 style={{
-                  borderColor: data.ownerType === key ? 'var(--green)' : '#e5e7eb',
-                  backgroundColor: data.ownerType === key ? 'rgba(5,150,105,0.04)' : 'white',
+                  borderColor:
+                    data.ownerType === key ? "var(--green)" : "#e5e7eb",
+                  backgroundColor:
+                    data.ownerType === key ? "rgba(5,150,105,0.04)" : "white",
                 }}
               >
                 <span className="w-9 h-9 rounded border border-gray-200 flex items-center justify-center text-gray-500 shrink-0">
-                  <Icon className="w-4.5 h-4.5" strokeWidth={1.8} aria-hidden="true" />
+                  <Icon
+                    className="w-4.5 h-4.5"
+                    strokeWidth={1.8}
+                    aria-hidden="true"
+                  />
                 </span>
                 <div>
                   <div className="text-sm font-bold text-gray-900">{label}</div>
                   <div className="text-xs text-gray-400">{desc}</div>
                 </div>
                 {data.ownerType === key && (
-                  <span className="ml-auto w-5 h-5 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: 'var(--green)' }}>
+                  <span
+                    className="ml-auto w-5 h-5 rounded-full flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: "var(--green)" }}
+                  >
                     <Check className="w-3 h-3 text-white" strokeWidth={3} />
                   </span>
                 )}
@@ -476,43 +837,98 @@ function Step2({ data, setData }: { data: FormData; setData: (d: Partial<FormDat
 
         {/* Owner identity */}
         <div>
-          <SectionHeading>{isPerson ? 'ข้อมูลส่วนตัว' : 'ข้อมูลบริษัท / องค์กร'}</SectionHeading>
+          <SectionHeading>
+            {isPerson ? "ข้อมูลส่วนตัว" : "ข้อมูลบริษัท / องค์กร"}
+          </SectionHeading>
           <div className="space-y-4">
             {isPerson ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <FormField label="ชื่อ-นามสกุล" value={data.ownerFullName}
-                  onChange={v => setData({ ownerFullName: v })} placeholder="เช่น สมชาย ใจดี" required />
-                <FormField label="เลขบัตรประชาชน" value={data.ownerIdCard}
-                  onChange={v => setData({ ownerIdCard: v })} placeholder="x-xxxx-xxxxx-xx-x" required />
+                <FormField
+                  label="ชื่อ-นามสกุล"
+                  value={data.ownerFullName}
+                  onChange={(v) => setData({ ownerFullName: v })}
+                  placeholder="เช่น สมชาย ใจดี"
+                  required
+                />
+                <div>
+                  <FormField
+                    label="เลขบัตรประชาชน"
+                    value={data.ownerIdCard}
+                    onChange={(v) =>
+                      setData({
+                        ownerIdCard: v.replace(/\D/g, "").slice(0, 13),
+                      })
+                    }
+                    placeholder="กรอกตัวเลข 13 หลัก"
+                    required
+                  />
+                  <p
+                    className="mt-1.5 text-xs"
+                    style={{
+                      color:
+                        data.ownerIdCard.length === 13
+                          ? "var(--green)"
+                          : "#9ca3af",
+                    }}
+                  >
+                    {data.ownerIdCard.length}/13 หลัก
+                  </p>
+                </div>
               </div>
             ) : (
               <>
                 {/* RD Lookup widget */}
-                <div className="rounded-xl p-4 space-y-3" style={{ backgroundColor: '#f8fafc', border: '1px solid #e5e7eb' }}>
+                <div
+                  className="rounded-xl p-4 space-y-3"
+                  style={{
+                    backgroundColor: "#f8fafc",
+                    border: "1px solid #e5e7eb",
+                  }}
+                >
                   <div className="flex items-center justify-between">
-                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">ค้นหาจากฐานข้อมูลกรมสรรพากร</p>
-                    {rdState === 'found' && (
-                      <button type="button" onClick={resetRd} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                      ค้นหาจากฐานข้อมูลกรมสรรพากร
+                    </p>
+                    {rdState === "found" && (
+                      <button
+                        type="button"
+                        onClick={resetRd}
+                        className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                      >
                         ค้นหาใหม่
                       </button>
                     )}
                   </div>
 
                   {/* Search type toggle */}
-                  <div className="flex rounded-lg p-0.5 gap-0.5" style={{ backgroundColor: '#e5e7eb' }}>
-                    {([
-                      { key: 'taxId', label: 'เลขทะเบียน' },
-                      { key: 'name',  label: 'ชื่อบริษัท' },
-                    ] as const).map(({ key, label }) => (
+                  <div
+                    className="flex rounded-lg p-0.5 gap-0.5"
+                    style={{ backgroundColor: "#e5e7eb" }}
+                  >
+                    {(
+                      [
+                        { key: "taxId", label: "เลขทะเบียน" },
+                        { key: "name", label: "ชื่อบริษัท" },
+                      ] as const
+                    ).map(({ key, label }) => (
                       <button
                         key={key}
                         type="button"
-                        onClick={() => { setSearchType(key); setSearchQuery(''); setRdState('idle'); setRdError('') }}
+                        onClick={() => {
+                          setSearchType(key);
+                          setSearchQuery("");
+                          setRdState("idle");
+                          setRdError("");
+                        }}
                         className="flex-1 py-2 text-xs font-semibold rounded-md transition-all"
                         style={{
-                          backgroundColor: searchType === key ? 'white' : 'transparent',
-                          color: searchType === key ? 'var(--navy)' : '#9ca3af',
-                          boxShadow: searchType === key ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                          backgroundColor:
+                            searchType === key ? "white" : "transparent",
+                          color: searchType === key ? "var(--navy)" : "#9ca3af",
+                          boxShadow:
+                            searchType === key
+                              ? "0 1px 2px rgba(0,0,0,0.08)"
+                              : "none",
                         }}
                       >
                         {label}
@@ -523,64 +939,119 @@ function Step2({ data, setData }: { data: FormData; setData: (d: Partial<FormDat
                   {/* Search input + button */}
                   <div className="flex gap-2">
                     <input
-                      type={searchType === 'taxId' ? 'text' : 'text'}
+                      type={searchType === "taxId" ? "text" : "text"}
                       value={searchQuery}
-                      placeholder={searchType === 'taxId' ? 'เช่น 0105565012345' : 'เช่น บริษัท MyShop'}
-                      maxLength={searchType === 'taxId' ? 17 : 100}
-                      onChange={e => { setSearchQuery(e.target.value); if (rdState !== 'idle') { setRdState('idle'); setRdError('') } }}
-                      onKeyDown={e => e.key === 'Enter' && handleLookup()}
-                      className={inputCls + ' flex-1 bg-white'}
+                      placeholder={
+                        searchType === "taxId"
+                          ? "เช่น 0105565012345"
+                          : "เช่น บริษัท MyShop"
+                      }
+                      maxLength={searchType === "taxId" ? 17 : 100}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        if (rdState !== "idle") {
+                          setRdState("idle");
+                          setRdError("");
+                        }
+                      }}
+                      onKeyDown={(e) => e.key === "Enter" && handleLookup()}
+                      className={inputCls + " flex-1 bg-white"}
                       onFocus={onInputFocus}
                       onBlur={onInputBlur}
                     />
                     <button
                       type="button"
                       onClick={handleLookup}
-                      disabled={rdState === 'loading'}
+                      disabled={rdState === "loading"}
                       className="shrink-0 flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-semibold transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                       style={{
-                        backgroundColor: rdState === 'found' ? 'rgba(5,150,105,0.08)' : 'var(--navy)',
-                        color: rdState === 'found' ? 'var(--green)' : 'white',
-                        border: rdState === 'found' ? '1.5px solid var(--green)' : 'none',
+                        backgroundColor:
+                          rdState === "found"
+                            ? "rgba(5,150,105,0.08)"
+                            : "var(--navy)",
+                        color: rdState === "found" ? "var(--green)" : "white",
+                        border:
+                          rdState === "found"
+                            ? "1.5px solid var(--green)"
+                            : "none",
                       }}
                     >
-                      {rdState === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : rdState === 'found' ? <CheckCircle className="w-4 h-4" /> : <Search className="w-4 h-4" />}
+                      {rdState === "loading" ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : rdState === "found" ? (
+                        <CheckCircle className="w-4 h-4" />
+                      ) : (
+                        <Search className="w-4 h-4" />
+                      )}
                       <span className="hidden sm:inline">
-                        {rdState === 'loading' ? 'กำลังค้นหา...' : rdState === 'found' ? 'พบแล้ว' : 'ค้นหา'}
+                        {rdState === "loading"
+                          ? "กำลังค้นหา..."
+                          : rdState === "found"
+                            ? "พบแล้ว"
+                            : "ค้นหา"}
                       </span>
                     </button>
                   </div>
 
                   {/* Status */}
-                  {rdState === 'found' && (
-                    <p className="text-xs font-medium flex items-center gap-1" style={{ color: 'var(--green)' }}>
+                  {rdState === "found" && (
+                    <p
+                      className="text-xs font-medium flex items-center gap-1"
+                      style={{ color: "var(--green)" }}
+                    >
                       <CheckCircle className="w-3.5 h-3.5 shrink-0" />
-                      ดึงข้อมูลจากกรมสรรพากรเรียบร้อย — ชื่อบริษัทและที่อยู่ถูกเติมให้อัตโนมัติ
+                      ดึงข้อมูลจากกรมสรรพากรเรียบร้อย —
+                      ชื่อบริษัทและที่อยู่ถูกเติมให้อัตโนมัติ
                     </p>
                   )}
-                  {rdState === 'error' && rdError && (
+                  {rdState === "error" && rdError && (
                     <p className="text-xs text-red-500">{rdError}</p>
                   )}
                 </div>
 
-                <FormField label="ชื่อบริษัท / องค์กร" value={data.companyName}
-                  onChange={v => setData({ companyName: v })} placeholder="เช่น บริษัท MyShop จำกัด" required />
-                <FormField label="เลขทะเบียนนิติบุคคล" value={data.companyRegNumber}
-                  onChange={v => setData({ companyRegNumber: v })} placeholder="เช่น 0105565012345" required />
+                <FormField
+                  label="ชื่อบริษัท / องค์กร"
+                  value={data.companyName}
+                  onChange={(v) => setData({ companyName: v })}
+                  placeholder="เช่น บริษัท MyShop จำกัด"
+                  required
+                />
+                <FormField
+                  label="เลขทะเบียนนิติบุคคล"
+                  value={data.companyRegNumber}
+                  onChange={(v) => setData({ companyRegNumber: v })}
+                  placeholder="เช่น 0105565012345"
+                  required
+                />
 
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
-                    ประเภทธุรกิจ <span className="text-red-400 normal-case font-normal ml-1">*</span>
+                    ประเภทธุรกิจ{" "}
+                    <span className="text-red-400 normal-case font-normal ml-1">
+                      *
+                    </span>
                   </label>
-                  <select value={data.businessType} onChange={e => setData({ businessType: e.target.value })}
+                  <select
+                    value={data.businessType}
+                    onChange={(e) => setData({ businessType: e.target.value })}
                     className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-800 focus:outline-none bg-white transition-colors"
-                    onFocus={onInputFocus} onBlur={onInputBlur}>
+                    onFocus={onInputFocus}
+                    onBlur={onInputBlur}
+                  >
                     <option value="">เลือกประเภทธุรกิจ...</option>
-                    {businessTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                    {businessTypes.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
                   </select>
                 </div>
-                <FormField label="ชื่อผู้ติดต่อ" value={data.ownerFullName}
-                  onChange={v => setData({ ownerFullName: v })} placeholder="ชื่อ-นามสกุล ผู้ดูแลนโยบาย" />
+                <FormField
+                  label="ชื่อผู้ติดต่อ"
+                  value={data.ownerFullName}
+                  onChange={(v) => setData({ ownerFullName: v })}
+                  placeholder="ชื่อ-นามสกุล ผู้ดูแลนโยบาย"
+                />
               </>
             )}
           </div>
@@ -590,10 +1061,21 @@ function Step2({ data, setData }: { data: FormData; setData: (d: Partial<FormDat
         <div>
           <SectionHeading>ข้อมูลเว็บไซต์</SectionHeading>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <FormField label="ชื่อเว็บไซต์ / ชื่อแอป" value={data.websiteName}
-              onChange={v => setData({ websiteName: v })} placeholder="เช่น ร้านค้า MyShop" required />
-            <FormField label="URL เว็บไซต์" value={data.websiteUrl} type="url"
-              onChange={v => setData({ websiteUrl: v })} placeholder="https://www.example.com" required />
+            <FormField
+              label="ชื่อเว็บไซต์ / ชื่อแอป"
+              value={data.websiteName}
+              onChange={(v) => setData({ websiteName: v })}
+              placeholder="เช่น ร้านค้า MyShop"
+              required
+            />
+            <FormField
+              label="URL เว็บไซต์"
+              value={data.websiteUrl}
+              type="url"
+              onChange={(v) => setData({ websiteUrl: v })}
+              placeholder="https://www.example.com"
+              required
+            />
           </div>
         </div>
 
@@ -604,74 +1086,107 @@ function Step2({ data, setData }: { data: FormData; setData: (d: Partial<FormDat
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
-                  อีเมลติดต่อ <span className="text-red-400 normal-case font-normal ml-1">*</span>
+                  อีเมลติดต่อ{" "}
+                  <span className="text-red-400 normal-case font-normal ml-1">
+                    *
+                  </span>
                 </label>
                 <input
                   type="email"
                   required
                   autoComplete="email"
                   value={data.contactEmail}
-                  onChange={event => setData({ contactEmail: event.target.value.trimStart() })}
+                  onChange={(event) =>
+                    setData({ contactEmail: event.target.value.trimStart() })
+                  }
                   placeholder="contact@company.com"
                   className={inputCls}
-                  aria-invalid={Boolean(data.contactEmail) && !isValidEmail(data.contactEmail)}
+                  aria-invalid={
+                    Boolean(data.contactEmail) &&
+                    !isValidEmail(data.contactEmail)
+                  }
                   onFocus={onInputFocus}
                   onBlur={onInputBlur}
                 />
                 {data.contactEmail && !isValidEmail(data.contactEmail) && (
-                  <p className="text-xs text-red-500 mt-1.5">กรอกอีเมลให้ถูกต้อง เช่น name@company.com</p>
+                  <p className="text-xs text-red-500 mt-1.5">
+                    กรอกอีเมลให้ถูกต้อง เช่น name@company.com
+                  </p>
                 )}
               </div>
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">เบอร์โทรศัพท์ไทย</label>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
+                  เบอร์โทรศัพท์ไทย
+                </label>
                 <input
                   type="tel"
                   inputMode="numeric"
                   autoComplete="tel-national"
                   maxLength={10}
                   value={data.contactPhone}
-                  onChange={event => setData({ contactPhone: sanitizeThaiPhone(event.target.value) })}
+                  onChange={(event) =>
+                    setData({
+                      contactPhone: sanitizeThaiPhone(event.target.value),
+                    })
+                  }
                   placeholder="0812345678 หรือ 021234567"
                   className={inputCls}
-                  aria-invalid={Boolean(data.contactPhone) && !isValidThaiPhone(data.contactPhone)}
+                  aria-invalid={
+                    Boolean(data.contactPhone) &&
+                    !isValidThaiPhone(data.contactPhone)
+                  }
                   onFocus={onInputFocus}
                   onBlur={onInputBlur}
                 />
                 {data.contactPhone && !isValidThaiPhone(data.contactPhone) && (
-                  <p className="text-xs text-red-500 mt-1.5">ใช้เบอร์มือถือไทย 10 หลัก หรือเบอร์สำนักงานไทย 9 หลัก</p>
+                  <p className="text-xs text-red-500 mt-1.5">
+                    ใช้เบอร์มือถือไทย 10 หลัก หรือเบอร์สำนักงานไทย 9 หลัก
+                  </p>
                 )}
               </div>
             </div>
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
-                {isPerson ? 'ที่อยู่' : 'ที่อยู่บริษัท / สำนักงาน'}
+                {isPerson ? "ที่อยู่" : "ที่อยู่บริษัท / สำนักงาน"}
               </label>
-              <textarea rows={3} value={data.address}
+              <textarea
+                rows={3}
+                value={data.address}
                 placeholder="ที่อยู่สำหรับระบุในนโยบาย"
-                onChange={e => setData({ address: e.target.value })}
+                onChange={(e) => setData({ address: e.target.value })}
                 className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-800 focus:outline-none resize-none transition-colors"
-                onFocus={onInputFocus} onBlur={onInputBlur}
+                onFocus={onInputFocus}
+                onBlur={onInputBlur}
               />
             </div>
           </div>
         </div>
-
       </div>
     </div>
-  )
+  );
 }
 
-function Step3({ data, setData }: { data: FormData; setData: (d: Partial<FormData>) => void }) {
+function Step3({
+  data,
+  setData,
+}: {
+  data: FormData;
+  setData: (d: Partial<FormData>) => void;
+}) {
   const toggleItem = (arr: string[], key: string) =>
-    arr.includes(key) ? arr.filter(k => k !== key) : [...arr, key]
+    arr.includes(key) ? arr.filter((k) => k !== key) : [...arr, key];
 
-  const standard = dataTypeOptions.filter(d => !d.sensitive)
-  const sensitive = dataTypeOptions.filter(d => d.sensitive)
+  const standard = dataTypeOptions.filter((d) => !d.sensitive);
+  const sensitive = dataTypeOptions.filter((d) => d.sensitive);
 
   return (
     <div>
-      <h2 className="text-xl font-black text-gray-900 mb-1">ข้อมูลส่วนบุคคลที่เก็บรวบรวม</h2>
-      <p className="text-sm text-gray-400 mb-6">เลือกทุกประเภทข้อมูลที่ธุรกิจของคุณเก็บจากผู้ใช้งาน</p>
+      <h2 className="text-xl font-black text-gray-900 mb-1">
+        ข้อมูลส่วนบุคคลที่เก็บรวบรวม
+      </h2>
+      <p className="text-sm text-gray-400 mb-6">
+        เลือกทุกประเภทข้อมูลที่ธุรกิจของคุณเก็บจากผู้ใช้งาน
+      </p>
 
       <div className="space-y-5">
         <div>
@@ -682,7 +1197,9 @@ function Step3({ data, setData }: { data: FormData; setData: (d: Partial<FormDat
                 key={key}
                 label={label}
                 checked={data.dataTypes.includes(key)}
-                onChange={() => setData({ dataTypes: toggleItem(data.dataTypes, key) })}
+                onChange={() =>
+                  setData({ dataTypes: toggleItem(data.dataTypes, key) })
+                }
               />
             ))}
           </div>
@@ -696,26 +1213,37 @@ function Step3({ data, setData }: { data: FormData; setData: (d: Partial<FormDat
                 key={key}
                 label={label}
                 checked={data.dataTypes.includes(key)}
-                onChange={() => setData({ dataTypes: toggleItem(data.dataTypes, key) })}
+                onChange={() =>
+                  setData({ dataTypes: toggleItem(data.dataTypes, key) })
+                }
                 tag="อ่อนไหว"
               />
             ))}
           </div>
         </div>
-
       </div>
     </div>
-  )
+  );
 }
 
-function Step4({ data, setData }: { data: FormData; setData: (d: Partial<FormData>) => void }) {
+function Step4({
+  data,
+  setData,
+}: {
+  data: FormData;
+  setData: (d: Partial<FormData>) => void;
+}) {
   const toggleItem = (arr: string[], key: string) =>
-    arr.includes(key) ? arr.filter(k => k !== key) : [...arr, key]
+    arr.includes(key) ? arr.filter((k) => k !== key) : [...arr, key];
 
   return (
     <div>
-      <h2 className="text-xl font-black text-gray-900 mb-1">วัตถุประสงค์และบุคคลที่สาม</h2>
-      <p className="text-sm text-gray-400 mb-6">ระบุว่าข้อมูลถูกนำไปใช้ทำอะไร และมีบริการใดที่ได้รับข้อมูล</p>
+      <h2 className="text-xl font-black text-gray-900 mb-1">
+        วัตถุประสงค์และบุคคลที่สาม
+      </h2>
+      <p className="text-sm text-gray-400 mb-6">
+        ระบุว่าข้อมูลถูกนำไปใช้ทำอะไร และมีบริการใดที่ได้รับข้อมูล
+      </p>
 
       <div className="space-y-6">
         <div>
@@ -726,7 +1254,9 @@ function Step4({ data, setData }: { data: FormData; setData: (d: Partial<FormDat
                 key={key}
                 label={label}
                 checked={data.purposes.includes(key)}
-                onChange={() => setData({ purposes: toggleItem(data.purposes, key) })}
+                onChange={() =>
+                  setData({ purposes: toggleItem(data.purposes, key) })
+                }
               />
             ))}
           </div>
@@ -740,21 +1270,33 @@ function Step4({ data, setData }: { data: FormData; setData: (d: Partial<FormDat
                 key={key}
                 label={label}
                 checked={data.thirdParties.includes(key)}
-                onChange={() => setData({ thirdParties: toggleItem(data.thirdParties, key) })}
+                onChange={() =>
+                  setData({ thirdParties: toggleItem(data.thirdParties, key) })
+                }
               />
             ))}
           </div>
         </div>
       </div>
     </div>
-  )
+  );
 }
 
-function Step5({ data, setData }: { data: FormData; setData: (d: Partial<FormData>) => void }) {
+function Step5({
+  data,
+  setData,
+}: {
+  data: FormData;
+  setData: (d: Partial<FormData>) => void;
+}) {
   return (
     <div>
-      <h2 className="text-xl font-black text-gray-900 mb-1">การตั้งค่านโยบาย</h2>
-      <p className="text-sm text-gray-400 mb-6">กำหนดรูปแบบและรายละเอียดการติดต่อสำหรับนโยบายของคุณ</p>
+      <h2 className="text-xl font-black text-gray-900 mb-1">
+        การตั้งค่านโยบาย
+      </h2>
+      <p className="text-sm text-gray-400 mb-6">
+        กำหนดรูปแบบและรายละเอียดการติดต่อสำหรับนโยบายของคุณ
+      </p>
 
       <div className="space-y-6">
         {/* Language */}
@@ -762,40 +1304,66 @@ function Step5({ data, setData }: { data: FormData; setData: (d: Partial<FormDat
           <SectionHeading>ภาษาของนโยบาย</SectionHeading>
           <div className="grid grid-cols-3 gap-3">
             {[
-              { value: 'th',    code: 'TH',    label: 'ภาษาไทย' },
-              { value: 'en',    code: 'EN',    label: 'English' },
-              { value: 'both',  code: 'TH+EN', label: 'สองภาษา' },
+              { value: "th", code: "TH", label: "ภาษาไทย" },
+              { value: "en", code: "EN", label: "English" },
+              { value: "both", code: "TH+EN", label: "สองภาษา" },
             ].map(({ value, code, label }) => (
               <label
                 key={value}
                 className="flex flex-col items-center justify-center gap-1.5 p-4 rounded-xl border-2 cursor-pointer transition-all text-center"
                 style={{
-                  borderColor: data.language === value ? 'var(--green)' : '#e5e7eb',
-                  backgroundColor: data.language === value ? 'rgba(5,150,105,0.05)' : 'white',
+                  borderColor:
+                    data.language === value ? "var(--green)" : "#e5e7eb",
+                  backgroundColor:
+                    data.language === value ? "rgba(5,150,105,0.05)" : "white",
                 }}
               >
-                <input type="radio" className="hidden" value={value} checked={data.language === value} onChange={() => setData({ language: value })} />
+                <input
+                  type="radio"
+                  className="hidden"
+                  value={value}
+                  checked={data.language === value}
+                  onChange={() => setData({ language: value })}
+                />
                 <Languages className="w-4 h-4" aria-hidden="true" />
-                <span className="text-[10px] font-medium text-gray-400" style={{ fontFamily: 'IBM Plex Mono, monospace' }}>{code}</span>
-                <span className="text-xs font-semibold" style={{ color: data.language === value ? 'var(--green)' : '#374151' }}>
+                <span
+                  className="text-[10px] font-medium text-gray-400"
+                  style={{ fontFamily: "IBM Plex Mono, monospace" }}
+                >
+                  {code}
+                </span>
+                <span
+                  className="text-xs font-semibold"
+                  style={{
+                    color: data.language === value ? "var(--green)" : "#374151",
+                  }}
+                >
                   {label}
                 </span>
               </label>
             ))}
           </div>
-          <p className="text-xs text-gray-400 mt-2">* ภาษาอังกฤษรองรับเฉพาะแผน Premium</p>
+          <p className="text-xs text-gray-400 mt-2">
+            * ภาษาอังกฤษรองรับในแพ็กเกจตามเงื่อนไขบริการ
+          </p>
         </div>
 
         {/* Export format */}
         <div>
           <SectionHeading>รูปแบบการดาวน์โหลด</SectionHeading>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {['PDF', 'Word (.docx)', 'TXT', 'HTML Embed'].map(fmt => (
+            {["PDF", "Word (.docx)", "TXT", "HTML Embed"].map((fmt) => (
               <CheckboxCard
                 key={fmt}
                 label={fmt}
                 checked={data.exportFormat.includes(fmt)}
-                onChange={() => setData({ exportFormat: data.exportFormat.includes(fmt) ? data.exportFormat.filter(f => f !== fmt) : [...data.exportFormat, fmt] })}
+                onChange={() =>
+                  setData({
+                    exportFormat: data.exportFormat.includes(fmt)
+                      ? data.exportFormat.filter((f) => f !== fmt)
+                      : [...data.exportFormat, fmt],
+                  })
+                }
               />
             ))}
           </div>
@@ -805,20 +1373,27 @@ function Step5({ data, setData }: { data: FormData; setData: (d: Partial<FormDat
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
-              อีเมลเจ้าหน้าที่คุ้มครองข้อมูล (DPO) <span className="text-red-500">*</span>
+              อีเมลเจ้าหน้าที่คุ้มครองข้อมูล (DPO){" "}
+              <span className="text-red-500">*</span>
             </label>
             <input
               type="email"
               required
               placeholder="dpo@company.com"
               value={data.dpoEmail}
-              onChange={e => setData({ dpoEmail: e.target.value })}
-              aria-invalid={Boolean(data.dpoEmail) && !isValidEmail(data.dpoEmail)}
+              onChange={(e) => setData({ dpoEmail: e.target.value })}
+              aria-invalid={
+                Boolean(data.dpoEmail) && !isValidEmail(data.dpoEmail)
+              }
               className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-800 focus:outline-none transition-colors"
-              onFocus={e => (e.currentTarget.style.borderColor = 'var(--green)')}
-              onBlur={e => (e.currentTarget.style.borderColor = '#e5e7eb')}
+              onFocus={(e) =>
+                (e.currentTarget.style.borderColor = "var(--green)")
+              }
+              onBlur={(e) => (e.currentTarget.style.borderColor = "#e5e7eb")}
             />
-            <p className="text-xs text-gray-400 mt-1">จำเป็นต้องระบุอีเมล DPO ที่ถูกต้อง</p>
+            <p className="text-xs text-gray-400 mt-1">
+              จำเป็นต้องระบุอีเมล DPO ที่ถูกต้อง
+            </p>
           </div>
 
           <div>
@@ -828,48 +1403,76 @@ function Step5({ data, setData }: { data: FormData; setData: (d: Partial<FormDat
             <select
               required
               value={data.retentionPeriod}
-              onChange={e => setData({ retentionPeriod: e.target.value })}
+              onChange={(e) => setData({ retentionPeriod: e.target.value })}
               className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-800 focus:outline-none bg-white transition-colors"
-              onFocus={e => (e.currentTarget.style.borderColor = 'var(--green)')}
-              onBlur={e => (e.currentTarget.style.borderColor = '#e5e7eb')}
+              onFocus={(e) =>
+                (e.currentTarget.style.borderColor = "var(--green)")
+              }
+              onBlur={(e) => (e.currentTarget.style.borderColor = "#e5e7eb")}
             >
               <option value="">เลือกระยะเวลา...</option>
-              {retentionOptions.map(o => <option key={o} value={o}>{o}</option>)}
+              {retentionOptions.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
             </select>
           </div>
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 function Step6({ data }: { data: FormData }) {
-  const policy = policyTypes.find(p => p.key === data.policyType)
-  const selectedDataTypes = dataTypeOptions.filter(d => data.dataTypes.includes(d.key))
-  const selectedPurposes = purposeOptions.filter(p => data.purposes.includes(p.key))
-  const selectedThirdParties = thirdPartyOptions.filter(t => data.thirdParties.includes(t.key))
+  const policy = policyTypes.find((p) => p.key === data.policyType);
+  const selectedDataTypes = dataTypeOptions.filter((d) =>
+    data.dataTypes.includes(d.key),
+  );
+  const selectedPurposes = purposeOptions.filter((p) =>
+    data.purposes.includes(p.key),
+  );
+  const selectedThirdParties = thirdPartyOptions.filter((t) =>
+    data.thirdParties.includes(t.key),
+  );
 
   return (
     <div>
-      <h2 className="text-xl font-black text-gray-900 mb-1">ตรวจสอบข้อมูลก่อนสร้าง</h2>
-      <p className="text-sm text-gray-400 mb-6">ตรวจสอบความถูกต้องก่อนกดสร้างนโยบาย สามารถย้อนกลับแก้ไขได้</p>
+      <h2 className="text-xl font-black text-gray-900 mb-1">
+        ตรวจสอบข้อมูลก่อนสร้าง
+      </h2>
+      <p className="text-sm text-gray-400 mb-6">
+        ตรวจสอบความถูกต้องก่อนกดสร้างนโยบาย สามารถย้อนกลับแก้ไขได้
+      </p>
 
       <div className="space-y-4">
         <div className="bg-white rounded-xl border border-gray-100 px-6 py-2">
-          <ReviewRow label="ประเภท Policy" value={
-            <span className="inline-flex items-center gap-1.5">
-              <PolicyTypeIcon type={policy?.key ?? 'privacy'} className="w-4 h-4" /> {policy?.label ?? ''}
-            </span>
-          } />
-          <ReviewRow label="ผู้ควบคุมข้อมูล" value={
-            <span className="inline-flex items-center gap-1.5">
-              {data.ownerType === 'person'
-                ? <UserRound className="w-4 h-4" aria-hidden="true" />
-                : <Building2 className="w-4 h-4" aria-hidden="true" />}
-              {data.ownerType === 'person' ? 'บุคคลธรรมดา' : 'นิติบุคคล'}
-            </span>
-          } />
-          {data.ownerType === 'person' ? (
+          <ReviewRow
+            label="ประเภท Policy"
+            value={
+              <span className="inline-flex items-center gap-1.5">
+                <PolicyTypeIcon
+                  type={policy?.key ?? "privacy"}
+                  className="w-4 h-4"
+                />{" "}
+                {policy?.label ?? ""}
+              </span>
+            }
+          />
+          <ReviewRow
+            label="ผู้ควบคุมข้อมูล"
+            value={
+              <span className="inline-flex items-center gap-1.5">
+                {data.ownerType === "person" ? (
+                  <UserRound className="w-4 h-4" aria-hidden="true" />
+                ) : (
+                  <Building2 className="w-4 h-4" aria-hidden="true" />
+                )}
+                {data.ownerType === "person" ? "บุคคลธรรมดา" : "นิติบุคคล"}
+              </span>
+            }
+          />
+          {data.ownerType === "person" ? (
             <>
               <ReviewRow label="ชื่อ-นามสกุล" value={data.ownerFullName} />
               <ReviewRow label="เลขบัตรประชาชน" value={data.ownerIdCard} />
@@ -889,66 +1492,325 @@ function Step6({ data }: { data: FormData }) {
         <div className="bg-white rounded-xl border border-gray-100 px-6 py-2">
           <ReviewRow
             label="ข้อมูลที่เก็บ"
-            value={selectedDataTypes.length ? selectedDataTypes.map(d => d.label).join(', ') : ''}
+            value={
+              selectedDataTypes.length
+                ? selectedDataTypes.map((d) => d.label).join(", ")
+                : ""
+            }
           />
         </div>
 
         <div className="bg-white rounded-xl border border-gray-100 px-6 py-2">
           <ReviewRow
             label="วัตถุประสงค์"
-            value={selectedPurposes.length ? selectedPurposes.map(p => p.label).join(', ') : ''}
+            value={
+              selectedPurposes.length
+                ? selectedPurposes.map((p) => p.label).join(", ")
+                : ""
+            }
           />
           <ReviewRow
             label="บุคคลที่สาม"
-            value={selectedThirdParties.length ? selectedThirdParties.map(t => t.label).join(', ') : ''}
+            value={
+              selectedThirdParties.length
+                ? selectedThirdParties.map((t) => t.label).join(", ")
+                : ""
+            }
           />
         </div>
 
         <div className="bg-white rounded-xl border border-gray-100 px-6 py-2">
-          <ReviewRow label="ภาษา" value={data.language === 'both' ? 'ไทย + อังกฤษ' : data.language === 'en' ? 'อังกฤษ' : 'ไทย'} />
+          <ReviewRow
+            label="ภาษา"
+            value={
+              data.language === "both"
+                ? "ไทย + อังกฤษ"
+                : data.language === "en"
+                  ? "อังกฤษ"
+                  : "ไทย"
+            }
+          />
           <ReviewRow label="ระยะเวลาเก็บ" value={data.retentionPeriod} />
-          <ReviewRow label="รูปแบบดาวน์โหลด" value={data.exportFormat.join(', ')} />
+          <ReviewRow
+            label="รูปแบบดาวน์โหลด"
+            value={data.exportFormat.join(", ")}
+          />
         </div>
       </div>
     </div>
-  )
+  );
 }
 
-function WaitingReviewScreen({ data, slug, processing, error, onRetry, onReset }: { data: FormData; slug: string; processing: boolean; error: string; onRetry: () => void; onReset: () => void }) {
-  const policy = policyTypes.find(p => p.key === data.policyType)
-  const refId = processing ? 'กำลังสร้าง...' : slug.split('-').pop()?.toUpperCase() || '------'
+function Step7({
+  selectedPackage,
+  onSelect,
+  billingCycle,
+  onBillingCycleChange,
+}: {
+  selectedPackage: CheckoutPackage;
+  onSelect: (value: CheckoutPackage) => void;
+  billingCycle: BillingCycle;
+  onBillingCycleChange: (value: BillingCycle) => void;
+}) {
+  const selected = checkoutPackages.find(
+    (item) => item.id === selectedPackage,
+  )!;
+  const selectedPrice =
+    billingCycle === "monthly" ? selected.monthlyPrice : selected.annualPrice;
+
+  return (
+    <div>
+      <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">
+            ขั้นตอนชำระเงิน
+          </p>
+          <h2 className="text-xl font-black text-gray-900">
+            เลือกแพ็กเกจที่เหมาะกับคุณ
+          </h2>
+          <p className="mt-1 text-sm text-gray-400">
+            เปรียบเทียบราคาและสิทธิ์ที่ได้รับก่อนยืนยัน
+          </p>
+        </div>
+        <span className="w-fit rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+          ชำระเงินอย่างปลอดภัยผ่าน Stripe
+        </span>
+      </div>
+
+      <div className="mb-7 flex justify-center">
+        <div
+          className="inline-flex rounded-lg bg-slate-100 p-1"
+          aria-label="รอบการชำระเงิน"
+        >
+          {[
+            { value: "monthly" as const, label: "ชำระรายเดือน" },
+            { value: "annual" as const, label: "ชำระรายปี · ประหยัด 2 เดือน" },
+          ].map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onBillingCycleChange(option.value)}
+              className="rounded-md px-4 py-2 text-xs font-bold transition"
+              style={{
+                backgroundColor:
+                  billingCycle === option.value ? "#fff" : "transparent",
+                color:
+                  billingCycle === option.value ? "var(--navy)" : "#94a3b8",
+                boxShadow:
+                  billingCycle === option.value
+                    ? "0 1px 3px rgba(15,23,42,0.1)"
+                    : "none",
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        {checkoutPackages.map((item) => {
+          const active = selectedPackage === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              aria-pressed={active}
+              onClick={() => onSelect(item.id)}
+              className="relative flex h-full flex-col rounded-xl border-2 p-5 text-left transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
+              style={{
+                borderColor: active ? "var(--green)" : "#e5e7eb",
+                backgroundColor: active ? "rgba(5,150,105,0.035)" : "#fff",
+              }}
+            >
+              {item.recommended && (
+                <span className="absolute -top-3 right-4 rounded-full bg-emerald-700 px-3 py-1 text-[10px] font-bold text-white">
+                  แนะนำ
+                </span>
+              )}
+              <div className="flex w-full items-start justify-between gap-3">
+                <div>
+                  <p className="text-base font-black text-gray-900">
+                    {item.name}
+                  </p>
+                  <p className="mt-1 min-h-10 text-xs leading-5 text-gray-500">
+                    {item.audience}
+                  </p>
+                </div>
+                <span
+                  className="grid h-5 w-5 shrink-0 place-items-center rounded-full border"
+                  style={{
+                    borderColor: active ? "var(--green)" : "#d1d5db",
+                    backgroundColor: active ? "var(--green)" : "#fff",
+                  }}
+                >
+                  {active && (
+                    <Check className="h-3 w-3 text-white" strokeWidth={3} />
+                  )}
+                </span>
+              </div>
+              <div className="my-5">
+                <span className="text-3xl font-black tracking-tight text-gray-900">
+                  ฿
+                  {(billingCycle === "monthly"
+                    ? item.monthlyPrice
+                    : item.annualPrice
+                  ).toLocaleString("th-TH")}
+                </span>
+                <span className="ml-1 text-xs text-gray-400">
+                  {billingCycle === "monthly" ? "ต่อเดือน" : "ต่อปี"}
+                </span>
+                {billingCycle === "annual" && (
+                  <p className="mt-1 text-xs font-semibold text-emerald-700">
+                    เฉลี่ย ฿{item.annualMonthlyAverage.toLocaleString("th-TH")}
+                    /เดือน
+                  </p>
+                )}
+              </div>
+              <p className="mb-4 text-xs leading-5 text-gray-500">
+                {item.description}
+              </p>
+              <ul className="mt-auto space-y-2.5 border-t border-gray-100 pt-4">
+                {item.features.map((feature) => (
+                  <li
+                    key={feature}
+                    className="flex items-start gap-2 text-xs leading-5 text-gray-600"
+                  >
+                    <CheckCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-6 flex flex-col gap-4 rounded-xl border border-slate-200 bg-slate-50 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-white text-emerald-700 shadow-sm">
+            <CreditCard className="h-4 w-4" />
+          </span>
+          <div>
+            <p className="text-xs font-semibold text-gray-500">สรุปรายการ</p>
+            <p className="mt-1 text-sm font-black text-gray-900">
+              แพ็กเกจ {selected.name}
+            </p>
+            <p className="mt-0.5 text-xs text-gray-500">
+              Privacy + Cookies Policy ·{" "}
+              {billingCycle === "monthly" ? "รายเดือน" : "รายปี"}
+            </p>
+          </div>
+        </div>
+        <div className="sm:text-right">
+          <p className="text-xs text-gray-400">ยอดชำระ</p>
+          <p className="mt-1 text-2xl font-black text-gray-900">
+            ฿{selectedPrice.toLocaleString("th-TH")}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WaitingReviewScreen({
+  data,
+  slug,
+  processing,
+  error,
+  onRetry,
+  onReset,
+}: {
+  data: FormData;
+  slug: string;
+  processing: boolean;
+  error: string;
+  onRetry: () => void;
+  onReset: () => void;
+}) {
+  const policy = policyTypes.find((p) => p.key === data.policyType);
+  const refId = processing
+    ? "กำลังสร้าง..."
+    : slug.split("-").pop()?.toUpperCase() || "------";
 
   const reviewSteps = [
-    { icon: processing ? Loader2 : CheckCircle, label: processing ? 'AI กำลังสร้างร่าง' : 'ส่งข้อมูลเรียบร้อย', done: !processing, active: processing },
-    { icon: Clock,        label: 'รอทีมกฎหมายตรวจสอบ', done: false, active: !processing && !error },
-    { icon: ShieldCheck,  label: 'อนุมัติและเผยแพร่',   done: false },
-  ]
+    {
+      icon: processing ? Loader2 : CheckCircle,
+      label: processing ? "AI กำลังสร้างร่าง" : "ส่งข้อมูลเรียบร้อย",
+      done: !processing,
+      active: processing,
+    },
+    {
+      icon: Clock,
+      label: "รอทีมกฎหมายตรวจสอบ",
+      done: false,
+      active: !processing && !error,
+    },
+    { icon: ShieldCheck, label: "อนุมัติและเผยแพร่", done: false },
+  ];
 
   return (
     <div className="text-center py-8 max-w-md mx-auto">
-
       {/* Icon */}
       <div
         className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"
-        style={{ backgroundColor: 'rgba(245,158,11,0.1)', border: '2px solid rgba(245,158,11,0.2)' }}
+        style={{
+          backgroundColor: error
+            ? "rgba(239,68,68,0.08)"
+            : "rgba(5,150,105,0.1)",
+          border: error
+            ? "2px solid rgba(239,68,68,0.16)"
+            : "2px solid rgba(5,150,105,0.18)",
+        }}
       >
-        {processing ? <Loader2 className="w-10 h-10 animate-spin" style={{ color: '#f59e0b' }} /> : error ? <AlertCircle className="w-10 h-10 text-red-500" /> : <Clock className="w-10 h-10" style={{ color: '#f59e0b' }} />}
+        {processing ? (
+          <Loader2
+            className="w-10 h-10 animate-spin"
+            style={{ color: "#f59e0b" }}
+          />
+        ) : error ? (
+          <AlertCircle className="w-10 h-10 text-red-500" />
+        ) : (
+          <CheckCircle
+            className="w-10 h-10"
+            style={{ color: "var(--green)" }}
+          />
+        )}
       </div>
 
-      <h2 className="text-2xl font-black text-gray-900 mb-2">{processing ? 'AI กำลังจัดทำร่างนโยบาย' : error ? 'สร้างร่างนโยบายไม่สำเร็จ' : 'รอการตรวจสอบจากทีมกฎหมาย'}</h2>
+      <h2 className="text-2xl font-black text-gray-900 mb-2">
+        {processing
+          ? "AI กำลังจัดทำร่างนโยบาย"
+          : error
+            ? "สร้างร่างนโยบายไม่สำเร็จ"
+            : "เสร็จสิ้น"}
+      </h2>
       <p className="text-sm text-gray-500 mb-1 flex items-center justify-center gap-1.5 flex-wrap">
-        <PolicyTypeIcon type={policy?.key ?? 'privacy'} className="w-4 h-4" />
-        <strong>{policy?.label}</strong> สำหรับ <strong>{data.websiteName}</strong>
+        <PolicyTypeIcon type={policy?.key ?? "privacy"} className="w-4 h-4" />
+        <strong>{policy?.label}</strong> สำหรับ{" "}
+        <strong>{data.websiteName}</strong>
       </p>
-      <p className="text-xs text-gray-400 mb-8">{processing ? 'คุณอยู่ในหน้าสถานะแล้ว ไม่ต้องรออยู่ที่แบบฟอร์ม หน้านี้จะอัปเดตเมื่อร่างพร้อม' : error ? error : 'ทีมกฎหมายจะตรวจสอบและอนุมัตินโยบายของคุณภายใน 1–2 วันทำการ'}</p>
+      <p className="text-xs text-gray-400 mb-8">
+        {processing
+          ? "คุณอยู่ในหน้าสถานะแล้ว ไม่ต้องรออยู่ที่แบบฟอร์ม หน้านี้จะอัปเดตเมื่อร่างพร้อม"
+          : error
+            ? error
+            : "ทีมกฎหมายจะตรวจสอบและอนุมัตินโยบายของคุณภายใน 1–2 วันทำการ"}
+      </p>
 
       {/* Reference ID */}
-      <div
-        className="inline-flex items-center gap-2 px-4 py-2 rounded-full mb-8 text-xs font-bold tracking-widest"
-        style={{ backgroundColor: '#f8fafc', border: '1px solid #e5e7eb', color: '#374151' }}
-      >
-        หมายเลขอ้างอิง: <span style={{ color: 'var(--green)' }}>{refId}</span>
-      </div>
+      {slug && (
+        <div
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-full mb-8 text-xs font-bold tracking-widest"
+          style={{
+            backgroundColor: "#f8fafc",
+            border: "1px solid #e5e7eb",
+            color: "#374151",
+          }}
+        >
+          หมายเลขอ้างอิง: <span style={{ color: "var(--green)" }}>{refId}</span>
+        </div>
+      )}
 
       {/* Status timeline */}
       <div className="flex items-center justify-center gap-0 mb-10">
@@ -959,22 +1821,28 @@ function WaitingReviewScreen({ data, slug, processing, error, onRetry, onReset }
                 className="w-9 h-9 rounded-full flex items-center justify-center transition-colors"
                 style={{
                   backgroundColor: done
-                    ? 'rgba(5,150,105,0.12)'
+                    ? "rgba(5,150,105,0.12)"
                     : active
-                      ? 'rgba(245,158,11,0.12)'
-                      : '#f1f5f9',
+                      ? "rgba(245,158,11,0.12)"
+                      : "#f1f5f9",
                 }}
               >
                 <Icon
                   className="w-4 h-4"
                   style={{
-                    color: done ? 'var(--green)' : active ? '#f59e0b' : '#cbd5e1',
+                    color: done
+                      ? "var(--green)"
+                      : active
+                        ? "#f59e0b"
+                        : "#cbd5e1",
                   }}
                 />
               </div>
               <span
                 className="text-xs font-medium text-center leading-tight max-w-[72px]"
-                style={{ color: done ? 'var(--green)' : active ? '#f59e0b' : '#cbd5e1' }}
+                style={{
+                  color: done ? "var(--green)" : active ? "#f59e0b" : "#cbd5e1",
+                }}
               >
                 {label}
               </span>
@@ -982,7 +1850,7 @@ function WaitingReviewScreen({ data, slug, processing, error, onRetry, onReset }
             {i < reviewSteps.length - 1 && (
               <div
                 className="w-10 h-px mb-5 mx-1"
-                style={{ backgroundColor: done ? 'var(--green)' : '#e5e7eb' }}
+                style={{ backgroundColor: done ? "var(--green)" : "#e5e7eb" }}
               />
             )}
           </div>
@@ -992,11 +1860,28 @@ function WaitingReviewScreen({ data, slug, processing, error, onRetry, onReset }
       {/* Info box */}
       <div
         className="text-left px-5 py-4 rounded-xl mb-8 text-sm space-y-2"
-        style={{ backgroundColor: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)' }}
+        style={{
+          backgroundColor: "rgba(245,158,11,0.06)",
+          border: "1px solid rgba(245,158,11,0.15)",
+        }}
       >
-        <p className="font-semibold text-gray-700">{processing ? 'กำลังดำเนินการ' : 'ขั้นตอนถัดไป'}</p>
+        <p className="font-semibold text-gray-700">
+          {processing ? "กำลังดำเนินการ" : "ขั้นตอนถัดไป"}
+        </p>
         <ul className="space-y-1 text-xs text-gray-500 list-disc list-inside">
-          {processing ? <><li>AI กำลังสร้างเนื้อหาภาษาไทยและภาษาอังกฤษตามที่เลือก</li><li>เมื่อร่างพร้อม ระบบจะส่งให้ทีมกฎหมายโดยอัตโนมัติ</li><li>คุณสามารถกลับ Dashboard ได้โดยไม่ต้องเปิดหน้านี้ค้างไว้</li></> : <><li>ทีมกฎหมายจะรับข้อมูลและเริ่มตรวจสอบโดยเร็ว</li><li>ผลการตรวจสอบจะแสดงในหน้า Dashboard ของคุณ</li><li>คุณจะได้รับแจ้งเมื่อนโยบายได้รับการอนุมัติ</li></>}
+          {processing ? (
+            <>
+              <li>AI กำลังสร้างเนื้อหาภาษาไทยและภาษาอังกฤษตามที่เลือก</li>
+              <li>เมื่อร่างพร้อม ระบบจะส่งให้ทีมกฎหมายโดยอัตโนมัติ</li>
+              <li>คุณสามารถกลับ Dashboard ได้โดยไม่ต้องเปิดหน้านี้ค้างไว้</li>
+            </>
+          ) : (
+            <>
+              <li>ทีมกฎหมายจะรับข้อมูลและเริ่มตรวจสอบโดยเร็ว</li>
+              <li>ผลการตรวจสอบจะแสดงในหน้า Dashboard ของคุณ</li>
+              <li>คุณจะได้รับแจ้งเมื่อนโยบายได้รับการอนุมัติ</li>
+            </>
+          )}
         </ul>
       </div>
 
@@ -1005,48 +1890,68 @@ function WaitingReviewScreen({ data, slug, processing, error, onRetry, onReset }
         <Link
           to="/dashboard"
           className="btn-green px-8 py-3 text-sm flex items-center justify-center gap-2"
-          style={{ borderRadius: '8px' }}
+          style={{ borderRadius: "8px" }}
         >
           กลับ Dashboard
         </Link>
-        {error ? <button onClick={onRetry} className="btn-green px-8 py-3 text-sm" style={{ borderRadius: '8px' }}>ลองสร้างอีกครั้ง</button> : <button
-          onClick={onReset}
-          disabled={processing}
-          className="px-8 py-3 text-sm font-bold border-2 rounded-lg transition-colors"
-          style={{ borderColor: '#e5e7eb', color: '#6b7280', borderRadius: '8px' }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = '#d1d5db'; e.currentTarget.style.color = '#374151' }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.color = '#6b7280' }}
-        >
-          ส่งข้อมูลนโยบายอื่น
-        </button>}
+        {error ? (
+          <button
+            onClick={onRetry}
+            className="btn-green px-8 py-3 text-sm"
+            style={{ borderRadius: "8px" }}
+          >
+            ลองสร้างอีกครั้ง
+          </button>
+        ) : (
+          <button
+            onClick={onReset}
+            disabled={processing}
+            className="px-8 py-3 text-sm font-bold border-2 rounded-lg transition-colors"
+            style={{
+              borderColor: "#e5e7eb",
+              color: "#6b7280",
+              borderRadius: "8px",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = "#d1d5db";
+              e.currentTarget.style.color = "#374151";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = "#e5e7eb";
+              e.currentTarget.style.color = "#6b7280";
+            }}
+          >
+            ส่งข้อมูลนโยบายอื่น
+          </button>
+        )}
       </div>
     </div>
-  )
+  );
 }
 
 // ── Main ──────────────────────────────────────────────────────
 const initialData: FormData = {
   policyType: null,
   agreedToTerms: false,
-  ownerType: 'person',
-  ownerFullName: '',
-  ownerIdCard: '',
-  companyName: '',
-  companyRegNumber: '',
-  businessType: '',
-  websiteName: '',
-  websiteUrl: '',
-  contactEmail: '',
-  contactPhone: '',
-  address: '',
+  ownerType: "person",
+  ownerFullName: "",
+  ownerIdCard: "",
+  companyName: "",
+  companyRegNumber: "",
+  businessType: "",
+  websiteName: "",
+  websiteUrl: "",
+  contactEmail: "",
+  contactPhone: "",
+  address: "",
   dataTypes: [],
   purposes: [],
   thirdParties: [],
-  language: 'both',
-  dpoEmail: '',
-  retentionPeriod: '',
-  exportFormat: ['PDF'],
-}
+  language: "both",
+  dpoEmail: "",
+  retentionPeriod: "",
+  exportFormat: ["PDF"],
+};
 
 function profileAddress(profile: UserProfile) {
   return [
@@ -1056,184 +1961,378 @@ function profileAddress(profile: UserProfile) {
     profile.address.state,
     profile.address.zip,
     profile.address.country,
-  ].map(value => value.trim()).filter(Boolean).join(', ')
+  ]
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .join(", ");
 }
 
 function prefillFromProfile(current: FormData, profile: UserProfile): FormData {
-  const companyName = profile.company_name.trim()
+  const companyName = profile.company_name.trim();
   return {
     ...current,
-    ownerType: companyName && !current.ownerFullName && !current.companyName ? 'company' : current.ownerType,
+    ownerType:
+      companyName && !current.ownerFullName && !current.companyName
+        ? "company"
+        : current.ownerType,
     ownerFullName: current.ownerFullName || profile.name.trim(),
     companyName: current.companyName || companyName,
     companyRegNumber: current.companyRegNumber || profile.vat.trim(),
     websiteName: current.websiteName || companyName,
     websiteUrl: current.websiteUrl || profile.website.trim(),
     contactEmail: current.contactEmail || profile.email.trim(),
-    contactPhone: current.contactPhone || profile.phone.trim() || profile.mobile.trim(),
+    contactPhone:
+      current.contactPhone || profile.phone.trim() || profile.mobile.trim(),
     address: current.address || profileAddress(profile),
-  }
+  };
 }
 
 function initialDataFromSession(): FormData {
-  const auth = storage.auth.get()
+  const auth = storage.auth.get();
   return {
     ...initialData,
-    ownerFullName: auth?.name || '',
-    contactEmail: auth?.email || '',
-    contactPhone: auth?.phone || '',
-    companyName: auth?.company || '',
-  }
+    ownerFullName: auth?.name || "",
+    contactEmail: auth?.email || "",
+    contactPhone: auth?.phone || "",
+    companyName: auth?.company || "",
+  };
 }
 
 export default function CreatePolicy() {
-  const navigate = useNavigate()
-  const [step, setStep] = useState(1)
-  const [done, setDone] = useState(false)
-  const [generating, setGenerating] = useState(false)
-  const [data, setDataRaw] = useState<FormData>(initialDataFromSession)
-  const [savedSlug, setSavedSlug] = useState('')
-  const [generationError, setGenerationError] = useState('')
+  const navigate = useNavigate();
+  const [step, setStep] = useState(1);
+  const [done, setDone] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [data, setDataRaw] = useState<FormData>(initialDataFromSession);
+  const [selectedPackage, setSelectedPackage] =
+    useState<CheckoutPackage>("business");
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>("annual");
+  const [savedSlug, setSavedSlug] = useState("");
+  const [generationError, setGenerationError] = useState("");
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
+  const checkoutReturnHandled = useRef(false);
 
-  const setData = useCallback((partial: Partial<FormData>) => setDataRaw(prev => ({ ...prev, ...partial })), [])
+  const setData = useCallback(
+    (partial: Partial<FormData>) =>
+      setDataRaw((prev) => ({ ...prev, ...partial })),
+    [],
+  );
 
   useEffect(() => {
-    const auth = storage.auth.get()
+    const auth = storage.auth.get();
     if (!auth?.token) {
-      navigate('/login', { state: { from: '/create/policy' } })
-      return
+      navigate("/login", { state: { from: "/create/policy" } });
+      return;
     }
 
-    let active = true
-    void api.profile.get().then(response => {
-      if (active && response.success && response.data) {
-        setDataRaw(current => prefillFromProfile(current, response.data!))
-      }
-    })
-    return () => { active = false }
-  }, [navigate])
+    let active = true;
+    void Promise.all([api.profile.get(), api.billing.subscriptions()]).then(
+      ([profileResponse, subscriptionsResponse]) => {
+        if (!active) return;
+        if (profileResponse.success && profileResponse.data) {
+          setDataRaw((current) =>
+            prefillFromProfile(current, profileResponse.data!),
+          );
+        }
+        setHasActiveSubscription(
+          Boolean(
+            subscriptionsResponse.success &&
+              subscriptionsResponse.data?.some((item) =>
+                ["active", "trialing"].includes(item.status),
+              ),
+          ),
+        );
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [navigate]);
 
-  useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }) }, [step])
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [step]);
 
   const canProceed = () => {
-    if (step === 1) return data.policyType !== null && data.agreedToTerms
+    if (step === 1) return data.policyType !== null && data.agreedToTerms;
     if (step === 2) {
-      const contactIsValid = isValidEmail(data.contactEmail) && (!data.contactPhone || isValidThaiPhone(data.contactPhone))
-      const base = !!(data.websiteName && isValidWebsiteUrl(data.websiteUrl) && contactIsValid)
-      if (data.ownerType === 'person') return base && !!(data.ownerFullName && data.ownerIdCard)
-      return base && !!(data.companyName && data.companyRegNumber && data.businessType)
+      const contactIsValid =
+        isValidEmail(data.contactEmail) &&
+        (!data.contactPhone || isValidThaiPhone(data.contactPhone));
+      const base = !!(
+        data.websiteName &&
+        isValidWebsiteUrl(data.websiteUrl) &&
+        contactIsValid
+      );
+      if (data.ownerType === "person")
+        return (
+          base && !!data.ownerFullName && /^\d{13}$/.test(data.ownerIdCard)
+        );
+      return (
+        base &&
+        !!(data.companyName && data.companyRegNumber && data.businessType)
+      );
     }
-    if (step === 3) return data.dataTypes.length > 0
-    if (step === 4) return data.purposes.length > 0
-    if (step === 5) return data.language !== '' && isValidEmail(data.dpoEmail) && data.retentionPeriod !== ''
-    return true
-  }
+    if (step === 3) return data.dataTypes.length > 0;
+    if (step === 4) return data.purposes.length > 0;
+    if (step === 5)
+      return (
+        data.language !== "" &&
+        isValidEmail(data.dpoEmail) &&
+        data.retentionPeriod !== ""
+      );
+    return true;
+  };
 
-  const startGeneration = async () => {
-    setGenerating(true)
-    setGenerationError('')
-    if (!data.policyType || !data.agreedToTerms) {
-      setGenerating(false)
-      setGenerationError('Please select a policy type and accept the terms.')
-      return
+  const startGeneration = async (sourceData: FormData = data) => {
+    setGenerating(true);
+    setGenerationError("");
+    if (!sourceData.policyType || !sourceData.agreedToTerms) {
+      setGenerating(false);
+      setGenerationError("Please select a policy type and accept the terms.");
+      return;
     }
-    if (!isValidEmail(data.dpoEmail) || !data.retentionPeriod) {
-      setGenerating(false)
-      setGenerationError('Please enter a valid DPO email and select a data retention period.')
-      return
+    if (!isValidEmail(sourceData.dpoEmail) || !sourceData.retentionPeriod) {
+      setGenerating(false);
+      setGenerationError(
+        "Please enter a valid DPO email and select a data retention period.",
+      );
+      return;
     }
-    setDone(true)
+    setDone(true);
     const payload: PolicyQuestionnaire = {
-      ...data,
-      websiteUrl: normalizeWebsiteUrl(data.websiteUrl),
-      policyType: data.policyType,
+      ...sourceData,
+      websiteUrl: normalizeWebsiteUrl(sourceData.websiteUrl),
+      policyType: sourceData.policyType,
       agreedToTerms: true,
-      language: data.language as PolicyQuestionnaire['language'],
-      templateVersion: 'v1-dev',
+      language: data.language as PolicyQuestionnaire["language"],
+      templateVersion: "v1-dev",
       useAI: true,
-    }
-    const response = await api.policies.create(payload)
-    setGenerating(false)
+    };
+    const response = await api.policies.create(payload);
+    setGenerating(false);
     if (response.success && response.data) {
-      setSavedSlug(response.data.slug)
-      return
+      setSavedSlug(response.data.slug);
+      return;
     }
-    setGenerationError(response.error?.message ?? 'Unable to create policy. Please try again.')
-  }
+    setGenerationError(
+      response.error?.message ?? "Unable to create policy. Please try again.",
+    );
+  };
 
-  const handleGenerate = () => {
-    if (generating) return
-    void startGeneration()
-  }
+  useEffect(() => {
+    if (checkoutReturnHandled.current) return;
+    const checkoutParams = new URLSearchParams(window.location.search);
+    const checkoutResult = checkoutParams.get("checkout");
+    const checkoutSessionId = checkoutParams.get("session_id");
+    if (!checkoutResult) return;
+    checkoutReturnHandled.current = true;
+    const raw = sessionStorage.getItem("flowpdpa_pending_policy");
+    if (!raw) return;
+    try {
+      const pending = JSON.parse(raw) as {
+        data: FormData;
+        selectedPackage: CheckoutPackage;
+        billingCycle: BillingCycle;
+        sessionId?: string;
+      };
+      const sessionId = checkoutSessionId || pending.sessionId || null;
+      setDataRaw(pending.data);
+      setSelectedPackage(pending.selectedPackage);
+      setBillingCycle(pending.billingCycle);
+      setStep(7);
+      if (checkoutResult === "cancel") {
+        setGenerationError("ยกเลิกการชำระเงินแล้ว คุณสามารถเลือกแพ็กเกจและลองใหม่ได้");
+        return;
+      }
+      void (async () => {
+        setCheckoutLoading(true);
+        for (let attempt = 0; attempt < 12; attempt += 1) {
+          if (sessionId) {
+            const verification = await api.billing.verifyCheckout(sessionId);
+            if (verification.success && verification.data?.active) {
+              setCheckoutLoading(false);
+              sessionStorage.removeItem("flowpdpa_pending_policy");
+              await startGeneration(pending.data);
+              window.history.replaceState({}, "", window.location.pathname);
+              return;
+            }
+          }
+          const subscriptions = await api.billing.subscriptions();
+          if (
+            subscriptions.success &&
+            subscriptions.data?.some((item) =>
+              ["active", "trialing"].includes(item.status),
+            )
+          ) {
+            setCheckoutLoading(false);
+            sessionStorage.removeItem("flowpdpa_pending_policy");
+            await startGeneration(pending.data);
+            window.history.replaceState({}, "", window.location.pathname);
+            return;
+          }
+          await new Promise((resolve) => window.setTimeout(resolve, 1000));
+        }
+        setCheckoutLoading(false);
+        setGenerationError(
+          "ได้รับผลการชำระเงินแล้ว แต่ระบบยังยืนยันแพ็กเกจไม่เสร็จ กรุณารีเฟรชหน้านี้อีกครั้ง",
+        );
+      })();
+    } catch {
+      sessionStorage.removeItem("flowpdpa_pending_policy");
+      setGenerationError("ไม่สามารถกู้คืนข้อมูลก่อนชำระเงินได้");
+    }
+  }, []);
 
-  const progress = ((step - 1) / (steps.length - 1)) * 100
+  const handleCheckout = async () => {
+    if (checkoutLoading) return;
+    setCheckoutLoading(true);
+    setGenerationError("");
+    const subscriptions = await api.billing.subscriptions();
+    const alreadyActive = Boolean(
+      subscriptions.success &&
+        subscriptions.data?.some((item) =>
+          ["active", "trialing"].includes(item.status),
+        ),
+    );
+    if (alreadyActive) {
+      setHasActiveSubscription(true);
+      setCheckoutLoading(false);
+      await startGeneration();
+      return;
+    }
+    const response = await api.billing.createCheckout(
+      selectedPackage,
+      billingCycle,
+    );
+    if (response.success && response.data?.checkoutUrl) {
+      sessionStorage.setItem(
+        "flowpdpa_pending_policy",
+        JSON.stringify({
+          data,
+          selectedPackage,
+          billingCycle,
+          sessionId: response.data.sessionId,
+        }),
+      );
+      window.location.assign(response.data.checkoutUrl);
+      return;
+    }
+    if (response.error?.code === "SUBSCRIPTION_ALREADY_ACTIVE") {
+      setHasActiveSubscription(true);
+      setCheckoutLoading(false);
+      await startGeneration();
+      return;
+    }
+    setCheckoutLoading(false);
+    setGenerationError(
+      response.error?.message ??
+        "ไม่สามารถเริ่มการชำระเงินได้ กรุณาลองใหม่อีกครั้ง",
+    );
+  };
+
+  const progress =
+    ((Math.min(step, steps.length) - 1) / (steps.length - 1)) * 100;
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#f8fafc' }}>
-
+    <div
+      className="min-h-screen flex flex-col"
+      style={{ backgroundColor: "#f8fafc" }}
+    >
       {/* Header */}
       <header
         className="sticky top-0 z-20 bg-white border-b border-gray-200"
-        style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}
+        style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}
       >
         <div className="max-w-4xl mx-auto px-4 sm:px-6 flex items-center justify-between h-14">
           <Link to="/dashboard" className="flex items-center gap-0.5">
-            <span className="font-black text-lg tracking-tight text-gray-900">Flow</span>
-            <span className="font-black text-lg tracking-tight" style={{ color: 'var(--green)' }}>PDPA</span>
+            <span className="font-black text-lg tracking-tight text-gray-900">
+              Flow
+            </span>
+            <span
+              className="font-black text-lg tracking-tight"
+              style={{ color: "var(--green)" }}
+            >
+              PDPA
+            </span>
           </Link>
-          {!done && (
+          {!done && step <= steps.length && (
             <span className="text-xs font-semibold text-gray-400">
               ขั้นตอนที่ {step} จาก {steps.length}
             </span>
           )}
-          <Link to="/dashboard" className="text-gray-400 hover:text-gray-600 transition-colors">
+          <Link
+            to="/dashboard"
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+          >
             <X className="w-5 h-5" />
           </Link>
         </div>
 
         {/* Progress bar */}
-        {!done && (
+        {!done && step <= steps.length && (
           <div className="h-1 bg-gray-100">
             <div
               className="h-full transition-all duration-500"
-              style={{ width: `${progress}%`, backgroundColor: 'var(--green)' }}
+              style={{ width: `${progress}%`, backgroundColor: "var(--green)" }}
             />
           </div>
         )}
       </header>
 
       {/* Step indicators */}
-      {!done && (
+      {!done && step <= steps.length && (
         <div className="bg-white border-b border-gray-100">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 py-3">
-            <div className="flex items-center justify-between overflow-x-auto gap-1">
+            <div className="flex items-center justify-between overflow-hidden gap-1">
               {steps.map(({ num, label }) => {
-                const active = step === num
-                const done_ = step > num
+                const active = step === num;
+                const done_ = step > num;
                 return (
                   <div key={num} className="flex items-center gap-1 shrink-0">
                     <div className="flex items-center gap-1.5">
                       <span
                         className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-colors"
                         style={{
-                          backgroundColor: done_ ? 'var(--green)' : active ? 'var(--navy)' : '#e5e7eb',
-                          color: done_ || active ? 'white' : '#9ca3af',
+                          backgroundColor: done_
+                            ? "var(--green)"
+                            : active
+                              ? "var(--navy)"
+                              : "#e5e7eb",
+                          color: done_ || active ? "white" : "#9ca3af",
                         }}
                       >
-                        {done_ ? <Check className="w-3 h-3" strokeWidth={3} /> : num}
+                        {done_ ? (
+                          <Check className="w-3 h-3" strokeWidth={3} />
+                        ) : (
+                          num
+                        )}
                       </span>
                       <span
                         className="text-xs font-medium hidden sm:block"
-                        style={{ color: active ? 'var(--navy)' : done_ ? 'var(--green)' : '#9ca3af' }}
+                        style={{
+                          color: active
+                            ? "var(--navy)"
+                            : done_
+                              ? "var(--green)"
+                              : "#9ca3af",
+                        }}
                       >
                         {label}
                       </span>
                     </div>
                     {num < steps.length && (
-                      <div className="w-4 sm:w-8 h-px mx-1" style={{ backgroundColor: step > num ? 'var(--green)' : '#e5e7eb' }} />
+                      <div
+                        className="w-4 sm:w-8 h-px mx-1"
+                        style={{
+                          backgroundColor:
+                            step > num ? "var(--green)" : "#e5e7eb",
+                        }}
+                      />
                     )}
                   </div>
-                )
+                );
               })}
             </div>
           </div>
@@ -1244,58 +2343,120 @@ export default function CreatePolicy() {
       <main className="flex-1 py-8 px-4 sm:px-6">
         <div className="max-w-4xl mx-auto">
           {generationError && !done && (
-            <div className="mb-4 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
+            <div
+              className="mb-4 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+              role="alert"
+            >
               {generationError}
             </div>
           )}
           {done ? (
             <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-sm">
-              <WaitingReviewScreen data={data} slug={savedSlug} processing={generating} error={generationError} onRetry={() => void startGeneration()} onReset={() => { setDataRaw(initialData); setStep(1); setDone(false); setSavedSlug(''); setGenerationError('') }} />
+              <WaitingReviewScreen
+                data={data}
+                slug={savedSlug}
+                processing={false}
+                error={generationError}
+                onRetry={() => void startGeneration()}
+                onReset={() => {
+                  setDataRaw(initialData);
+                  setStep(1);
+                  setDone(false);
+                  setSavedSlug("");
+                  setGenerationError("");
+                }}
+              />
             </div>
           ) : generating ? (
             <div className="bg-white rounded-2xl border border-gray-100 p-16 shadow-sm text-center">
-              <div className="w-14 h-14 rounded-full border-4 border-gray-100 mx-auto mb-5 animate-spin" style={{ borderTopColor: 'var(--green)' }} />
-              <p className="text-gray-900 font-bold mb-1">กำลังสร้างนโยบาย...</p>
-              <p className="text-sm text-gray-400">AI กำลังประมวลผลข้อมูลของคุณ กรุณารอสักครู่</p>
+              <div
+                className="w-14 h-14 rounded-full border-4 border-gray-100 mx-auto mb-5 animate-spin"
+                style={{ borderTopColor: "var(--green)" }}
+              />
+              <p className="text-gray-900 font-bold mb-1">
+                กำลังสร้างนโยบาย...
+              </p>
+              <p className="text-sm text-gray-400">
+                AI กำลังประมวลผลข้อมูลของคุณ กรุณารอสักครู่
+              </p>
             </div>
           ) : (
-            <div key={step} className="bg-white rounded-2xl border border-gray-100 p-6 sm:p-8 shadow-sm step-in">
+            <div
+              key={step}
+              className="bg-white rounded-2xl border border-gray-100 p-6 sm:p-8 shadow-sm step-in"
+            >
               {step === 1 && <Step1 data={data} setData={setData} />}
               {step === 2 && <Step2 data={data} setData={setData} />}
               {step === 3 && <Step3 data={data} setData={setData} />}
               {step === 4 && <Step4 data={data} setData={setData} />}
               {step === 5 && <Step5 data={data} setData={setData} />}
               {step === 6 && <Step6 data={data} />}
+              {step === 7 && (
+                <Step7
+                  selectedPackage={selectedPackage}
+                  onSelect={setSelectedPackage}
+                  billingCycle={billingCycle}
+                  onBillingCycleChange={setBillingCycle}
+                />
+              )}
 
               {/* Navigation */}
               <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-100">
                 <button
                   type="button"
-                  onClick={() => step > 1 ? setStep(s => s - 1) : navigate('/dashboard')}
+                  onClick={() =>
+                    step > 1 ? setStep((s) => s - 1) : navigate("/dashboard")
+                  }
                   className="flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-gray-800 transition-colors"
                 >
                   <ChevronLeft className="w-4 h-4" />
-                  {step === 1 ? 'ยกเลิก' : 'ย้อนกลับ'}
+                  {step === 1 ? "ยกเลิก" : "ย้อนกลับ"}
                 </button>
 
-                {step < steps.length ? (
+                {step < 7 ? (
                   <button
                     type="button"
                     disabled={!canProceed()}
-                    onClick={() => setStep(s => s + 1)}
+                    onClick={() => {
+                      if (step === 6 && hasActiveSubscription) {
+                        void startGeneration();
+                        return;
+                      }
+                      setStep((s) => s + 1);
+                    }}
                     className="btn-green px-8 py-3 text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none"
-                    style={{ borderRadius: '8px' }}
+                    style={{ borderRadius: "8px" }}
                   >
-                    ถัดไป <ChevronRight className="w-4 h-4" />
+                    {step === 6 ? (
+                      <>
+                        {hasActiveSubscription ? (
+                          <><CheckCircle className="w-4 h-4" /> สร้างเอกสาร</>
+                        ) : (
+                          <><CreditCard className="w-4 h-4" /> ไปหน้า Checkout</>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        ถัดไป <ChevronRight className="w-4 h-4" />
+                      </>
+                    )}
                   </button>
                 ) : (
                   <button
                     type="button"
-                    onClick={handleGenerate}
+                    onClick={() => void handleCheckout()}
+                    disabled={checkoutLoading}
                     className="btn-green px-8 py-3 text-sm flex items-center gap-2"
-                    style={{ borderRadius: '8px' }}
+                    style={{ borderRadius: "8px" }}
                   >
-                    <CheckCircle className="w-4 h-4" /> ส่งข้อมูล
+                    {checkoutLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <CreditCard className="w-4 h-4" />
+                    )}
+                    {checkoutLoading
+                      ? "กำลังเปิดหน้าชำระเงิน..."
+                      : "ชำระเงินด้วย Stripe"}
                   </button>
                 )}
               </div>
@@ -1304,5 +2465,5 @@ export default function CreatePolicy() {
         </div>
       </main>
     </div>
-  )
+  );
 }

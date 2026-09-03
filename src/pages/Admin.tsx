@@ -7,12 +7,15 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleDollarSign,
+  ClipboardCopy,
   CreditCard,
   FileText,
   Gauge,
   Landmark,
   LogOut,
   Eye,
+  ExternalLink,
+  Loader2,
   Languages,
   Menu,
   Pencil,
@@ -39,6 +42,7 @@ import type {
   AdminMerchantStatus,
   AdminOverview,
   AdminPayment,
+  AdminPaymentDetail,
   AdminPolicy,
   AdminPolicyDetail,
   AdminPolicyStatus,
@@ -609,38 +613,42 @@ function MerchantFormModal({
               />
             </label>
           ))}
-          <label className="block text-xs font-semibold text-gray-600">
-            Status
-            <select
-              className="mt-2 h-10 w-full rounded border border-gray-300 px-3 text-sm font-normal"
-              value={draft.status}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  status: event.target.value as MerchantStatus,
-                }))
-              }
-            >
-              {(["active", "pending", "suspended", "inactive"] as const).map(
-                (value) => (
-                  <option key={value}>{value}</option>
-                ),
-              )}
-            </select>
-          </label>
-          <label className="block text-xs font-semibold text-gray-600">
-            Plan
-            <input
-              className="mt-2 h-10 w-full rounded border border-gray-300 px-3 text-sm font-normal"
-              value={draft.plan}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  plan: event.target.value,
-                }))
-              }
-            />
-          </label>
+          {!requirePassword ? (
+            <>
+              <label className="block text-xs font-semibold text-gray-600">
+                Status
+                <select
+                  className="mt-2 h-10 w-full rounded border border-gray-300 px-3 text-sm font-normal"
+                  value={draft.status}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      status: event.target.value as MerchantStatus,
+                    }))
+                  }
+                >
+                  {(["active", "pending", "suspended", "inactive"] as const).map(
+                    (value) => (
+                      <option key={value}>{value}</option>
+                    ),
+                  )}
+                </select>
+              </label>
+              <label className="block text-xs font-semibold text-gray-600">
+                Plan
+                <input
+                  className="mt-2 h-10 w-full rounded border border-gray-300 px-3 text-sm font-normal"
+                  value={draft.plan}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      plan: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+            </>
+          ) : null}
           <button
             className="portal-button primary sm:col-span-2"
             onClick={submit}
@@ -672,7 +680,7 @@ function MerchantView({
   const [deleting, setDeleting] = useState<Merchant | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const visible = rows.filter((row) => {
-    const matchesQuery = `${row.name} ${row.email} ${row.companyName || ""}`
+    const matchesQuery = `${row.id} ${row.name} ${row.email} ${row.companyName || ""}`
       .toLowerCase()
       .includes(query.toLowerCase());
     return (
@@ -834,6 +842,23 @@ function MerchantView({
                   <td>
                     <p className="font-semibold">{row.name}</p>
                     <p className="text-xs text-gray-400">{row.email}</p>
+                    <div className="mt-1 flex items-center gap-1 text-[11px] text-gray-500">
+                      <span className="shrink-0">รหัส:</span>
+                      <code className="select-all break-all">{row.id}</code>
+                      <button
+                        type="button"
+                        className="shrink-0 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-emerald-700"
+                        title="คัดลอก Merchant ID"
+                        aria-label={`คัดลอก Merchant ID ของ ${row.name}`}
+                        onClick={() => {
+                          void navigator.clipboard.writeText(row.id).catch(() => {
+                            setError("ไม่สามารถคัดลอก Merchant ID ได้");
+                          });
+                        }}
+                      >
+                        <ClipboardCopy className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </td>
                   <td>{row.companyName || "-"}</td>
                   <td>{row.policyCount}</td>
@@ -1116,6 +1141,20 @@ function BillingView({
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [paymentDetail, setPaymentDetail] = useState<AdminPaymentDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
+  const openPayment = async (paymentId: string) => {
+    setDetailLoading(true);
+    setDetailError("");
+    const response = await api.admin.getPayment(paymentId);
+    setDetailLoading(false);
+    if (response.success && response.data?.payment) {
+      setPaymentDetail(response.data.payment);
+      return;
+    }
+    setDetailError(response.error?.message ?? "ไม่สามารถโหลดรายละเอียดการชำระเงินได้");
+  };
   const visibleSubscriptions = subscriptions.filter((row) => {
     const matchesQuery =
       `${row.id} ${row.merchantName || ""} ${row.merchantEmail || ""}`
@@ -1124,7 +1163,7 @@ function BillingView({
     return (
       matchesQuery &&
       (statusFilter === "all" || row.status === statusFilter) &&
-      (typeFilter === "all" || row.policyType === typeFilter)
+      (typeFilter === "all" || row.plan === typeFilter)
     );
   });
   const visiblePayments = payments.filter((row) => {
@@ -1135,7 +1174,7 @@ function BillingView({
     return (
       matchesQuery &&
       (statusFilter === "all" || row.status === statusFilter) &&
-      (typeFilter === "all" || row.policyType === typeFilter)
+      (typeFilter === "all" || row.plan === typeFilter)
     );
   });
   const subscriptionPagination = usePagination(visibleSubscriptions);
@@ -1145,7 +1184,7 @@ function BillingView({
   const policyTypes = Array.from(
     new Set(
       source
-        .map((row) => row.policyType)
+        .map((row) => row.plan)
         .filter((value): value is string => Boolean(value)),
     ),
   );
@@ -1183,7 +1222,7 @@ function BillingView({
           value={typeFilter}
           onChange={(event) => setTypeFilter(event.target.value)}
         >
-          <option value="all">นโยบายทุกประเภท</option>
+          <option value="all">ทุกแพ็กเกจ</option>
           {policyTypes.map((value) => (
             <option key={value} value={value}>
               {value}
@@ -1199,7 +1238,7 @@ function BillingView({
                 <tr>
                   <th>การสมัครสมาชิก</th>
                   <th>ผู้ประกอบการ</th>
-                  <th>ประเภทนโยบาย</th>
+                  <th>แพ็กเกจ / รอบบิล</th>
                   <th>วันเริ่มรอบ</th>
                   <th>วันสิ้นสุดรอบ</th>
                   <th>การยกเลิก</th>
@@ -1209,14 +1248,17 @@ function BillingView({
               <tbody>
                 {subscriptionPagination.pageRows.map((row) => (
                   <tr key={row.id}>
-                    <td className="font-mono text-xs">{row.id}</td>
+                    <td className="font-mono text-xs" title={row.stripeSubscriptionId || row.id}>{row.stripeSubscriptionId || row.id}</td>
                     <td>
                       <p className="font-semibold">{row.merchantName || "-"}</p>
                       <p className="text-xs text-gray-400">
                         {row.merchantEmail}
                       </p>
                     </td>
-                    <td>{row.policyType}</td>
+                    <td>
+                      <p className="font-semibold capitalize">{row.plan || "-"}</p>
+                      <p className="text-xs text-gray-400">{row.billingCycle === "annual" ? "รายปี" : row.billingCycle === "monthly" ? "รายเดือน" : "-"}</p>
+                    </td>
                     <td>{formatDate(row.currentPeriodStart)}</td>
                     <td>{formatDate(row.currentPeriodEnd)}</td>
                     <td>{row.cancelAtPeriodEnd ? "At period end" : "-"}</td>
@@ -1233,10 +1275,11 @@ function BillingView({
                 <tr>
                   <th>ใบแจ้งหนี้</th>
                   <th>ผู้ประกอบการ</th>
-                  <th>ประเภทนโยบาย</th>
+                  <th>แพ็กเกจ / รอบบิล</th>
                   <th>จำนวนเงิน</th>
                   <th>วันที่ชำระ</th>
                   <th>สถานะ</th>
+                  <th>รายละเอียด</th>
                 </tr>
               </thead>
               <tbody>
@@ -1246,13 +1289,21 @@ function BillingView({
                       {row.stripeInvoiceId || row.id}
                     </td>
                     <td>{row.merchantName || "-"}</td>
-                    <td>{row.policyType || "-"}</td>
+                    <td>
+                      <p className="font-semibold capitalize">{row.plan || "-"}</p>
+                      <p className="text-xs text-gray-400">{row.billingCycle === "annual" ? "รายปี" : row.billingCycle === "monthly" ? "รายเดือน" : "-"}</p>
+                    </td>
                     <td>
                       {money(row.amountPaid)} {row.currency.toUpperCase()}
                     </td>
                     <td>{formatDate(row.paidAt)}</td>
                     <td>
                       <Badge value={row.status} />
+                    </td>
+                    <td>
+                      <button type="button" onClick={() => void openPayment(row.id)} className="portal-action-btn">
+                        <Eye className="h-3.5 w-3.5" /> ดูรายละเอียด
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -1269,6 +1320,28 @@ function BillingView({
           <Pagination {...paymentPagination} total={visiblePayments.length} />
         )}
       </section>
+      {(detailLoading || detailError || paymentDetail) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4" onMouseDown={() => { if (!detailLoading) { setPaymentDetail(null); setDetailError(""); } }}>
+          <section className="max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+            <header className="sticky top-0 z-10 flex items-start justify-between border-b border-gray-200 bg-white px-6 py-5">
+              <div><p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700">Stripe invoice</p><h2 className="mt-1 text-lg font-bold text-gray-900">รายละเอียดการชำระเงิน</h2></div>
+              <button type="button" aria-label="ปิด" onClick={() => { setPaymentDetail(null); setDetailError(""); }} className="grid h-8 w-8 place-items-center rounded border border-gray-200"><X className="h-4 w-4" /></button>
+            </header>
+            {detailLoading ? <div className="grid min-h-64 place-items-center"><Loader2 className="h-6 w-6 animate-spin text-emerald-700" /></div> : detailError ? <div className="m-6 border border-red-200 bg-red-50 p-4 text-sm text-red-700">{detailError}</div> : paymentDetail ? (
+              <div className="space-y-6 p-6">
+                <div className="grid gap-px overflow-hidden rounded-lg border border-gray-200 bg-gray-200 sm:grid-cols-3">
+                  {[["ยอดรวม", `${money(paymentDetail.total)} ${paymentDetail.currency.toUpperCase()}`],["ชำระแล้ว", `${money(paymentDetail.amountPaid)} ${paymentDetail.currency.toUpperCase()}`],["ยอดคงเหลือ", `${money(paymentDetail.amountRemaining)} ${paymentDetail.currency.toUpperCase()}`]].map(([label,value]) => <div key={label} className="bg-white p-4"><p className="text-xs text-gray-400">{label}</p><p className="mt-1 text-lg font-bold text-gray-900">{value}</p></div>)}
+                </div>
+                <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
+                  {[["ผู้ประกอบการ", paymentDetail.merchantName || "-"],["อีเมล", paymentDetail.customerEmail || paymentDetail.merchantEmail || "-"],["เลข Invoice", paymentDetail.invoiceNumber || paymentDetail.stripeInvoiceId || "-"],["แพ็กเกจ", `${paymentDetail.plan || "-"} · ${paymentDetail.billingCycle === "annual" ? "รายปี" : "รายเดือน"}`],["สถานะ", paymentDetail.status],["วิธีเรียกเก็บ", paymentDetail.collectionMethod || "-"],["เริ่มรอบ", formatDate(paymentDetail.periodStart)],["สิ้นสุดรอบ", formatDate(paymentDetail.periodEnd)],["Stripe Customer", paymentDetail.stripeCustomerId || "-"],["Stripe Subscription", paymentDetail.stripeSubscriptionId || "-"]].map(([label,value]) => <div key={label}><p className="text-xs text-gray-400">{label}</p><p className="mt-1 break-all text-sm font-semibold text-gray-800">{value}</p></div>)}
+                </div>
+                <div><h3 className="mb-3 text-sm font-bold text-gray-900">รายการในใบแจ้งหนี้</h3><div className="divide-y divide-gray-100 rounded-lg border border-gray-200">{paymentDetail.lines.map((line) => <div key={line.id} className="flex items-start justify-between gap-4 p-4"><div><p className="text-sm font-semibold text-gray-800">{line.description || "รายการแพ็กเกจ"}</p><p className="mt-1 text-xs text-gray-400">จำนวน {line.quantity ?? 1} · {formatDate(line.periodStart)} – {formatDate(line.periodEnd)}</p></div><p className="shrink-0 text-sm font-bold">{money(line.amount)} {line.currency.toUpperCase()}</p></div>)}</div></div>
+                <div className="flex flex-wrap gap-2">{paymentDetail.hostedInvoiceUrl ? <a href={paymentDetail.hostedInvoiceUrl} target="_blank" rel="noreferrer" className="portal-action-btn"><ExternalLink className="h-3.5 w-3.5" /> เปิดใบแจ้งหนี้</a> : null}{paymentDetail.invoicePdf ? <a href={paymentDetail.invoicePdf} target="_blank" rel="noreferrer" className="portal-action-btn"><ExternalLink className="h-3.5 w-3.5" /> ดาวน์โหลด PDF</a> : null}</div>
+              </div>
+            ) : null}
+          </section>
+        </div>
+      )}
     </>
   );
 }
