@@ -363,6 +363,20 @@ export default function Register() {
     }
   };
 
+  const handleOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const digits = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    if (!digits) return;
+
+    e.preventDefault();
+    setOtp(Array.from({ length: 6 }, (_, index) => digits[index] ?? ""));
+    setError("");
+
+    const focusIndex = Math.min(digits.length, 6) - 1;
+    requestAnimationFrame(() => {
+      document.getElementById(`otp-${focusIndex}`)?.focus();
+    });
+  };
+
   // Countdown timer for OTP expiry
   useEffect(() => {
     if (step === "verify" && otpReady && expiryCountdown > 0) {
@@ -880,6 +894,8 @@ export default function Register() {
                                   e as React.KeyboardEvent<HTMLInputElement>,
                                 )
                               }
+                              onPaste={handleOtpPaste}
+                              autoComplete={index === 0 ? "one-time-code" : "off"}
                               className="register-otp text-center tracking-wider transition-colors focus:outline-none disabled:cursor-wait disabled:opacity-60"
                               style={{
                                 backgroundColor: digit ? "#edf5f2" : "#fff",
