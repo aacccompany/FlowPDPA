@@ -39,6 +39,7 @@ import type {
   AdminLegalUser,
   AdminLegalWorkload,
   AdminMerchant,
+  AdminMerchantActivity,
   AdminMerchantStatus,
   AdminOverview,
   AdminPayment,
@@ -66,6 +67,7 @@ type AdminView =
   | "legal"
   | "logs"
   | "audit"
+  | "merchant_activity"
   | "analytics";
 type Merchant = AdminMerchant;
 type Policy = AdminPolicy;
@@ -113,6 +115,25 @@ const badgeMeta: Record<string, { color: string; bg: string }> = {
   error: { color: "#c2410c", bg: "#fff0e8" },
 };
 
+const auditActionLabels: Record<string, string> = {
+  login_success: "เข้าสู่ระบบสำเร็จ",
+  login_failed: "เข้าสู่ระบบไม่สำเร็จ",
+  password_reset: "ตั้งรหัสผ่านใหม่",
+  merchant_created: "สร้างผู้ประกอบการ",
+  merchant_updated: "แก้ไขผู้ประกอบการ",
+  merchant_status_changed: "เปลี่ยนสถานะผู้ประกอบการ",
+  merchant_deleted: "ลบผู้ประกอบการ",
+  legal_user_created: "สร้างผู้ใช้ฝ่ายกฎหมาย",
+  legal_user_updated: "แก้ไขผู้ใช้ฝ่ายกฎหมาย",
+  legal_user_status_changed: "เปลี่ยนสถานะฝ่ายกฎหมาย",
+  legal_user_deleted: "ลบผู้ใช้ฝ่ายกฎหมาย",
+  policy_created: "สร้างนโยบาย",
+  policy_regenerated: "สร้างนโยบายใหม่",
+  policy_archived: "จัดเก็บนโยบาย",
+  subscription_cancelled: "ยกเลิกการต่ออายุ",
+  subscription_resumed: "เปิดการต่ออายุ",
+};
+
 function Badge({ value }: { value: string }) {
   const meta = badgeMeta[value] || { color: "#475467", bg: "#f2f4f7" };
   const labels: Record<string, string> = {
@@ -136,6 +157,7 @@ function Badge({ value }: { value: string }) {
     update: "แก้ไข",
     delete: "ลบ",
     read: "อ่าน",
+    ...auditActionLabels,
   };
   return (
     <span
@@ -172,6 +194,17 @@ function Pagination({
 }) {
   const first = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const last = Math.min(page * pageSize, total);
+  const pageItems: Array<number | string> = [];
+  const visiblePages = Array.from(
+    new Set([1, page - 1, page, page + 1, pageCount]),
+  )
+    .filter((value) => value >= 1 && value <= pageCount)
+    .sort((a, b) => a - b);
+  visiblePages.forEach((value, index) => {
+    const previous = visiblePages[index - 1];
+    if (previous && value - previous > 1) pageItems.push(`ellipsis-${value}`);
+    pageItems.push(value);
+  });
   return (
     <footer className="portal-pagination">
       <p className="text-xs text-gray-500">
@@ -190,8 +223,8 @@ function Pagination({
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
-        {Array.from({ length: pageCount }, (_, index) => index + 1).map(
-          (value) => (
+        {pageItems.map((value) =>
+          typeof value === "number" ? (
             <button
               key={value}
               className="portal-page-button"
@@ -201,6 +234,14 @@ function Pagination({
             >
               {value}
             </button>
+          ) : (
+            <span
+              key={value}
+              className="px-1 text-sm text-gray-400"
+              aria-hidden="true"
+            >
+              …
+            </span>
           ),
         )}
         <button
@@ -291,6 +332,11 @@ function Sidebar({
     {
       label: "การติดตามระบบ",
       items: [
+        {
+          id: "merchant_activity" as const,
+          text: "กิจกรรมผู้ประกอบการ",
+          Icon: Activity,
+        },
         { id: "audit" as const, text: "บันทึกกิจกรรม", Icon: Activity },
         { id: "logs" as const, text: "บันทึกระบบ", Icon: AlertTriangle },
         { id: "analytics" as const, text: "การวิเคราะห์", Icon: BarChart3 },
@@ -2118,42 +2164,26 @@ function LegalManagement({
   );
 }
 
-type AdminLogType =
-  | "all"
-  | "error"
-  | "document_acknowledged"
-  | "customer_consent"
-  | "merchant_change_requested"
-  | "legal_document_updated";
-
-const adminLogType = (log: ErrorLog): Exclude<AdminLogType, "all"> => {
-  const value = String(log.context?.type || log.context?.eventType || "");
-  if (
-    value === "document_acknowledged" ||
-    value === "customer_consent" ||
-    value === "merchant_change_requested" ||
-    value === "legal_document_updated"
-  )
-    return value;
-  return "error";
-};
-
-const adminLogLabel: Record<Exclude<AdminLogType, "all">, string> = {
-  error: "ข้อผิดพลาดของระบบ",
-  document_acknowledged: "การรับทราบเอกสาร",
-  customer_consent: "ความยินยอมของลูกค้า",
-  merchant_change_requested: "คำขอแก้ไขจากผู้ประกอบการ",
-  legal_document_updated: "การแก้ไขเอกสารโดยฝ่ายกฎหมาย",
-};
-
 function LogsView({ logs }: { logs: ErrorLog[] }) {
-  const [type, setType] = useState<AdminLogType>("all");
   const [query, setQuery] = useState("");
+  const [level, setLevel] = useState("all");
+  const [service, setService] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const services = useMemo(
+    () => Array.from(new Set(logs.map((log) => log.service))).sort(),
+    [logs],
+  );
   const visible = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
+    const fromTime = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : null;
+    const toTime = dateTo ? new Date(`${dateTo}T23:59:59.999`).getTime() : null;
     return logs.filter((log) => {
-      const logType = adminLogType(log);
-      if (type !== "all" && logType !== type) return false;
+      if (level !== "all" && log.level !== level) return false;
+      if (service !== "all" && log.service !== service) return false;
+      const createdTime = log.createdAt ? new Date(log.createdAt).getTime() : null;
+      if (fromTime !== null && (createdTime === null || createdTime < fromTime)) return false;
+      if (toTime !== null && (createdTime === null || createdTime > toTime)) return false;
       if (!normalized) return true;
       return [
         log.id,
@@ -2164,15 +2194,22 @@ function LogsView({ logs }: { logs: ErrorLog[] }) {
         log.context?.path,
         log.context?.relatedField,
         log.context?.policyId,
-        adminLogLabel[logType],
       ].some((value) =>
         String(value || "")
           .toLocaleLowerCase()
           .includes(normalized),
       );
     });
-  }, [logs, query, type]);
+  }, [logs, query, level, service, dateFrom, dateTo]);
   const pagination = usePagination(visible);
+  const hasFilters = Boolean(query || level !== "all" || service !== "all" || dateFrom || dateTo);
+  const clearFilters = () => {
+    setQuery("");
+    setLevel("all");
+    setService("all");
+    setDateFrom("");
+    setDateTo("");
+  };
   return (
     <>
       <PageTitle
@@ -2188,22 +2225,52 @@ function LogsView({ logs }: { logs: ErrorLog[] }) {
         />
         <select
           className="portal-filter h-9"
-          value={type}
-          onChange={(event) => setType(event.target.value as AdminLogType)}
+          value={level}
+          onChange={(event) => setLevel(event.target.value)}
         >
-          <option value="all">บันทึกทุกประเภท</option>
-          <option value="error">ข้อผิดพลาดของระบบ</option>
-          <option value="document_acknowledged">การรับทราบเอกสาร</option>
-          <option value="customer_consent">ความยินยอมของลูกค้า</option>
-          <option value="merchant_change_requested">
-            คำขอแก้ไขจากผู้ประกอบการ
-          </option>
-          <option value="legal_document_updated">
-            การแก้ไขเอกสารโดยฝ่ายกฎหมาย
-          </option>
+          <option value="all">ทุกระดับ</option>
+          <option value="warning">คำเตือน</option>
+          <option value="error">ข้อผิดพลาด</option>
+          <option value="critical">วิกฤต</option>
         </select>
+        <select
+          className="portal-filter h-9"
+          value={service}
+          onChange={(event) => setService(event.target.value)}
+        >
+          <option value="all">ทุกบริการ</option>
+          {services.map((value) => (
+            <option key={value} value={value}>{value}</option>
+          ))}
+        </select>
+        <label className="flex items-center gap-2 text-xs text-gray-500">
+          จาก
+          <input
+            type="date"
+            className="portal-filter h-9"
+            value={dateFrom}
+            max={dateTo || undefined}
+            onChange={(event) => setDateFrom(event.target.value)}
+          />
+        </label>
+        <label className="flex items-center gap-2 text-xs text-gray-500">
+          ถึง
+          <input
+            type="date"
+            className="portal-filter h-9"
+            value={dateTo}
+            min={dateFrom || undefined}
+            onChange={(event) => setDateTo(event.target.value)}
+          />
+        </label>
+        {hasFilters ? (
+          <button type="button" className="portal-button" onClick={clearFilters}>
+            <X className="h-3.5 w-3.5" />
+            ล้างตัวกรอง
+          </button>
+        ) : null}
         <span className="text-xs text-gray-400">
-          {visible.length} of {logs.length} logs
+          แสดง {visible.length} จาก {logs.length} รายการ
         </span>
       </div>
       <section className="portal-panel">
@@ -2215,44 +2282,23 @@ function LogsView({ logs }: { logs: ErrorLog[] }) {
               <table className="portal-table">
                 <thead>
                   <tr>
-                    <th>ประเภท</th>
-                    <th>ระดับ</th>
-                    <th>บริการ / ข้อมูลที่เกี่ยวข้อง</th>
-                    <th>คำขอ / ID ที่เกี่ยวข้อง</th>
-                    <th>รายละเอียด</th>
                     <th>เวลา</th>
+                    <th>ระดับ</th>
+                    <th>บริการ</th>
+                    <th>รายละเอียด</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {pagination.pageRows.map((row) => {
-                    const logType = adminLogType(row);
-                    return (
+                  {pagination.pageRows.map((row) => (
                       <tr key={row.id}>
-                        <td>
-                          <Badge value={adminLogLabel[logType]} />
-                        </td>
+                        <td>{formatDate(row.createdAt)}</td>
                         <td>
                           <Badge value={row.level} />
                         </td>
-                        <td>
-                          {String(
-                            row.context?.relatedField || row.service || "-",
-                          )}
-                        </td>
-                        <td className="font-mono text-xs">
-                          {String(row.context?.method || "")}{" "}
-                          {String(
-                            row.context?.path ||
-                              row.context?.relatedId ||
-                              row.context?.policyId ||
-                              "-",
-                          )}
-                        </td>
+                        <td>{row.service || "-"}</td>
                         <td>{row.message}</td>
-                        <td>{formatDate(row.createdAt)}</td>
                       </tr>
-                    );
-                  })}
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -2264,11 +2310,244 @@ function LogsView({ logs }: { logs: ErrorLog[] }) {
   );
 }
 
+const merchantActivityLabels: Record<string, string> = {
+  document_acknowledged: "รับทราบเอกสารแล้ว",
+  customer_consent: "ลูกค้าให้ความยินยอม",
+  merchant_change_requested: "คำขอแก้ไขจากผู้ประกอบการ",
+  legal_document_updated: "ฝ่ายกฎหมายแก้ไขเอกสาร",
+  consent_granted: "ให้ความยินยอม",
+  consent_rejected: "ปฏิเสธความยินยอม",
+  consent_withdrawn: "ถอนความยินยอม",
+};
+
+function MerchantActivityView() {
+  const [rows, setRows] = useState<AdminMerchantActivity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const [type, setType] = useState("all");
+  const [merchantId, setMerchantId] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [selected, setSelected] = useState<AdminMerchantActivity | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void api.admin.listMerchantActivity({ limit: 500 }).then((response) => {
+      if (!active) return;
+      if (response.success && response.data) setRows(response.data.logs);
+      else setError(response.error?.message || "ไม่สามารถโหลดกิจกรรมผู้ประกอบการได้");
+      setLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const merchants = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          rows.map((row) => [
+            row.merchantId,
+            { id: row.merchantId, name: row.merchantName, email: row.merchantEmail },
+          ]),
+        ).values(),
+      ).sort((left, right) => left.name.localeCompare(right.name, "th")),
+    [rows],
+  );
+  const visible = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase();
+    return rows.filter((row) => {
+      if (type !== "all" && row.type !== type) return false;
+      if (merchantId !== "all" && row.merchantId !== merchantId) return false;
+      const createdDate = row.createdAt?.slice(0, 10);
+      if ((dateFrom || dateTo) && !createdDate) return false;
+      if (dateFrom && createdDate && createdDate < dateFrom) return false;
+      if (dateTo && createdDate && createdDate > dateTo) return false;
+      if (!normalized) return true;
+      return [
+        row.merchantName,
+        row.merchantEmail,
+        row.policyName,
+        row.policySlug,
+        row.relatedField,
+        row.description,
+      ].some((value) => value?.toLocaleLowerCase().includes(normalized));
+    });
+  }, [rows, query, type, merchantId, dateFrom, dateTo]);
+  const hasFilters = Boolean(query || type !== "all" || merchantId !== "all" || dateFrom || dateTo);
+  const clearFilters = () => {
+    setQuery("");
+    setType("all");
+    setMerchantId("all");
+    setDateFrom("");
+    setDateTo("");
+  };
+  const pagination = usePagination(visible);
+
+  return (
+    <>
+      <PageTitle
+        eyebrow="ประวัติทางธุรกิจ"
+        title="กิจกรรมผู้ประกอบการ"
+        description="รายการรับทราบเอกสาร ความยินยอม และการดำเนินการเอกสารที่ผู้ประกอบการแต่ละรายมองเห็น"
+      />
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <SearchBox
+          value={query}
+          setValue={setQuery}
+          placeholder="ค้นหาผู้ประกอบการ อีเมล หรือนโยบาย"
+        />
+        <select
+          className="portal-filter h-9"
+          value={type}
+          onChange={(event) => setType(event.target.value)}
+        >
+          <option value="all">กิจกรรมทุกประเภท</option>
+          {Object.entries(merchantActivityLabels).map(([value, label]) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+        </select>
+        <select
+          className="portal-filter h-9"
+          value={merchantId}
+          onChange={(event) => setMerchantId(event.target.value)}
+        >
+          <option value="all">ผู้ประกอบการทั้งหมด</option>
+          {merchants.map((merchant) => (
+            <option key={merchant.id} value={merchant.id}>
+              {merchant.name} · {merchant.email}
+            </option>
+          ))}
+        </select>
+        <label className="flex items-center gap-2 text-xs text-gray-500">
+          จาก
+          <input className="portal-filter h-9" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+        </label>
+        <label className="flex items-center gap-2 text-xs text-gray-500">
+          ถึง
+          <input className="portal-filter h-9" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+        </label>
+        {hasFilters ? (
+          <button type="button" className="portal-button" onClick={clearFilters}>
+            <X className="h-3.5 w-3.5" /> ล้างตัวกรอง
+          </button>
+        ) : null}
+        <span className="text-xs text-gray-400">
+          แสดง {visible.length} จาก {rows.length} รายการ
+        </span>
+      </div>
+      {error ? (
+        <p className="mb-4 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>
+      ) : null}
+      <section className="portal-panel">
+        {loading ? (
+          <div className="portal-empty">กำลังโหลดกิจกรรมผู้ประกอบการ...</div>
+        ) : visible.length === 0 ? (
+          <div className="portal-empty">ไม่พบกิจกรรมที่ตรงกับตัวกรอง</div>
+        ) : (
+          <>
+            <div className="portal-table-wrap">
+              <table className="portal-table">
+                <thead>
+                  <tr>
+                    <th>ผู้ประกอบการ</th>
+                    <th>ประเภท</th>
+                    <th>นโยบาย</th>
+                    <th>ข้อมูลที่เกี่ยวข้อง</th>
+                    <th>รายละเอียด</th>
+                    <th>วันที่บันทึก</th>
+                    <th>หลักฐาน</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagination.pageRows.map((row) => (
+                    <tr key={`${row.kind}-${row.id}`}>
+                      <td>
+                        <p className="font-semibold">{row.merchantName}</p>
+                        <p className="text-xs text-gray-400">{row.merchantEmail}</p>
+                      </td>
+                      <td className="font-semibold text-emerald-700">
+                        {merchantActivityLabels[row.type] || row.type.replaceAll("_", " ")}
+                      </td>
+                      <td>
+                        <p className="font-semibold">{row.policyName}</p>
+                        <p className="text-xs text-gray-400">{row.policySlug}</p>
+                      </td>
+                      <td>{row.relatedField === "document" ? "เอกสารสาธารณะ" : row.relatedField || row.relatedType}</td>
+                      <td className="min-w-64">{row.description}</td>
+                      <td>{formatDate(row.createdAt)}</td>
+                      <td>
+                        <button type="button" className="portal-button" onClick={() => setSelected(row)}>
+                          <Eye className="h-3.5 w-3.5" />
+                          รายละเอียด
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination {...pagination} total={visible.length} />
+          </>
+        )}
+      </section>
+      {selected ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSelected(null);
+          }}
+        >
+          <section className="portal-panel flex max-h-[92vh] w-full max-w-3xl flex-col">
+            <div className="portal-panel-head shrink-0">
+              <div>
+                <h2 className="text-sm font-semibold">หลักฐานกิจกรรมผู้ประกอบการ</h2>
+                <p className="mt-1 font-mono text-[11px] text-gray-400">{selected.id}</p>
+              </div>
+              <button type="button" className="portal-button px-2" onClick={() => setSelected(null)} aria-label="ปิด">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="min-h-0 overflow-y-auto p-5">
+              <dl className="grid gap-4 sm:grid-cols-2">
+                {[
+                  ["ผู้ประกอบการ", `${selected.merchantName} · ${selected.merchantEmail}`],
+                  ["ประเภท", merchantActivityLabels[selected.type] || selected.type],
+                  ["นโยบาย", `${selected.policyName} · ${selected.policySlug}`],
+                  ["วันที่และเวลา", formatDate(selected.createdAt)],
+                  ["ข้อมูลที่เกี่ยวข้อง", selected.relatedField || selected.relatedType],
+                  ["รายละเอียด", selected.description],
+                ].map(([label, value]) => (
+                  <div key={label} className="border-b border-gray-100 pb-3">
+                    <dt className="text-[11px] font-semibold text-gray-400">{label}</dt>
+                    <dd className="mt-1 break-all text-sm text-gray-800">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              <pre className="mt-5 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded bg-slate-900 p-4 text-xs text-slate-100">
+                {JSON.stringify(selected.evidence || {}, null, 2)}
+              </pre>
+            </div>
+          </section>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 function AuditLogsView() {
   const [rows, setRows] = useState<AdminAuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [action, setAction] = useState("all");
+  const [role, setRole] = useState("all");
+  const [result, setResult] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<AdminAuditLog | null>(null);
   useEffect(() => {
@@ -2278,18 +2557,36 @@ function AuditLogsView() {
       setLoading(false);
     });
   }, []);
-  const visible = useMemo(
-    () =>
-      rows.filter(
-        (row) =>
-          (action === "all" || row.action === action) &&
-          (!query.trim() ||
-            `${row.actorEmail || "public"} ${row.actorRole || ""} ${row.method} ${row.path} ${row.statusCode} ${row.ipAddress || ""}`
-              .toLowerCase()
-              .includes(query.toLowerCase())),
-      ),
-    [rows, query, action],
+  const roles = useMemo(
+    () => Array.from(new Set(rows.flatMap((row) => (row.actorRole ? [row.actorRole] : [])))).sort(),
+    [rows],
   );
+  const visible = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return rows.filter((row) => {
+      if (action !== "all" && row.action !== action) return false;
+      if (role !== "all" && row.actorRole !== role) return false;
+      if (result === "success" && row.statusCode >= 400) return false;
+      if (result === "failed" && row.statusCode < 400) return false;
+      const createdDate = row.createdAt?.slice(0, 10);
+      if ((dateFrom || dateTo) && !createdDate) return false;
+      if (dateFrom && createdDate && createdDate < dateFrom) return false;
+      if (dateTo && createdDate && createdDate > dateTo) return false;
+      if (!normalized) return true;
+      return `${row.actorEmail || "public"} ${row.actorRole || ""} ${row.method} ${row.path} ${row.statusCode} ${row.ipAddress || ""}`
+        .toLowerCase()
+        .includes(normalized);
+    });
+  }, [rows, query, action, role, result, dateFrom, dateTo]);
+  const hasFilters = Boolean(query || action !== "all" || role !== "all" || result !== "all" || dateFrom || dateTo);
+  const clearFilters = () => {
+    setQuery("");
+    setAction("all");
+    setRole("all");
+    setResult("all");
+    setDateFrom("");
+    setDateTo("");
+  };
   const pagination = usePagination(visible);
   return (
     <>
@@ -2310,12 +2607,38 @@ function AuditLogsView() {
           onChange={(event) => setAction(event.target.value)}
         >
           <option value="all">การดำเนินการทั้งหมด</option>
-          <option value="create">สร้าง</option>
-          <option value="update">แก้ไข</option>
-          <option value="delete">ลบ</option>
+          {Object.entries(auditActionLabels).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
         </select>
+        <select className="portal-filter h-9" value={role} onChange={(event) => setRole(event.target.value)}>
+          <option value="all">ทุกบทบาท</option>
+          {roles.map((actorRole) => (
+            <option key={actorRole} value={actorRole}>{actorRole}</option>
+          ))}
+        </select>
+        <select className="portal-filter h-9" value={result} onChange={(event) => setResult(event.target.value)}>
+          <option value="all">ทุกผลลัพธ์</option>
+          <option value="success">สำเร็จ</option>
+          <option value="failed">ไม่สำเร็จ</option>
+        </select>
+        <label className="flex items-center gap-2 text-xs text-gray-500">
+          จาก
+          <input className="portal-filter h-9" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+        </label>
+        <label className="flex items-center gap-2 text-xs text-gray-500">
+          ถึง
+          <input className="portal-filter h-9" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+        </label>
+        {hasFilters ? (
+          <button type="button" className="portal-button" onClick={clearFilters}>
+            <X className="h-3.5 w-3.5" /> ล้างตัวกรอง
+          </button>
+        ) : null}
         <span className="text-xs text-gray-400">
-          {visible.length} of {rows.length} events
+          แสดง {visible.length} จาก {rows.length} รายการ
         </span>
       </div>
       {error && (
@@ -3185,6 +3508,7 @@ export default function Admin() {
       />
     );
   else if (view === "logs") content = <LogsView logs={logs} />;
+  else if (view === "merchant_activity") content = <MerchantActivityView />;
   else if (view === "audit") content = <AuditLogsView />;
   else if (view === "analytics" && analytics)
     content = <AnalyticsView analytics={analytics} />;

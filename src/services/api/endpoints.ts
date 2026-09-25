@@ -66,6 +66,7 @@ export const API_ENDPOINTS = {
     assignLegal: (policyId: string) => `/admin/policies/${encodeURIComponent(policyId)}/assign-legal`,
     logs: '/admin/monitoring/logs',
     activityLogs: '/admin/monitoring/activity-logs',
+    merchantActivity: '/admin/monitoring/merchant-activity',
     analytics: '/admin/analytics',
     legalUsers: '/admin/legal-users',
     legalUser: (legalUserId: string) => `/admin/legal-users/${encodeURIComponent(legalUserId)}`,

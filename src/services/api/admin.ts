@@ -9,6 +9,7 @@ import type {
   AdminLegalUser,
   AdminLegalWorkload,
   AdminMerchant,
+  AdminMerchantActivity,
   AdminMerchantCreate,
   AdminMerchantDetail,
   AdminMerchantStatus,
@@ -141,6 +142,18 @@ export const adminApi = {
   ) =>
     apiRequest<{ logs: AdminAuditLog[]; pagination: AdminPagination }>(
       `${API_ENDPOINTS.admin.activityLogs}${query(params)}`,
+    ),
+  listMerchantActivity: (
+    params: {
+      type?: string;
+      merchantId?: string;
+      search?: string;
+      page?: number;
+      limit?: number;
+    } = {},
+  ) =>
+    apiRequest<{ logs: AdminMerchantActivity[]; pagination: AdminPagination }>(
+      `${API_ENDPOINTS.admin.merchantActivity}${query(params)}`,
     ),
   analytics: () => apiRequest<AdminAnalytics>(API_ENDPOINTS.admin.analytics),
   listLegalUsers: (params: { status?: string; search?: string } = {}) =>

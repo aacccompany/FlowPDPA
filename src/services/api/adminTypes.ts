@@ -169,6 +169,23 @@ export interface AdminErrorLog {
   createdAt: string | null;
 }
 
+export interface AdminMerchantActivity {
+  id: string;
+  kind: "policy" | "consent";
+  type: string;
+  merchantId: string;
+  merchantName: string;
+  merchantEmail: string;
+  policyId: string;
+  policyName: string;
+  policySlug: string;
+  relatedType: string;
+  relatedField: string | null;
+  description: string;
+  evidence: Record<string, unknown>;
+  createdAt: string | null;
+}
+
 export interface AdminAuditLog {
   id: string;
   actorEmail: string | null;

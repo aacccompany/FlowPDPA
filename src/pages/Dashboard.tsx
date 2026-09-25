@@ -1117,6 +1117,9 @@ function ActivityLogsView() {
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [type, setType] = useState<"all" | MerchantActivityType>("all");
+  const [policyId, setPolicyId] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [selectedEvidence, setSelectedEvidence] =
     useState<ConsentActivityLog | null>(null);
   const [selectedPolicyEvidence, setSelectedPolicyEvidence] =
@@ -1191,10 +1194,26 @@ function ActivityLogsView() {
     };
   }, []);
 
+  const policies = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          logs.map((log) => [
+            log.policyId,
+            { id: log.policyId, name: log.policyName },
+          ]),
+        ).values(),
+      ).sort((left, right) => left.name.localeCompare(right.name, "th")),
+    [logs],
+  );
   const visibleLogs = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
     return logs.filter((log) => {
       if (type !== "all" && log.type !== type) return false;
+      if (policyId !== "all" && log.policyId !== policyId) return false;
+      const createdDate = log.createdAt.slice(0, 10);
+      if (dateFrom && createdDate < dateFrom) return false;
+      if (dateTo && createdDate > dateTo) return false;
       if (!normalized) return true;
       return [
         log.id,
@@ -1209,7 +1228,18 @@ function ActivityLogsView() {
         log.consent?.formName,
       ].some((value) => value?.toLocaleLowerCase().includes(normalized));
     });
-  }, [logs, query, type]);
+  }, [logs, query, type, policyId, dateFrom, dateTo]);
+  const hasFilters = Boolean(
+    query || type !== "all" || policyId !== "all" || dateFrom || dateTo,
+  );
+  const clearFilters = () => {
+    setQuery("");
+    setType("all");
+    setPolicyId("all");
+    setDateFrom("");
+    setDateTo("");
+    setPage(1);
+  };
   const pageCount = Math.max(1, Math.ceil(visibleLogs.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const pageLogs = visibleLogs.slice(
@@ -1229,7 +1259,7 @@ function ActivityLogsView() {
           ติดตามการรับทราบ ความยินยอม และขั้นตอนการจัดการเอกสารของนโยบายทั้งหมด
         </p>
       </div>
-      <div className="mb-3 flex flex-col gap-2 sm:flex-row">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="relative min-w-0 flex-1 sm:max-w-sm">
           <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
           <input
@@ -1263,6 +1293,54 @@ function ActivityLogsView() {
           </option>
           <option value="legal_document_updated">ฝ่ายกฎหมายแก้ไขเอกสาร</option>
         </select>
+        <select
+          value={policyId}
+          onChange={(event) => {
+            setPolicyId(event.target.value);
+            setPage(1);
+          }}
+          className="h-9 border border-gray-300 bg-white px-3 text-sm"
+          aria-label="กรองนโยบาย"
+        >
+          <option value="all">นโยบายทั้งหมด</option>
+          {policies.map((policy) => (
+            <option key={policy.id} value={policy.id}>{policy.name}</option>
+          ))}
+        </select>
+        <label className="flex items-center gap-2 text-xs text-gray-500">
+          จาก
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(event) => {
+              setDateFrom(event.target.value);
+              setPage(1);
+            }}
+            className="h-9 border border-gray-300 bg-white px-3 text-sm"
+          />
+        </label>
+        <label className="flex items-center gap-2 text-xs text-gray-500">
+          ถึง
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(event) => {
+              setDateTo(event.target.value);
+              setPage(1);
+            }}
+            className="h-9 border border-gray-300 bg-white px-3 text-sm"
+          />
+        </label>
+        {hasFilters ? (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="flex h-9 items-center gap-1.5 border border-gray-300 bg-white px-3 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+          >
+            <X className="h-3.5 w-3.5" />
+            ล้างตัวกรอง
+          </button>
+        ) : null}
         <span className="self-center text-xs text-gray-400">
           แสดง {visibleLogs.length} จาก {logs.length} รายการ
         </span>
