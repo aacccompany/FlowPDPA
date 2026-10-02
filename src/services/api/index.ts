@@ -8,6 +8,7 @@ import { adminApi } from './admin'
 import { consentsApi } from './consents'
 import { templatesApi } from './templates'
 import { billingApi } from './billing'
+import { companyDocumentsApi } from './companyDocuments'
 
 export const api = {
   auth: authApi,
@@ -20,10 +21,12 @@ export const api = {
   consents: consentsApi,
   templates: templatesApi,
   billing: billingApi,
+  companyDocuments: companyDocumentsApi,
 }
 
 export { apiRequest } from './client'
 export { API_ENDPOINTS } from './endpoints'
+export { fileSha256 } from './companyDocuments'
 export { useApiLoading } from './useApiLoading'
 export type * from './types'
 export type * from './policyTypes'
@@ -31,5 +34,6 @@ export type * from './adminTypes'
 export type * from './consents'
 export type * from './templates'
 export type * from './billing'
+export type * from './companyDocuments'
 
 export default api

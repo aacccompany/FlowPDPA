@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Activity,
   AlertTriangle,
   BarChart3,
+  Building2,
   ChevronLeft,
   ChevronRight,
   CircleDollarSign,
@@ -50,6 +51,7 @@ import type {
   AdminSubscription,
   DocumentTemplate,
   DocumentTemplateInput,
+  AdminCompanyDocument,
 } from "@/services/api";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { marked } from "marked";
@@ -68,6 +70,7 @@ type AdminView =
   | "logs"
   | "audit"
   | "merchant_activity"
+  | "company_documents"
   | "analytics";
 type Merchant = AdminMerchant;
 type Policy = AdminPolicy;
@@ -305,6 +308,7 @@ function Sidebar({
       label: "เนื้อหาและการกำกับดูแล",
       items: [
         { id: "policies" as const, text: "นโยบาย", Icon: FileText },
+        { id: "company_documents" as const, text: "เอกสารนิติบุคคล", Icon: Building2 },
         {
           id: "templates" as const,
           text: "เทมเพลตเอกสาร",
@@ -2310,6 +2314,164 @@ function LogsView({ logs }: { logs: ErrorLog[] }) {
   );
 }
 
+const companyValidationLabels: Record<string, string> = {
+  UPLOADING: "กำลังอัปโหลด", UPLOADED: "อัปโหลดแล้ว", QUEUED: "อยู่ในคิว",
+  PROCESSING: "กำลังตรวจ", RETRYING: "กำลังลองใหม่", PASSED: "ผ่าน",
+  FAILED: "ไม่ผ่าน", NEEDS_REVIEW: "รอตรวจโดยผู้ดูแล", ERROR: "เกิดข้อผิดพลาด",
+};
+const companyArchiveLabels: Record<string, string> = {
+  NOT_STARTED: "ยังไม่เริ่ม", QUEUED: "อยู่ในคิว", UPLOADING: "กำลังสำรอง",
+  ARCHIVED: "สำรองแล้ว", RETRYING: "กำลังลองใหม่", FAILED: "สำรองไม่สำเร็จ",
+};
+
+function CompanyDocumentsView() {
+  const [rows, setRows] = useState<AdminCompanyDocument[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
+  const [validationStatus, setValidationStatus] = useState("");
+  const [archiveStatus, setArchiveStatus] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageCount, setPageCount] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [selected, setSelected] = useState<AdminCompanyDocument | null>(null);
+  const [viewUrl, setViewUrl] = useState("");
+  const [note, setNote] = useState("");
+  const [rejectReason, setRejectReason] = useState("COMPANY_NAME_MISMATCH");
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    const response = await api.admin.listCompanyDocuments({
+      query: deferredQuery, validationStatus, archiveStatus, dateFrom, dateTo, page, limit: 20,
+    });
+    if (response.success && response.data) {
+      setRows(response.data.items);
+      setTotal(response.data.pagination.total);
+      setPageCount(response.data.pagination.totalPages);
+      setError("");
+    } else setError(response.error?.message || "ไม่สามารถโหลดเอกสารนิติบุคคลได้");
+    setLoading(false);
+  };
+
+  useEffect(() => { void load(); }, [deferredQuery, validationStatus, archiveStatus, dateFrom, dateTo, page]);
+  useEffect(() => { setPage(1); }, [deferredQuery, validationStatus, archiveStatus, dateFrom, dateTo]);
+
+  const openDocument = async (row: AdminCompanyDocument) => {
+    setSelected(row);
+    setViewUrl("");
+    setNote("");
+    const [detail, signedUrl] = await Promise.all([
+      api.admin.getCompanyDocument(row.id), api.admin.getCompanyDocumentViewUrl(row.id),
+    ]);
+    if (detail.success && detail.data) setSelected(detail.data);
+    if (signedUrl.success && signedUrl.data) setViewUrl(signedUrl.data.url);
+  };
+
+  const decide = async (decision: "approve" | "reject") => {
+    if (!selected) return;
+    setSaving(true);
+    const response = decision === "approve"
+      ? await api.admin.approveCompanyDocument(selected.id, note)
+      : await api.admin.rejectCompanyDocument(selected.id, rejectReason, note);
+    setSaving(false);
+    if (response.success && response.data) {
+      setSelected(response.data);
+      setRows(current => current.map(row => row.id === response.data!.id ? response.data! : row));
+      setError("");
+    } else setError(response.error?.message || "บันทึกผลการตรวจสอบไม่สำเร็จ");
+  };
+
+  const clearFilters = () => {
+    setQuery(""); setValidationStatus(""); setArchiveStatus(""); setDateFrom(""); setDateTo(""); setPage(1);
+  };
+  const hasFilters = Boolean(query || validationStatus || archiveStatus || dateFrom || dateTo);
+
+  return <>
+    <PageTitle eyebrow="การตรวจสอบนิติบุคคล" title="เอกสารนิติบุคคล" description="ตรวจหนังสือรับรอง ผล OCR และสถานะสำรองเอกสารไปยัง Google Drive" />
+    <div className="mb-4 flex flex-wrap items-center gap-2">
+      <SearchBox value={query} setValue={setQuery} placeholder="ค้นหาบริษัท อีเมล หรือเลขทะเบียน" />
+      <select className="portal-filter h-9" value={validationStatus} onChange={event => setValidationStatus(event.target.value)}>
+        <option value="">ทุกสถานะการตรวจ</option>
+        {Object.entries(companyValidationLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+      </select>
+      <select className="portal-filter h-9" value={archiveStatus} onChange={event => setArchiveStatus(event.target.value)}>
+        <option value="">ทุกสถานะการสำรอง</option>
+        {Object.entries(companyArchiveLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+      </select>
+      <label className="flex items-center gap-2 text-xs text-gray-500">จาก <input className="portal-filter h-9" type="date" value={dateFrom} onChange={event => setDateFrom(event.target.value)} /></label>
+      <label className="flex items-center gap-2 text-xs text-gray-500">ถึง <input className="portal-filter h-9" type="date" value={dateTo} onChange={event => setDateTo(event.target.value)} /></label>
+      {hasFilters ? <button className="portal-button" type="button" onClick={clearFilters}><X className="h-3.5 w-3.5" /> ล้างตัวกรอง</button> : null}
+      <span className="text-xs text-gray-400">ทั้งหมด {total} รายการ</span>
+    </div>
+    {error ? <p className="mb-4 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p> : null}
+    <section className="portal-panel">
+      {loading ? <div className="portal-empty">กำลังโหลดเอกสาร...</div> : rows.length === 0 ? <div className="portal-empty">ไม่พบเอกสารที่ตรงกับตัวกรอง</div> : <>
+        <div className="portal-table-wrap"><table className="portal-table"><thead><tr>
+          <th>นิติบุคคล</th><th>ผู้ประกอบการ</th><th>เอกสาร</th><th>ผลตรวจ</th><th>Google Drive</th><th>วันที่อัปโหลด</th><th>จัดการ</th>
+        </tr></thead><tbody>{rows.map(row => <tr key={row.id}>
+          <td><p className="font-semibold">{row.companyNameEntered}</p><p className="text-xs text-gray-400">{row.companyRegistrationNumber || "ไม่มีเลขทะเบียน"}</p></td>
+          <td><p className="font-semibold">{row.merchant.name}</p><p className="text-xs text-gray-400">{row.merchant.email}</p></td>
+          <td><p className="max-w-64 truncate" title={row.storedFileName}>{row.storedFileName}</p><p className="text-xs text-gray-400">{(row.fileSize / 1024 / 1024).toFixed(2)} MB</p></td>
+          <td><Badge value={row.validationStatus.toLowerCase()} /><p className="mt-1 text-[11px] text-gray-400">{companyValidationLabels[row.validationStatus]}</p></td>
+          <td><Badge value={row.archiveStatus.toLowerCase()} /><p className="mt-1 text-[11px] text-gray-400">{companyArchiveLabels[row.archiveStatus]}</p></td>
+          <td>{formatDate(row.createdAt)}</td>
+          <td><button className="portal-button" type="button" onClick={() => void openDocument(row)}><Eye className="h-3.5 w-3.5" /> ดูรายละเอียด</button></td>
+        </tr>)}</tbody></table></div>
+        <footer className="portal-pagination"><p className="text-xs text-gray-500">หน้า {page} จาก {pageCount}</p><div className="portal-pagination-pages">
+          <button className="portal-page-button" disabled={page <= 1} onClick={() => setPage(value => value - 1)}><ChevronLeft className="h-4 w-4" /></button>
+          <button className="portal-page-button" data-active>{page}</button>
+          <button className="portal-page-button" disabled={page >= pageCount} onClick={() => setPage(value => value + 1)}><ChevronRight className="h-4 w-4" /></button>
+        </div></footer>
+      </>}
+    </section>
+    {selected ? <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4" role="dialog" aria-modal="true" onMouseDown={event => { if (event.target === event.currentTarget) setSelected(null); }}>
+      <section className="portal-panel flex max-h-[94vh] w-full max-w-6xl flex-col">
+        <div className="portal-panel-head shrink-0"><div><h2 className="font-semibold">{selected.companyNameEntered}</h2><p className="mt-1 text-xs text-gray-400">{selected.merchant.name} · {selected.merchant.email}</p></div><button className="portal-button px-2" onClick={() => setSelected(null)}><X className="h-4 w-4" /></button></div>
+        <div className="grid min-h-0 overflow-y-auto lg:grid-cols-2">
+          <div className="min-h-[420px] border-b bg-gray-100 p-3 lg:border-b-0 lg:border-r">
+            {viewUrl ? selected.contentType === "application/pdf" ? <iframe className="h-[70vh] w-full bg-white" src={viewUrl} title="หนังสือรับรองนิติบุคคล" /> : <img className="mx-auto max-h-[70vh] object-contain" src={viewUrl} alt="หนังสือรับรองนิติบุคคล" /> : <div className="portal-empty"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />กำลังเปิดเอกสาร...</div>}
+          </div>
+          <div className="space-y-4 p-5">
+            <dl className="grid gap-3 sm:grid-cols-2">{[
+              ["ชื่อที่กรอก", selected.companyNameEntered], ["ชื่อที่ OCR อ่าน", selected.companyNameExtracted || "-"],
+              ["Confidence", selected.confidenceScore == null ? "-" : `${Math.round(selected.confidenceScore * 100)}%`],
+              ["สถานะตรวจ", companyValidationLabels[selected.validationStatus]], ["สถานะ Drive", companyArchiveLabels[selected.archiveStatus]],
+              ["Merchant ID", selected.merchantId], ["SHA-256", selected.fileSha256 || "-"], ["เวลาตรวจ", formatDate(selected.processedAt)],
+            ].map(([label, value]) => <div key={label} className="border-b border-gray-100 pb-2"><dt className="text-[11px] text-gray-400">{label}</dt><dd className="mt-1 break-all text-sm">{value}</dd></div>)}</dl>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <p className="text-xs font-semibold text-gray-700">ผลข้อความจาก OCR</p>
+              <p className="mt-1 text-[11px] text-gray-400">
+                วิธีตรวจ: {selected.matchMethod || "-"}{selected.matchReason ? ` · ${selected.matchReason}` : ""}
+              </p>
+              <pre className="mt-3 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded border border-gray-200 bg-white p-3 text-xs text-gray-700">
+                {selected.ocrText || "ไม่พบข้อความจาก OCR"}
+              </pre>
+            </div>
+            <textarea className="portal-input min-h-20 w-full" value={note} onChange={event => setNote(event.target.value)} placeholder="หมายเหตุการตรวจสอบ" />
+            <select className="portal-filter h-9 w-full" value={rejectReason} onChange={event => setRejectReason(event.target.value)}>
+              <option value="COMPANY_NAME_MISMATCH">ชื่อบริษัทไม่ตรงกัน</option><option value="UNREADABLE_DOCUMENT">เอกสารอ่านไม่ชัด</option><option value="INVALID_DOCUMENT">เอกสารไม่ถูกต้อง</option><option value="INCOMPLETE_DOCUMENT">เอกสารไม่ครบ</option><option value="OTHER">อื่น ๆ</option>
+            </select>
+            <div className="flex flex-wrap gap-2"><button className="portal-button portal-button-primary" disabled={saving} onClick={() => void decide("approve")}>อนุมัติเอกสาร</button><button className="portal-button text-red-700" disabled={saving} onClick={() => void decide("reject")}>ไม่อนุมัติ</button>
+              {selected.driveWebViewLink ? <a className="portal-button" href={selected.driveWebViewLink} target="_blank" rel="noreferrer"><ExternalLink className="h-3.5 w-3.5" /> เปิด Google Drive</a> : null}
+              {selected.validationStatus === "PASSED" && selected.archiveStatus === "FAILED" ? <button className="portal-button" onClick={async () => {
+                const response = await api.admin.retryCompanyDocumentArchive(selected.id);
+                if (response.success) {
+                  setSelected(current => current ? { ...current, archiveStatus: "QUEUED" } : current);
+                  setRows(current => current.map(row => row.id === selected.id ? { ...row, archiveStatus: "QUEUED" } : row));
+                } else setError(response.error?.message || "ส่งงานสำรองใหม่ไม่สำเร็จ");
+              }}>ลองสำรองใหม่</button> : null}
+            </div>
+          </div>
+        </div>
+      </section>
+    </div> : null}
+  </>;
+}
+
 const merchantActivityLabels: Record<string, string> = {
   document_acknowledged: "รับทราบเอกสารแล้ว",
   customer_consent: "ลูกค้าให้ความยินยอม",
@@ -3488,6 +3650,7 @@ export default function Admin() {
       />
     );
   else if (view === "templates") content = <TemplateManagement />;
+  else if (view === "company_documents") content = <CompanyDocumentsView />;
   else if (view === "subscriptions" || view === "payments")
     content = (
       <BillingView

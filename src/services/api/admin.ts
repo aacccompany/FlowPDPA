@@ -21,6 +21,7 @@ import type {
   AdminPolicyDetail,
   AdminSubscription,
 } from "./adminTypes";
+import type { AdminCompanyDocument } from "./companyDocuments";
 
 const query = (params: Record<string, string | number | undefined>) => {
   const search = new URLSearchParams();
@@ -211,4 +212,20 @@ export const adminApi = {
     apiRequest<{ reviews: AdminLegalReview[]; pagination: AdminPagination }>(
       `${API_ENDPOINTS.admin.legalReviews}${query(params)}`,
     ),
+  listCompanyDocuments: (params: {
+    query?: string; merchantId?: string; validationStatus?: string;
+    archiveStatus?: string; dateFrom?: string; dateTo?: string; page?: number; limit?: number;
+  } = {}) => apiRequest<{ items: AdminCompanyDocument[]; pagination: AdminPagination & { totalPages: number } }>(
+    `${API_ENDPOINTS.admin.companyDocuments}${query(params)}`,
+  ),
+  getCompanyDocument: (documentId: string) =>
+    apiRequest<AdminCompanyDocument>(API_ENDPOINTS.admin.companyDocument(documentId)),
+  getCompanyDocumentViewUrl: (documentId: string) =>
+    apiRequest<{ url: string; expiresIn: number }>(API_ENDPOINTS.admin.companyDocumentViewUrl(documentId)),
+  approveCompanyDocument: (documentId: string, note = "") =>
+    apiRequest<AdminCompanyDocument>(API_ENDPOINTS.admin.approveCompanyDocument(documentId), { method: "POST", body: { note } }),
+  rejectCompanyDocument: (documentId: string, reason: string, note = "") =>
+    apiRequest<AdminCompanyDocument>(API_ENDPOINTS.admin.rejectCompanyDocument(documentId), { method: "POST", body: { reason, note } }),
+  retryCompanyDocumentArchive: (documentId: string) =>
+    apiRequest<{ documentId: string; archiveStatus: string }>(API_ENDPOINTS.admin.retryCompanyDocumentArchive(documentId), { method: "POST" }),
 };

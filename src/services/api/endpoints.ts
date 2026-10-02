@@ -13,6 +13,12 @@ export const API_ENDPOINTS = {
     root: '/profile',
     changePassword: '/profile/change-password',
   },
+  companyDocuments: {
+    uploadUrl: '/company-documents/upload-url',
+    complete: (documentId: string) => `/company-documents/${encodeURIComponent(documentId)}/complete`,
+    detail: (documentId: string) => `/company-documents/${encodeURIComponent(documentId)}`,
+    retry: (documentId: string) => `/company-documents/${encodeURIComponent(documentId)}/retry`,
+  },
   templates: { root: '/templates' },
   billing: {
     checkoutSessions: '/billing/checkout-sessions',
@@ -75,6 +81,12 @@ export const API_ENDPOINTS = {
     legalReviews: '/admin/legal-reviews',
     templates: '/admin/templates',
     template: (templateId: string) => `/admin/templates/${encodeURIComponent(templateId)}`,
+    companyDocuments: '/admin/company-documents',
+    companyDocument: (documentId: string) => `/admin/company-documents/${encodeURIComponent(documentId)}`,
+    companyDocumentViewUrl: (documentId: string) => `/admin/company-documents/${encodeURIComponent(documentId)}/view-url`,
+    approveCompanyDocument: (documentId: string) => `/admin/company-documents/${encodeURIComponent(documentId)}/approve`,
+    rejectCompanyDocument: (documentId: string) => `/admin/company-documents/${encodeURIComponent(documentId)}/reject`,
+    retryCompanyDocumentArchive: (documentId: string) => `/admin/company-documents/${encodeURIComponent(documentId)}/archive/retry`,
   },
   dashboard: {
     stats: '/dashboard/stats',

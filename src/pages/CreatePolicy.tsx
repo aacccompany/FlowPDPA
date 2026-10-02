@@ -15,6 +15,8 @@ import {
   UserRound,
   Languages,
   CreditCard,
+  Upload,
+  FileText,
 } from "lucide-react";
 import { PolicyTypeIcon } from "@/components/policy/PolicyTypeIcon";
 import {
@@ -26,7 +28,8 @@ import {
 } from "@/utils/validation";
 import { storage } from "@/utils/storage";
 import { api } from "@/services/api";
-import type { PolicyQuestionnaire, UserProfile } from "@/services/api";
+import { fileSha256 } from "@/services/api";
+import type { CompanyDocumentValidationStatus, PolicyQuestionnaire, UserProfile } from "@/services/api";
 
 // ── Thai RD Company Lookup ────────────────────────────────────
 // Replace with real Thai RD VAT API calls via your backend proxy
@@ -75,6 +78,11 @@ interface FormData {
   ownerIdCard: string;
   companyName: string;
   companyRegNumber: string;
+  companyDocumentId: string;
+  companyDocumentDraftId: string;
+  companyDocumentStatus: CompanyDocumentValidationStatus | "";
+  companyDocumentFileName: string;
+  companyDocumentValidatedName: string;
   businessType: string;
   websiteName: string;
   websiteUrl: string;
@@ -713,6 +721,115 @@ function Step2({
   const [searchType, setSearchType] = useState<RDSearchType>("taxId");
   const [searchQuery, setSearchQuery] = useState("");
   const [showConsent, setShowConsent] = useState(false);
+  const [documentUploading, setDocumentUploading] = useState(false);
+  const [documentError, setDocumentError] = useState("");
+
+  useEffect(() => {
+    if (!data.companyDocumentId || !["QUEUED", "PROCESSING", "RETRYING", "UPLOADED"].includes(data.companyDocumentStatus)) return;
+    let active = true;
+    let timeoutId: number | undefined;
+    const pollingStartedAt = Date.now();
+    const maxPollingTimeMs = 90_000;
+    const poll = async () => {
+      if (Date.now() - pollingStartedAt >= maxPollingTimeMs) {
+        setDocumentError("การตรวจเอกสารใช้เวลานานกว่าปกติ กรุณาลองใหม่หรือติดต่อผู้ดูแลระบบ");
+        return;
+      }
+      const response = await api.companyDocuments.get(data.companyDocumentId);
+      if (!active) return;
+      if (response.success && response.data) {
+        setData({ companyDocumentStatus: response.data.validationStatus });
+        if (["QUEUED", "PROCESSING", "RETRYING", "UPLOADED"].includes(response.data.validationStatus)) {
+          timeoutId = window.setTimeout(poll, 3000);
+        }
+      } else {
+        setDocumentError(response.error?.message || "ไม่สามารถตรวจสอบสถานะเอกสารได้");
+      }
+    };
+    timeoutId = window.setTimeout(poll, 1000);
+    return () => {
+      active = false;
+      if (timeoutId) window.clearTimeout(timeoutId);
+    };
+  }, [data.companyDocumentId, data.companyDocumentStatus, setData]);
+
+  const updateCompanyName = (companyName: string) => {
+    const changedAfterValidation = Boolean(
+      data.companyDocumentValidatedName && data.companyDocumentValidatedName !== companyName,
+    );
+    setData({
+      companyName,
+      ...(changedAfterValidation ? {
+        companyDocumentId: "", companyDocumentDraftId: "", companyDocumentStatus: "",
+        companyDocumentFileName: "", companyDocumentValidatedName: "",
+      } : {}),
+    });
+  };
+
+  const uploadCompanyDocument = async (file: File) => {
+    setDocumentError("");
+    if (!data.companyName.trim() || !data.companyRegNumber.trim()) {
+      setDocumentError("กรุณากรอกชื่อบริษัทและเลขทะเบียนนิติบุคคลก่อนแนบเอกสาร");
+      return;
+    }
+    const registrationDigits = data.companyRegNumber
+      .replace(/[๐-๙]/g, (digit) => String("๐๑๒๓๔๕๖๗๘๙".indexOf(digit)))
+      .replace(/\D/g, "");
+    if (registrationDigits.length !== 13) {
+      setDocumentError("กรุณากรอกเลขทะเบียนนิติบุคคลให้ครบ 13 หลักก่อนแนบเอกสาร");
+      return;
+    }
+    if (!["application/pdf", "image/jpeg", "image/png"].includes(file.type)) {
+      setDocumentError("รองรับเฉพาะ PDF, JPG และ PNG");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setDocumentError("ไฟล์ต้องมีขนาดไม่เกิน 10 MB");
+      return;
+    }
+    setDocumentUploading(true);
+    let uploadStage: "prepare" | "upload" | "complete" = "prepare";
+    try {
+      const uploadResponse = await api.companyDocuments.createUploadUrl({
+        ...(data.companyDocumentDraftId ? { policyDraftId: data.companyDocumentDraftId } : {}),
+        companyName: data.companyName.trim(),
+        companyRegistrationNumber: registrationDigits,
+        originalFileName: file.name,
+        contentType: file.type,
+        fileSize: file.size,
+      });
+      if (!uploadResponse.success || !uploadResponse.data) throw new Error(uploadResponse.error?.message || "ไม่สามารถเตรียมพื้นที่อัปโหลดได้");
+      uploadStage = "upload";
+      await Promise.all([
+        api.companyDocuments.upload(uploadResponse.data.uploadUrl, file),
+        fileSha256(file),
+      ]).then(async ([, sha256]) => {
+        uploadStage = "complete";
+        const completeResponse = await api.companyDocuments.complete(uploadResponse.data!.documentId, sha256);
+        if (!completeResponse.success || !completeResponse.data) throw new Error(completeResponse.error?.message || "ไม่สามารถส่งเอกสารเข้าตรวจสอบได้");
+        setData({
+          companyDocumentId: uploadResponse.data!.documentId,
+          companyDocumentDraftId: uploadResponse.data!.policyDraftId,
+          companyDocumentStatus: completeResponse.data.validationStatus,
+          companyDocumentFileName: file.name,
+          companyDocumentValidatedName: data.companyName,
+        });
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "อัปโหลดเอกสารไม่สำเร็จ";
+      if (message === "Request timed out") {
+        setDocumentError(
+          uploadStage === "prepare"
+            ? "เซิร์ฟเวอร์ใช้เวลาเตรียมการอัปโหลดนานเกินไป กรุณาลองใหม่"
+            : "เซิร์ฟเวอร์ใช้เวลายืนยันไฟล์นานเกินไป กรุณาลองใหม่",
+        );
+      } else {
+        setDocumentError(message);
+      }
+    } finally {
+      setDocumentUploading(false);
+    }
+  };
 
   const resetRd = () => {
     setRdState("idle");
@@ -737,6 +854,11 @@ function Step2({
       if (result) {
         setData({
           companyName: result.name,
+          companyDocumentId: "",
+          companyDocumentDraftId: "",
+          companyDocumentStatus: "",
+          companyDocumentFileName: "",
+          companyDocumentValidatedName: "",
           address: result.address,
           ...(result.taxId ? { companyRegNumber: result.taxId } : {}),
         });
@@ -1012,7 +1134,7 @@ function Step2({
                 <FormField
                   label="ชื่อบริษัท / องค์กร"
                   value={data.companyName}
-                  onChange={(v) => setData({ companyName: v })}
+                  onChange={updateCompanyName}
                   placeholder="เช่น บริษัท MyShop จำกัด"
                   required
                 />
@@ -1023,6 +1145,41 @@ function Step2({
                   placeholder="เช่น 0105565012345"
                   required
                 />
+
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div className="mb-3 flex items-start gap-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500">
+                      <FileText className="h-4 w-4" />
+                    </span>
+                    <div>
+                      <p className="text-sm font-bold text-gray-800">หนังสือรับรองนิติบุคคล <span className="text-red-400">*</span></p>
+                      <p className="mt-0.5 text-xs text-gray-400">PDF, JPG หรือ PNG ขนาดไม่เกิน 10 MB ระบบจะตรวจชื่อบริษัทในเอกสาร</p>
+                    </div>
+                  </div>
+                  <label className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed px-4 py-3 text-sm font-semibold transition-colors ${documentUploading ? "cursor-wait border-gray-200 text-gray-400" : "border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50"}`}>
+                    {documentUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                    {documentUploading ? "กำลังอัปโหลด..." : data.companyDocumentFileName ? "เปลี่ยนเอกสาร" : "เลือกเอกสาร"}
+                    <input
+                      type="file"
+                      className="sr-only"
+                      accept="application/pdf,image/jpeg,image/png"
+                      disabled={documentUploading}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) void uploadCompanyDocument(file);
+                        event.currentTarget.value = "";
+                      }}
+                    />
+                  </label>
+                  {data.companyDocumentFileName ? <p className="mt-2 truncate text-xs text-gray-500">ไฟล์: {data.companyDocumentFileName}</p> : null}
+                  {data.companyDocumentStatus ? (
+                    <div className={`mt-3 flex items-start gap-2 rounded-lg px-3 py-2 text-xs ${data.companyDocumentStatus === "PASSED" ? "bg-emerald-50 text-emerald-700" : ["FAILED", "ERROR", "NEEDS_REVIEW"].includes(data.companyDocumentStatus) ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>
+                      {data.companyDocumentStatus === "PASSED" ? <CheckCircle className="h-4 w-4 shrink-0" /> : ["FAILED", "ERROR", "NEEDS_REVIEW"].includes(data.companyDocumentStatus) ? <AlertCircle className="h-4 w-4 shrink-0" /> : <Loader2 className="h-4 w-4 shrink-0 animate-spin" />}
+                      <span>{data.companyDocumentStatus === "PASSED" ? "ตรวจสอบแล้ว ชื่อบริษัทตรงกับเอกสาร" : data.companyDocumentStatus === "FAILED" ? "ชื่อบริษัทไม่ตรงกับเอกสาร กรุณาตรวจสอบชื่อหรืออัปโหลดใหม่" : data.companyDocumentStatus === "NEEDS_REVIEW" ? "เอกสารไม่ถูกต้องหรือไม่พบชื่อบริษัท กรุณาตรวจสอบและอัปโหลดใหม่" : data.companyDocumentStatus === "ERROR" ? "ตรวจเอกสารไม่สำเร็จ กรุณาอัปโหลดใหม่" : "ระบบกำลังตรวจสอบเอกสาร คุณสามารถกรอกข้อมูลส่วนอื่นต่อได้"}</span>
+                    </div>
+                  ) : null}
+                  {documentError ? <p className="mt-2 text-xs text-red-600">{documentError}</p> : null}
+                </div>
 
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
@@ -1938,6 +2095,11 @@ const initialData: FormData = {
   ownerIdCard: "",
   companyName: "",
   companyRegNumber: "",
+  companyDocumentId: "",
+  companyDocumentDraftId: "",
+  companyDocumentStatus: "",
+  companyDocumentFileName: "",
+  companyDocumentValidatedName: "",
   businessType: "",
   websiteName: "",
   websiteUrl: "",
@@ -2071,7 +2233,8 @@ export default function CreatePolicy() {
         );
       return (
         base &&
-        !!(data.companyName && data.companyRegNumber && data.businessType)
+        !!(data.companyName && data.companyRegNumber && data.businessType) &&
+        data.companyDocumentStatus === "PASSED"
       );
     }
     if (step === 3) return data.dataTypes.length > 0;
