@@ -63,6 +63,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hydrateUser = (current: StoredAuth, user: {
     id?: string; email: string; name: string; role?: string; plan?: string
     company?: string; phone?: string; email_verified?: boolean
+    privacy_notice_accepted?: boolean; privacy_notice_version?: string | null
+    privacy_notice_accepted_at?: string | null
   }): StoredAuth => ({
     ...current,
     id: user.id,
@@ -73,6 +75,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     company: user.company,
     phone: user.phone,
     emailVerified: user.email_verified ?? false,
+    privacyNoticeAccepted: user.privacy_notice_accepted ?? false,
+    privacyNoticeVersion: user.privacy_notice_version,
+    privacyNoticeAcceptedAt: user.privacy_notice_accepted_at,
   })
 
   useEffect(() => {
@@ -122,6 +127,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       company: auth.company,
       phone: auth.phone,
       emailVerified: auth.emailVerified,
+      privacyNoticeAccepted: auth.privacyNoticeAccepted,
+      privacyNoticeVersion: auth.privacyNoticeVersion,
+      privacyNoticeAcceptedAt: auth.privacyNoticeAcceptedAt,
     } : null,
     auth,
     loading,

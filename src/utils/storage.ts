@@ -9,6 +9,9 @@ export interface AuthUser {
   company?: string
   phone?: string
   emailVerified: boolean
+  privacyNoticeAccepted: boolean
+  privacyNoticeVersion?: string | null
+  privacyNoticeAcceptedAt?: string | null
 }
 
 export interface StoredAuth extends AuthUser {
@@ -103,6 +106,7 @@ const readAuth = (): StoredAuth | null => {
       role: normalizeRole(typeof claims.role === 'string' ? claims.role : undefined),
       plan: typeof claims.plan === 'string' ? claims.plan : 'Free',
       emailVerified: false,
+      privacyNoticeAccepted: false,
       token: value.token,
       refreshToken: value.refreshToken,
       expiresAt: value.expiresAt,

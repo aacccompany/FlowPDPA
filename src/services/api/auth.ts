@@ -6,6 +6,7 @@ import type {
   AuthPayload,
   OtpVerified,
   RegistrationStarted,
+  PrivacyNoticeStatus,
 } from './types'
 
 export interface RegisterRequest {
@@ -37,6 +38,12 @@ export const authApi = {
       ),
   },
   verify: () => apiRequest<{ valid: boolean; user: ApiUser }>(API_ENDPOINTS.auth.verifyToken),
+  privacyNotice: {
+    status: () => apiRequest<PrivacyNoticeStatus>(API_ENDPOINTS.auth.privacyNotice),
+    accept: (version: string) => apiRequest<PrivacyNoticeStatus>(API_ENDPOINTS.auth.acceptPrivacyNotice, {
+      method: 'POST', body: { version },
+    }),
+  },
   refreshToken: refreshAccessToken,
   passwordReset: {
     request: (data: { email: string }) =>

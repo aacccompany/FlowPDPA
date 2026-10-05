@@ -57,7 +57,9 @@ const registrationErrorMessage = (error?: ApiError) => {
     );
 
   if (duplicateEmail)
-    return "อีเมลนี้ถูกสมัครใช้งานแล้ว กรุณาเข้าสู่ระบบหรือใช้อีเมลอื่น";
+    return "อีเมลนี้มีบัญชีอยู่แล้ว กรุณาเข้าสู่ระบบหรือใช้อีเมลอื่น";
+  if (code === "EMAIL_PENDING_VERIFICATION")
+    return "อีเมลนี้สมัครไว้แล้วแต่ยังยืนยันไม่สำเร็จ กรุณาเข้าสู่ขั้นตอนยืนยันอีเมลหรือขอรหัส OTP ใหม่";
   if (
     error.status === 400 ||
     error.status === 422 ||
@@ -100,6 +102,11 @@ export default function Register() {
     requestOtp?: boolean;
   } | null;
   const automaticResendStarted = useRef(false);
+
+  const loginWithAnotherAccount = () => {
+    storage.auth.clear();
+    navigate("/login", { replace: true, state: { switchAccount: true } });
+  };
 
   // Step management
   const [step, setStep] = useState<"form" | "verify" | "success">(
@@ -255,6 +262,7 @@ export default function Register() {
         company: formData.company,
         phone: formData.phone,
         emailVerified: true,
+        privacyNoticeAccepted: false,
       });
       setStep("success");
       setTimeout(() => navigate(roleHome(role), { replace: true }), 2000);
@@ -731,6 +739,8 @@ export default function Register() {
 
                     {error && (
                       <div
+                        role="alert"
+                        aria-live="polite"
                         className="register-error text-xs px-4 py-3 rounded"
                         style={{
                           backgroundColor: "rgba(239,68,68,0.1)",
@@ -795,6 +805,7 @@ export default function Register() {
 
                   <Link
                     to="/login"
+                    onClick={() => storage.auth.clear()}
                     className="register-login-link block w-full py-3 text-sm font-semibold text-center rounded transition-colors"
                     style={{
                       border: "1px solid rgba(255,255,255,0.08)",
@@ -942,6 +953,8 @@ export default function Register() {
                     {/* Error Message */}
                     {error && (
                       <div
+                        role="alert"
+                        aria-live="polite"
                         className="register-error text-xs px-4 py-3 rounded text-center"
                         style={{
                           backgroundColor: "rgba(239,68,68,0.1)",
@@ -1018,14 +1031,23 @@ export default function Register() {
                     </div>
 
                     <div className="text-center mt-4">
-                      <button
-                        type="button"
-                        onClick={() => setStep("form")}
-                        className="inline-flex items-center gap-1.5 text-xs transition-colors hover:opacity-80 disabled:opacity-40 disabled:cursor-wait"
-                        style={{ color: "#64748b" }}
-                      >
-                        <ArrowLeft className="w-3.5 h-3.5" /> กลับไปกรอกข้อมูล
-                      </button>
+                      <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-3">
+                        <button
+                          type="button"
+                          onClick={() => setStep("form")}
+                          className="inline-flex items-center gap-1.5 text-xs transition-colors hover:opacity-80 disabled:opacity-40 disabled:cursor-wait"
+                          style={{ color: "#64748b" }}
+                        >
+                          <ArrowLeft className="w-3.5 h-3.5" /> กลับไปกรอกข้อมูล
+                        </button>
+                        <button
+                          type="button"
+                          onClick={loginWithAnotherAccount}
+                          className="text-xs font-semibold text-emerald-700 transition-colors hover:text-emerald-800"
+                        >
+                          เข้าสู่ระบบด้วยบัญชีอื่น
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </form>

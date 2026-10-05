@@ -5,6 +5,8 @@ export const API_ENDPOINTS = {
     verifyRegistration: '/auth/register/verify',
     resendRegistrationOtp: '/auth/register/resend-otp',
     verifyToken: '/auth/verify',
+    privacyNotice: '/auth/privacy-notice',
+    acceptPrivacyNotice: '/auth/privacy-notice/accept',
     refreshToken: '/auth/refresh',
     requestPasswordReset: '/auth/password-reset/request',
     confirmPasswordReset: '/auth/password-reset/confirm',

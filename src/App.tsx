@@ -26,6 +26,7 @@ import PolicyView from '@/pages/PolicyView'
 import PolicyEdit from '@/pages/PolicyEdit'
 import NotFound from '@/pages/NotFound'
 import { roleHome, type UserRole } from '@/utils/storage'
+import PrivacyNoticeGate from '@/components/auth/PrivacyNoticeGate'
 
 function ProtectedRoute({ children, roles }: { children: React.ReactNode; roles: UserRole[] }) {
   const location = useLocation()
@@ -48,6 +49,9 @@ function ProtectedRoute({ children, roles }: { children: React.ReactNode; roles:
     )
   }
   if (!roles.includes(role)) return <Navigate to={roleHome(role)} replace />
+  if (role === 'merchant' && auth.privacyNoticeAccepted !== true) {
+    return <PrivacyNoticeGate>{children}</PrivacyNoticeGate>
+  }
   return children
 }
 

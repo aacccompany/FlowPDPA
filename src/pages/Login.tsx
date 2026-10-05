@@ -10,17 +10,27 @@ import './Login.css'
 export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
-  const from = (location.state as { from?: string } | null)?.from ?? '/dashboard'
+  const locationState = location.state as { from?: string; privacyNoticeDeclined?: boolean; switchAccount?: boolean } | null
+  const from = locationState?.from ?? '/dashboard'
   const [showPassword, setShowPassword] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+  const [error, setError] = useState(
+    locationState?.privacyNoticeDeclined
+      ? 'คุณออกจากระบบเนื่องจากยังไม่ได้ยอมรับ Privacy Notice'
+      : '',
+  )
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
+    if (locationState?.switchAccount) {
+      storage.auth.clear()
+      navigate('/login', { replace: true })
+      return
+    }
     const auth = storage.auth.get()
     if (auth?.token) navigate(roleHome(auth.role), { replace: true })
-  }, [navigate])
+  }, [locationState?.switchAccount, navigate])
 
   const destinationFor = (role: UserRole) => {
     const canReturnToRequestedPage = (
@@ -56,7 +66,7 @@ export default function Login() {
         access_token?: string
         refresh_token?: string
         expires_in?: number
-        user?: { id?: string; email?: string; name?: string; role?: string; plan?: string; company?: string; phone?: string; email_verified?: boolean }
+        user?: { id?: string; email?: string; name?: string; role?: string; plan?: string; company?: string; phone?: string; email_verified?: boolean; privacy_notice_accepted?: boolean; privacy_notice_version?: string | null; privacy_notice_accepted_at?: string | null }
         email?: string
         name?: string
         role?: string
@@ -82,6 +92,9 @@ export default function Login() {
         company: data.user?.company,
         phone: data.user?.phone,
         emailVerified: data.user?.email_verified ?? true,
+        privacyNoticeAccepted: data.user?.privacy_notice_accepted ?? false,
+        privacyNoticeVersion: data.user?.privacy_notice_version,
+        privacyNoticeAcceptedAt: data.user?.privacy_notice_accepted_at,
       })
       navigate(destinationFor(role), { replace: true })
     } catch (requestError) {

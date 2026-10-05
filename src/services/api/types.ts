@@ -30,7 +30,19 @@ export interface ApiUser {
   company?: string
   phone?: string
   email_verified?: boolean
+  privacy_notice_accepted?: boolean
+  privacy_notice_version?: string | null
+  privacy_notice_accepted_at?: string | null
   status?: string
+}
+
+export interface PrivacyNoticeStatus {
+  accepted: boolean
+  currentVersion: string
+  acceptedVersion: string | null
+  acceptedAt: string | null
+  noticeUrl: string
+  emailSent?: boolean
 }
 
 export interface AuthPayload {
