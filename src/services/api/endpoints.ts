@@ -21,6 +21,9 @@ export const API_ENDPOINTS = {
     detail: (documentId: string) => `/company-documents/${encodeURIComponent(documentId)}`,
     retry: (documentId: string) => `/company-documents/${encodeURIComponent(documentId)}/retry`,
   },
+  companyRegistry: {
+    byId: (juristicId: string) => `/company-registry/${encodeURIComponent(juristicId)}`,
+  },
   templates: { root: '/templates' },
   billing: {
     checkoutSessions: '/billing/checkout-sessions',

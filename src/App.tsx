@@ -10,6 +10,7 @@ import Home from '@/pages/Home'
 import About from '@/pages/About'
 import FAQPage from '@/pages/FAQPage'
 import PrivacyPolicy from '@/pages/PrivacyPolicy'
+import PrivacyNotice from '@/pages/PrivacyNotice'
 import Terms from '@/pages/Terms'
 import WhyUs from '@/pages/WhyUs'
 import Support from '@/pages/Support'
@@ -96,6 +97,7 @@ function AnimatedRoutes() {
         <Route path="/helpdesk" element={<Helpdesk />} />
         <Route path="/helpdesk/track" element={<HelpdeskTrack />} />
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+        <Route path="/privacy-notice" element={<PrivacyNotice />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="*" element={<NotFound />} />
       </Routes>

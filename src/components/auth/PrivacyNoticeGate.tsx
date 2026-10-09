@@ -95,7 +95,7 @@ export default function PrivacyNoticeGate({ children }: PrivacyNoticeGateProps) 
             <li>คุณสามารถใช้สิทธิเกี่ยวกับข้อมูลส่วนบุคคลได้ตามกฎหมายคุ้มครองข้อมูลส่วนบุคคล</li>
           </ul>
           <Link
-            to="/privacy-policy"
+            to="/privacy-notice"
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-1.5 font-semibold text-emerald-700 hover:text-emerald-800"

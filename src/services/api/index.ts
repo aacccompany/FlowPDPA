@@ -9,6 +9,7 @@ import { consentsApi } from './consents'
 import { templatesApi } from './templates'
 import { billingApi } from './billing'
 import { companyDocumentsApi } from './companyDocuments'
+import { companyRegistryApi } from './companyRegistry'
 
 export const api = {
   auth: authApi,
@@ -22,6 +23,7 @@ export const api = {
   templates: templatesApi,
   billing: billingApi,
   companyDocuments: companyDocumentsApi,
+  companyRegistry: companyRegistryApi,
 }
 
 export { apiRequest } from './client'
@@ -35,5 +37,6 @@ export type * from './consents'
 export type * from './templates'
 export type * from './billing'
 export type * from './companyDocuments'
+export type * from './companyRegistry'
 
 export default api

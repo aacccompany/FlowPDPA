@@ -15,6 +15,10 @@ export interface PolicyQuestionnaire {
   ownerIdCard?: string;
   companyName?: string;
   companyRegNumber?: string;
+  businessTypeOther?: string;
+  businessObjective?: string;
+  companyRegistrationDate?: string;
+  registeredCapital?: string;
   websiteName: string;
   websiteUrl: string;
   businessType: string;

@@ -34,8 +34,9 @@ import type { CompanyDocumentValidationStatus, PolicyQuestionnaire, UserProfile 
 // ── Thai RD Company Lookup ────────────────────────────────────
 // Replace with real Thai RD VAT API calls via your backend proxy
 // (https://rdws.rd.go.th/serviceRD3/vatregistrationRI.asmx)
-type RDSearchType = "taxId" | "name";
+type RDSearchType = "taxId";
 
+/* Removed: the former client-side mock lookup. DBD calls now go through the backend.
 async function lookupThaiCompany(
   query: string,
   type: RDSearchType,
@@ -63,6 +64,7 @@ async function lookupThaiCompany(
   }
   return null;
 }
+*/
 
 // ── Types ─────────────────────────────────────────────────────
 type PolicyType = "privacy" | "hr" | "cctv" | "recruitment" | "vendor" | "dpa";
@@ -84,6 +86,10 @@ interface FormData {
   companyDocumentFileName: string;
   companyDocumentValidatedName: string;
   businessType: string;
+  businessTypeOther: string;
+  businessObjective: string;
+  companyRegistrationDate: string;
+  registeredCapital: string;
   websiteName: string;
   websiteUrl: string;
   contactEmail: string;
@@ -720,6 +726,7 @@ function Step2({
   const [rdError, setRdError] = useState("");
   const [searchType, setSearchType] = useState<RDSearchType>("taxId");
   const [searchQuery, setSearchQuery] = useState("");
+  const lookupInFlightRef = useRef(false);
   const [showConsent, setShowConsent] = useState(false);
   const [documentUploading, setDocumentUploading] = useState(false);
   const [documentError, setDocumentError] = useState("");
@@ -838,6 +845,13 @@ function Step2({
   };
 
   const handleLookup = async () => {
+    if (lookupInFlightRef.current) return;
+    const juristicId = searchQuery.replace(/\D/g, "");
+    if (juristicId.length !== 13) {
+      setRdError("กรุณากรอกเลขทะเบียนนิติบุคคลให้ครบ 13 หลัก");
+      setRdState("error");
+      return;
+    }
     if (!searchQuery.trim()) {
       setRdError(
         searchType === "taxId"
@@ -847,29 +861,32 @@ function Step2({
       setRdState("error");
       return;
     }
+    lookupInFlightRef.current = true;
     setRdState("loading");
     setRdError("");
     try {
-      const result = await lookupThaiCompany(searchQuery, searchType);
-      if (result) {
+      const response = await api.companyRegistry.lookup(juristicId);
+      if (response.success && response.data) {
+        const result = response.data;
         setData({
-          companyName: result.name,
+          companyName: result.juristicName,
+          companyRegNumber: result.juristicId,
           companyDocumentId: "",
           companyDocumentDraftId: "",
           companyDocumentStatus: "",
           companyDocumentFileName: "",
           companyDocumentValidatedName: "",
-          address: result.address,
-          ...(result.taxId ? { companyRegNumber: result.taxId } : {}),
         });
         setRdState("found");
       } else {
         setRdState("error");
-        setRdError("ไม่พบข้อมูลบริษัท กรุณาตรวจสอบและลองใหม่");
+        setRdError(response.error?.message || "ไม่พบข้อมูลบริษัท กรุณาตรวจสอบและลองใหม่");
       }
     } catch {
       setRdState("error");
-      setRdError("เชื่อมต่อฐานข้อมูลภาษีไม่ได้ กรุณาลองใหม่ภายหลัง");
+      setRdError("เชื่อมต่อฐานข้อมูลกรมพัฒนาธุรกิจการค้าไม่ได้ กรุณาลองใหม่ภายหลัง");
+    } finally {
+      lookupInFlightRef.current = false;
     }
   };
 
@@ -1029,8 +1046,7 @@ function Step2({
                   >
                     {(
                       [
-                        { key: "taxId", label: "เลขทะเบียน" },
-                        { key: "name", label: "ชื่อบริษัท" },
+                        { key: "taxId", label: "เลขทะเบียนนิติบุคคล" },
                       ] as const
                     ).map(({ key, label }) => (
                       <button
@@ -1076,7 +1092,9 @@ function Step2({
                           setRdError("");
                         }
                       }}
-                      onKeyDown={(e) => e.key === "Enter" && handleLookup()}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.repeat) void handleLookup();
+                      }}
                       className={inputCls + " flex-1 bg-white"}
                       onFocus={onInputFocus}
                       onBlur={onInputBlur}
@@ -1122,8 +1140,8 @@ function Step2({
                       style={{ color: "var(--green)" }}
                     >
                       <CheckCircle className="w-3.5 h-3.5 shrink-0" />
-                      ดึงข้อมูลจากกรมสรรพากรเรียบร้อย —
-                      ชื่อบริษัทและที่อยู่ถูกเติมให้อัตโนมัติ
+                      ดึงข้อมูลจากกรมพัฒนาธุรกิจการค้าเรียบร้อย —
+                      ชื่อบริษัทและเลขทะเบียนถูกเติมให้อัตโนมัติ
                     </p>
                   )}
                   {rdState === "error" && rdError && (
@@ -1190,7 +1208,10 @@ function Step2({
                   </label>
                   <select
                     value={data.businessType}
-                    onChange={(e) => setData({ businessType: e.target.value })}
+                    onChange={(e) => setData({
+                      businessType: e.target.value,
+                      ...(e.target.value !== "อื่นๆ" ? { businessTypeOther: "" } : {}),
+                    })}
                     className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-800 focus:outline-none bg-white transition-colors"
                     onFocus={onInputFocus}
                     onBlur={onInputBlur}
@@ -1202,6 +1223,38 @@ function Step2({
                       </option>
                     ))}
                   </select>
+                </div>
+                {data.businessType === "อื่นๆ" ? (
+                  <FormField
+                    label="ระบุประเภทธุรกิจ"
+                    value={data.businessTypeOther}
+                    onChange={(v) => setData({ businessTypeOther: v })}
+                    placeholder="กรุณาระบุประเภทธุรกิจ"
+                    required
+                  />
+                ) : null}
+                <FormField
+                  label="วัตถุประสงค์ / ลักษณะธุรกิจ"
+                  value={data.businessObjective}
+                  onChange={(v) => setData({ businessObjective: v })}
+                  placeholder="เช่น จำหน่ายเครื่องดื่มที่มีแอลกอฮอล์"
+                  required
+                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FormField
+                    label="วันที่จดทะเบียน"
+                    value={data.companyRegistrationDate}
+                    onChange={(v) => setData({ companyRegistrationDate: v })}
+                    type="date"
+                    required
+                  />
+                  <FormField
+                    label="ทุนจดทะเบียน (บาท)"
+                    value={data.registeredCapital}
+                    onChange={(v) => setData({ registeredCapital: v.replace(/[^\d.]/g, "") })}
+                    placeholder="เช่น 500000"
+                    required
+                  />
                 </div>
                 <FormField
                   label="ชื่อผู้ติดต่อ"
@@ -1638,7 +1691,13 @@ function Step6({ data }: { data: FormData }) {
             <>
               <ReviewRow label="ชื่อบริษัท" value={data.companyName} />
               <ReviewRow label="เลขทะเบียน" value={data.companyRegNumber} />
-              <ReviewRow label="ประเภทธุรกิจ" value={data.businessType} />
+              <ReviewRow
+                label="ประเภทธุรกิจ"
+                value={data.businessType === "อื่นๆ" ? data.businessTypeOther : data.businessType}
+              />
+              <ReviewRow label="วัตถุประสงค์ / ลักษณะธุรกิจ" value={data.businessObjective} />
+              <ReviewRow label="วันที่จดทะเบียน" value={data.companyRegistrationDate} />
+              <ReviewRow label="ทุนจดทะเบียน" value={data.registeredCapital ? `${Number(data.registeredCapital).toLocaleString("th-TH")} บาท` : ""} />
             </>
           )}
           <ReviewRow label="ชื่อเว็บไซต์" value={data.websiteName} />
@@ -2101,6 +2160,10 @@ const initialData: FormData = {
   companyDocumentFileName: "",
   companyDocumentValidatedName: "",
   businessType: "",
+  businessTypeOther: "",
+  businessObjective: "",
+  companyRegistrationDate: "",
+  registeredCapital: "",
   websiteName: "",
   websiteUrl: "",
   contactEmail: "",
@@ -2233,7 +2296,15 @@ export default function CreatePolicy() {
         );
       return (
         base &&
-        !!(data.companyName && data.companyRegNumber && data.businessType) &&
+        !!(
+          data.companyName &&
+          data.companyRegNumber &&
+          data.businessType &&
+          (data.businessType !== "อื่นๆ" || data.businessTypeOther.trim()) &&
+          data.businessObjective &&
+          data.companyRegistrationDate &&
+          data.registeredCapital
+        ) &&
         data.companyDocumentStatus === "PASSED"
       );
     }

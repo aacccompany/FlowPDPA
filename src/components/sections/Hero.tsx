@@ -37,7 +37,7 @@ export default function Hero() {
               </a>
             </div>
 
-            <div className="grid grid-cols-3 pt-8" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+            {/* <div className="grid grid-cols-3 pt-8" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
               {[
                 { v: '3,500+', l: 'นโยบายที่สร้างแล้ว' },
                 { v: 'ISO 29110', l: 'ได้รับการรับรอง' },
@@ -48,7 +48,7 @@ export default function Hero() {
                   <div className="text-xs" style={{ color: '#64748b' }}>{l}</div>
                 </div>
               ))}
-            </div>
+            </div> */}
           </div>
 
           {/* Right — dashboard mockup */}
