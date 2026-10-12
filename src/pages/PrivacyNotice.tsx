@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { MapPin } from 'lucide-react'
-import aaccLogo from '../../logo/AACC logo 3 2-01 (3).png'
-import universityLogo from '../../logo/messageImage_1791339136580.jpg'
-import digitalValleyLogo from '../../logo/New Logo KKDV (1).png'
+import aaccLogo from '../../logo/AACC logo 3 2-01 (3)-transparent.png'
+import digitalValleyLogo from '../../logo/New Logo KKDV (1)-transparent.png'
+import kkccLogo from '../../logo/KKCC.webp'
+import universityLogo from '../../logo/khonkeanUnivercity-transparent.png'
 import lawFacultyLogo from '../../logo/ตรานิติ_มข.png'
 
 const API_BASE_URL = (
@@ -47,15 +48,18 @@ export default function PrivacyNotice() {
   return (
     <div style={{ paddingTop: '61px' }}>
       <div className="py-16 border-b border-gray-100" style={{ backgroundColor: '#fafafa' }}>
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="mb-8 flex flex-wrap items-center gap-x-7 gap-y-5" aria-label="หน่วยงานที่เกี่ยวข้อง">
-            <img src={aaccLogo} alt="AA & CC" className="h-10 w-auto max-w-[150px] object-contain" />
-            <img src={universityLogo} alt="มหาวิทยาลัยขอนแก่น" className="h-10 w-auto max-w-[170px] object-contain" />
-            <img src={digitalValleyLogo} alt="Khon Kaen Digital Valley" className="h-11 w-auto max-w-[180px] object-contain" />
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+          <div className="mb-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-5 border-b border-gray-200 pb-7" aria-label="หน่วยงานที่เกี่ยวข้อง">
+            <img src={aaccLogo} alt="AA & CC" className="h-11 w-auto max-w-[145px] object-contain" />
+            <img src={digitalValleyLogo} alt="Khon Kaen Digital Valley" className="h-11 w-auto max-w-[155px] object-contain" />
+            <img src={kkccLogo} alt="Khon Kaen Chamber of Commerce" className="h-12 w-auto max-w-[145px] object-contain" />
+            <img src={universityLogo} alt="มหาวิทยาลัยขอนแก่น" className="h-11 w-auto max-w-[165px] object-contain" />
             <img src={lawFacultyLogo} alt="คณะนิติศาสตร์ มหาวิทยาลัยขอนแก่น" className="h-12 w-12 object-contain" />
           </div>
-          <h1 className="text-3xl sm:text-4xl font-black text-gray-900 mb-3">นโยบายความเป็นส่วนตัว</h1>
-          <p className="text-gray-500 text-sm">แพลตฟอร์ม Flow PDPA</p>
+          <div className="mx-auto max-w-3xl">
+            <h1 className="text-3xl sm:text-4xl font-black text-gray-900 mb-3">นโยบายความเป็นส่วนตัว</h1>
+            <p className="text-gray-500 text-sm">แพลตฟอร์ม Flow PDPA</p>
+          </div>
         </div>
       </div>
 
