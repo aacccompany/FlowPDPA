@@ -85,10 +85,7 @@ interface FormData {
   companyDocumentStatus: CompanyDocumentValidationStatus | "";
   companyDocumentFileName: string;
   companyDocumentValidatedName: string;
-  businessType: string;
-  businessTypeOther: string;
   businessObjective: string;
-  companyRegistrationDate: string;
   registeredCapital: string;
   websiteName: string;
   websiteUrl: string;
@@ -151,18 +148,6 @@ const policyTypes = [
     free: false,
     comingSoon: true,
   },
-];
-
-const businessTypes = [
-  "ร้านค้าออนไลน์ (E-Commerce)",
-  "บริษัทจำกัด / บริษัทมหาชน",
-  "SME / วิสาหกิจขนาดกลางและเล็ก",
-  "สตาร์ทอัป (Startup)",
-  "ฟรีแลนซ์ / บุคคลธรรมดา",
-  "หน่วยงานราชการ / NGO",
-  "คลินิก / โรงพยาบาล",
-  "สถาบันการศึกษา",
-  "อื่นๆ",
 ];
 
 const dataTypeOptions = [
@@ -871,6 +856,8 @@ function Step2({
         setData({
           companyName: result.juristicName,
           companyRegNumber: result.juristicId,
+          businessObjective: result.juristicObjective,
+          registeredCapital: result.registeredCapital,
           companyDocumentId: "",
           companyDocumentDraftId: "",
           companyDocumentStatus: "",
@@ -1026,7 +1013,7 @@ function Step2({
                 >
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                      ค้นหาจากฐานข้อมูลกรมสรรพากร
+                      ค้นหาจากฐานข้อมูลกรมพัฒนาธุรกิจการค้า (DBD)
                     </p>
                     {rdState === "found" && (
                       <button
@@ -1199,40 +1186,6 @@ function Step2({
                   {documentError ? <p className="mt-2 text-xs text-red-600">{documentError}</p> : null}
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
-                    ประเภทธุรกิจ{" "}
-                    <span className="text-red-400 normal-case font-normal ml-1">
-                      *
-                    </span>
-                  </label>
-                  <select
-                    value={data.businessType}
-                    onChange={(e) => setData({
-                      businessType: e.target.value,
-                      ...(e.target.value !== "อื่นๆ" ? { businessTypeOther: "" } : {}),
-                    })}
-                    className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-800 focus:outline-none bg-white transition-colors"
-                    onFocus={onInputFocus}
-                    onBlur={onInputBlur}
-                  >
-                    <option value="">เลือกประเภทธุรกิจ...</option>
-                    {businessTypes.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {data.businessType === "อื่นๆ" ? (
-                  <FormField
-                    label="ระบุประเภทธุรกิจ"
-                    value={data.businessTypeOther}
-                    onChange={(v) => setData({ businessTypeOther: v })}
-                    placeholder="กรุณาระบุประเภทธุรกิจ"
-                    required
-                  />
-                ) : null}
                 <FormField
                   label="วัตถุประสงค์ / ลักษณะธุรกิจ"
                   value={data.businessObjective}
@@ -1240,22 +1193,13 @@ function Step2({
                   placeholder="เช่น จำหน่ายเครื่องดื่มที่มีแอลกอฮอล์"
                   required
                 />
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <FormField
-                    label="วันที่จดทะเบียน"
-                    value={data.companyRegistrationDate}
-                    onChange={(v) => setData({ companyRegistrationDate: v })}
-                    type="date"
-                    required
-                  />
-                  <FormField
-                    label="ทุนจดทะเบียน (บาท)"
-                    value={data.registeredCapital}
-                    onChange={(v) => setData({ registeredCapital: v.replace(/[^\d.]/g, "") })}
-                    placeholder="เช่น 500000"
-                    required
-                  />
-                </div>
+                <FormField
+                  label="ทุนจดทะเบียน (บาท)"
+                  value={data.registeredCapital}
+                  onChange={(v) => setData({ registeredCapital: v.replace(/[^\d.]/g, "") })}
+                  placeholder="เช่น 500000"
+                  required
+                />
                 <FormField
                   label="ชื่อผู้ติดต่อ"
                   value={data.ownerFullName}
@@ -1691,12 +1635,7 @@ function Step6({ data }: { data: FormData }) {
             <>
               <ReviewRow label="ชื่อบริษัท" value={data.companyName} />
               <ReviewRow label="เลขทะเบียน" value={data.companyRegNumber} />
-              <ReviewRow
-                label="ประเภทธุรกิจ"
-                value={data.businessType === "อื่นๆ" ? data.businessTypeOther : data.businessType}
-              />
               <ReviewRow label="วัตถุประสงค์ / ลักษณะธุรกิจ" value={data.businessObjective} />
-              <ReviewRow label="วันที่จดทะเบียน" value={data.companyRegistrationDate} />
               <ReviewRow label="ทุนจดทะเบียน" value={data.registeredCapital ? `${Number(data.registeredCapital).toLocaleString("th-TH")} บาท` : ""} />
             </>
           )}
@@ -2159,10 +2098,7 @@ const initialData: FormData = {
   companyDocumentStatus: "",
   companyDocumentFileName: "",
   companyDocumentValidatedName: "",
-  businessType: "",
-  businessTypeOther: "",
   businessObjective: "",
-  companyRegistrationDate: "",
   registeredCapital: "",
   websiteName: "",
   websiteUrl: "",
@@ -2299,10 +2235,7 @@ export default function CreatePolicy() {
         !!(
           data.companyName &&
           data.companyRegNumber &&
-          data.businessType &&
-          (data.businessType !== "อื่นๆ" || data.businessTypeOther.trim()) &&
           data.businessObjective &&
-          data.companyRegistrationDate &&
           data.registeredCapital
         ) &&
         data.companyDocumentStatus === "PASSED"

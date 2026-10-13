@@ -6,6 +6,8 @@ export interface DBDCompany {
   juristicName: string;
   juristicType: string;
   juristicStatus: string;
+  juristicObjective: string;
+  registeredCapital: string;
 }
 
 export const companyRegistryApi = {
