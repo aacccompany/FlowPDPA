@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   LayoutDashboard,
   FileText,
@@ -40,12 +40,14 @@ import type {
   ConsentActivityLog,
   ConsentActivityType,
   ConsentPurpose,
+  ConsentUsage,
+  ConsentLogAddon,
   PolicyActivityLog,
   PolicyActivityType,
   MerchantBillingHistory,
 } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
-import { api } from "@/services/api";
+import { api, API_ENDPOINTS, peekApiCache } from "@/services/api";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import "./Dashboard.css";
 import ConsentManagement from "./ConsentManagement";
@@ -70,8 +72,12 @@ const langDisplay: Record<string, string> = {
 };
 
 function useMerchantPolicies() {
-  const [policies, setPolicies] = useState<SavedPolicy[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [policies, setPolicies] = useState<SavedPolicy[]>(
+    () => peekApiCache<SavedPolicy[]>(API_ENDPOINTS.policies.root)?.data ?? [],
+  );
+  const [loading, setLoading] = useState(
+    () => !peekApiCache<SavedPolicy[]>(API_ENDPOINTS.policies.root)?.success,
+  );
 
   useEffect(() => {
     void api.policies.list().then((response) => {
@@ -109,7 +115,7 @@ const merchantNavGroups = [
   {
     label: "บัญชี",
     items: [
-      { key: "billing", label: "แพ็กเกจและการชำระเงิน", Icon: CreditCard },
+      { key: "billing", label: "แพ็กเกจและฟีเจอร์", Icon: CreditCard },
       { key: "settings", label: "ตั้งค่าบัญชี", Icon: Settings },
     ],
   },
@@ -162,7 +168,7 @@ function Overview({
   setView: (v: string) => void;
   user: AuthUser;
 }) {
-  const { policies: userPolicies } = useMerchantPolicies();
+  const { policies: userPolicies, loading } = useMerchantPolicies();
   const activePolicies = userPolicies.filter(
     (p) => p.status === "approved",
   ).length;
@@ -170,13 +176,13 @@ function Overview({
   const stats = [
     {
       label: "นโยบายทั้งหมด",
-      value: String(userPolicies.length || 0),
+      value: loading ? "—" : String(userPolicies.length),
       Icon: FileText,
       color: "var(--blue)",
     },
     {
       label: "อนุมัติแล้ว",
-      value: String(activePolicies || 0),
+      value: loading ? "—" : String(activePolicies),
       Icon: CheckCircle,
       color: "var(--green)",
     },
@@ -250,7 +256,20 @@ function Overview({
             ดูทั้งหมด <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
-        {userPolicies.length === 0 ? (
+        {loading ? (
+          <div className="divide-y divide-gray-50" aria-label="กำลังโหลดนโยบาย">
+            {[0, 1, 2].map((item) => (
+              <div key={item} className="flex items-center gap-3 px-6 py-4 animate-pulse">
+                <div className="h-4 w-4 rounded bg-gray-100" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 w-40 rounded bg-gray-100" />
+                  <div className="h-2.5 w-24 rounded bg-gray-100" />
+                </div>
+                <div className="h-6 w-16 rounded bg-gray-100" />
+              </div>
+            ))}
+          </div>
+        ) : userPolicies.length === 0 ? (
           <div className="px-6 py-8 text-center">
             <p className="text-xs text-gray-400 mb-3">ยังไม่มีนโยบาย</p>
             <Link
@@ -442,6 +461,7 @@ function PolicyDownloadsDialog({
 
 function PoliciesList() {
   const { policies, setPolicies, loading } = useMerchantPolicies();
+  const [consentPolicyIds, setConsentPolicyIds] = useState<Set<string>>(() => new Set());
   const [copied, setCopied] = useState<string | null>(null);
   const [downloadPolicy, setDownloadPolicy] = useState<SavedPolicy | null>(
     null,
@@ -478,8 +498,23 @@ function PoliciesList() {
     : 0;
   const lastResult = Math.min(currentPage * pageSize, filteredPolicies.length);
 
+  useEffect(() => {
+    let active = true;
+    void api.consents.listForms().then((response) => {
+      if (active && response.success && response.data) {
+        setConsentPolicyIds(new Set(response.data.map((form) => form.policyId)));
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const publicPolicyUrl = (policy: SavedPolicy) =>
+    `${window.location.origin}/p/${encodeURIComponent(policy.slug)}`;
+
   const handleCopy = (p: SavedPolicy) => {
-    const url = p.shareUrl ?? `${window.location.origin}/p/${p.slug}`;
+    const url = publicPolicyUrl(p);
     navigator.clipboard.writeText(url).catch(() => {
       const ta = document.createElement("textarea");
       ta.value = url;
@@ -712,23 +747,24 @@ function PoliciesList() {
                     </Link>
                     {(p.status === "approved" || p.status === "edited") && (
                       <>
-                        <button
-                          title="คัดลอกลิงก์"
-                          onClick={() => handleCopy(p)}
-                          className="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
-                          style={{
-                            color: copied === p.id ? "var(--green)" : "#9ca3af",
-                          }}
-                          onMouseEnter={(e) =>
-                            (e.currentTarget.style.backgroundColor = "#f3f4f6")
-                          }
-                          onMouseLeave={(e) =>
-                            (e.currentTarget.style.backgroundColor =
-                              "transparent")
-                          }
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                        </button>
+                        {consentPolicyIds.has(p.id) ? (
+                          <button
+                            title="คัดลอกลิงก์ Consent"
+                            onClick={() => handleCopy(p)}
+                            className="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
+                            style={{
+                              color: copied === p.id ? "var(--green)" : "#9ca3af",
+                            }}
+                            onMouseEnter={(e) =>
+                              (e.currentTarget.style.backgroundColor = "#f3f4f6")
+                            }
+                            onMouseLeave={(e) =>
+                              (e.currentTarget.style.backgroundColor = "transparent")
+                            }
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                        ) : null}
                         <button
                           title="Download policy files"
                           onClick={() => setDownloadPolicy(p)}
@@ -736,25 +772,26 @@ function PoliciesList() {
                         >
                           <Download className="h-3.5 w-3.5" /> Files
                         </button>
-                        <a
-                          href={`/p/${p.slug}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title="ดูนโยบาย"
-                          className="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
-                          style={{ color: "#9ca3af" }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor = "#f3f4f6";
-                            e.currentTarget.style.color = "#374151";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor =
-                              "transparent";
-                            e.currentTarget.style.color = "#9ca3af";
-                          }}
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
+                        {consentPolicyIds.has(p.id) ? (
+                          <a
+                            href={publicPolicyUrl(p)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="เปิดลิงก์ Consent"
+                            className="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
+                            style={{ color: "#9ca3af" }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = "#f3f4f6";
+                              e.currentTarget.style.color = "#374151";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = "transparent";
+                              e.currentTarget.style.color = "#9ca3af";
+                            }}
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        ) : null}
                       </>
                     )}
                     <button
@@ -1125,14 +1162,37 @@ function ActivityLogsView() {
   const [selectedPolicyEvidence, setSelectedPolicyEvidence] =
     useState<PolicyActivityLog | null>(null);
   const [page, setPage] = useState(1);
+  const [exportingConsent, setExportingConsent] = useState<"csv" | "pdf" | null>(null);
+  const [consentUsage, setConsentUsage] = useState<ConsentUsage | null>(null);
   const pageSize = 10;
+
+  const exportConsentLogs = async (format: "csv" | "pdf") => {
+    if (exportingConsent || consentUsage?.plan !== "business") return;
+    setExportingConsent(format);
+    setError("");
+    const response = await api.consents.exportRecords(format);
+    setExportingConsent(null);
+    if (!response.success || !response.data) {
+      setError(response.error?.message || "ไม่สามารถส่งออก Consent Log ได้");
+      return;
+    }
+    const url = URL.createObjectURL(response.data.blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = response.data.filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
 
   useEffect(() => {
     let active = true;
     void Promise.all([
       api.policies.list(),
       api.consents.listActivityLogs(),
-    ]).then(async ([policiesResponse, consentResponse]) => {
+      api.consents.listRecords({ page: 1, limit: 1 }),
+    ]).then(async ([policiesResponse, consentResponse, recordsResponse]) => {
       if (!policiesResponse.success || !policiesResponse.data) {
         if (active) {
           setError(
@@ -1175,6 +1235,9 @@ function ActivityLogsView() {
               consent: log,
             }))
           : [];
+      if (recordsResponse.success && recordsResponse.data) {
+        setConsentUsage(recordsResponse.data.usage);
+      }
       setLogs(
         [...policyRows, ...consentRows].toSorted(
           (a, b) =>
@@ -1251,14 +1314,70 @@ function ActivityLogsView() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="mb-0.5 text-xl font-black text-gray-900">
-          บันทึกกิจกรรม
-        </h1>
-        <p className="text-sm text-gray-400">
-          ติดตามการรับทราบ ความยินยอม และขั้นตอนการจัดการเอกสารของนโยบายทั้งหมด
-        </p>
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="mb-0.5 text-xl font-black text-gray-900">
+            บันทึกกิจกรรม
+          </h1>
+          <p className="text-sm text-gray-400">
+            ติดตามการรับทราบ ความยินยอม และขั้นตอนการจัดการเอกสารของนโยบายทั้งหมด
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(["csv", "pdf"] as const).map((format) => (
+            <button
+              key={format}
+              type="button"
+              disabled={consentUsage?.plan !== "business" || exportingConsent !== null}
+              title={consentUsage?.plan === "business" ? undefined : "Export ใช้ได้เฉพาะแพ็กเกจ BUSINESS ที่ยังใช้งานอยู่"}
+              onClick={() => void exportConsentLogs(format)}
+              className="flex h-9 items-center gap-2 border border-emerald-700 bg-white px-4 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Download className="h-3.5 w-3.5" />
+              {exportingConsent === format
+                ? "กำลังสร้าง..."
+                : consentUsage?.plan === "business"
+                  ? `Export Consent ${format.toUpperCase()}`
+                  : `${format.toUpperCase()} · BUSINESS`}
+            </button>
+          ))}
+        </div>
       </div>
+      {consentUsage ? (
+        <div className={`mb-4 border px-4 py-3 ${consentUsage.reached ? "border-amber-300 bg-amber-50" : "border-emerald-200 bg-emerald-50/60"}`}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex-1">
+              <div className="flex items-center justify-between gap-3 text-xs font-bold">
+                <span className={consentUsage.reached ? "text-amber-900" : "text-emerald-900"}>
+                  {consentUsage.reached
+                    ? `Consent Log ถึงขีดจำกัด ${consentUsage.limit} รายการแล้ว`
+                    : `Consent Log ${consentUsage.total}/${consentUsage.limit} รายการ`}
+                </span>
+                <span>{Math.min(consentUsage.total, consentUsage.limit)}/{consentUsage.limit}</span>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white">
+                <div
+                  className={`h-full ${consentUsage.reached ? "bg-amber-500" : "bg-emerald-600"}`}
+                  style={{ width: `${Math.min(100, (consentUsage.total / consentUsage.limit) * 100)}%` }}
+                />
+              </div>
+              <p className={`mt-2 text-xs ${consentUsage.reached ? "text-amber-800" : "text-emerald-800"}`}>
+                {consentUsage.locked > 0
+                  ? `${consentUsage.locked} รายการถูกเก็บไว้แต่ล็อกการดูและ Export`
+                  : `เหลืออีก ${Math.max(0, consentUsage.limit - consentUsage.total)} รายการ`}
+              </p>
+            </div>
+            {consentUsage.plan === "free" ? (
+              <Link
+                to="/dashboard?view=billing"
+                className="btn-green shrink-0 px-4 py-2 text-xs font-bold"
+              >
+                {consentUsage.reached ? "อัปเกรดเพื่อปลดล็อก" : "เพิ่มเป็น 500 รายการ"}
+              </Link>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="relative min-w-0 flex-1 sm:max-w-sm">
           <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
@@ -1499,14 +1618,27 @@ function ActivityLogsView() {
 }
 
 function MerchantBillingView() {
-  const [history, setHistory] = useState<MerchantBillingHistory | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [history, setHistory] = useState<MerchantBillingHistory | null>(
+    () => peekApiCache<MerchantBillingHistory>(API_ENDPOINTS.billing.history)?.data ?? null,
+  );
+  const [loading, setLoading] = useState(
+    () => !peekApiCache<MerchantBillingHistory>(API_ENDPOINTS.billing.history)?.success,
+  );
   const [error, setError] = useState("");
   const [paymentPage, setPaymentPage] = useState(1);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [canceling, setCanceling] = useState(false);
+  const [upgrading, setUpgrading] = useState(false);
+  const [checkoutMessage, setCheckoutMessage] = useState("");
+  const [purchasingAddon, setPurchasingAddon] = useState<ConsentLogAddon | null>(null);
+  const [cancelingAddonId, setCancelingAddonId] = useState<string | null>(null);
 
   useEffect(() => {
+    const checkout = searchParams.get("checkout");
+    const sessionId = searchParams.get("session_id");
+    if (checkout === "success" && sessionId) return;
+
     let active = true;
     void api.billing.history().then((response) => {
       if (!active) return;
@@ -1517,7 +1649,43 @@ function MerchantBillingView() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [searchParams]);
+
+  useEffect(() => {
+    const checkout = searchParams.get("checkout");
+    const sessionId = searchParams.get("session_id");
+    if (checkout === "cancel") {
+      setCheckoutMessage("ยกเลิกการชำระเงินแล้ว คุณสามารถอัปเกรดใหม่ได้ทุกเมื่อ");
+      setSearchParams({ view: "billing" }, { replace: true });
+      return;
+    }
+    if (checkout !== "success" || !sessionId) return;
+
+    let active = true;
+    setLoading(true);
+    setUpgrading(true);
+    void api.billing.verifyCheckout(sessionId).then(async (verification) => {
+      if (!active) return;
+      if (!verification.success || !verification.data?.active) {
+        setError(verification.error?.message ?? "ยังไม่สามารถยืนยันการชำระเงินได้");
+        setLoading(false);
+        setUpgrading(false);
+        return;
+      }
+      const refreshed = await api.billing.history();
+      if (!active) return;
+      if (refreshed.success && refreshed.data) setHistory(refreshed.data);
+      else setError(refreshed.error?.message ?? "ชำระเงินแล้ว แต่ยังโหลดสถานะแพ็กเกจไม่สำเร็จ");
+      setCheckoutMessage("ชำระเงินสำเร็จและอัปเดตสิทธิ์การใช้งานแล้ว");
+      setLoading(false);
+      setUpgrading(false);
+      setPurchasingAddon(null);
+      setSearchParams({ view: "billing" }, { replace: true });
+    });
+    return () => {
+      active = false;
+    };
+  }, [searchParams, setSearchParams]);
 
   const subscriptions = history?.subscriptions ?? [];
   const payments = history?.payments ?? [];
@@ -1528,7 +1696,12 @@ function MerchantBillingView() {
     paymentPage * pageSize,
   );
   const current = subscriptions.find((item) =>
+    (item.policyType === "account" || !item.policyType) &&
     ["active", "trialing", "past_due", "unpaid"].includes(item.status),
+  );
+  const activeAddons = subscriptions.filter(
+    (item) => item.policyType?.startsWith("consent_logs_") &&
+      ["active", "trialing", "past_due", "unpaid"].includes(item.status),
   );
   const overduePayment = payments
     .filter((item) => item.status === "failed")
@@ -1557,7 +1730,8 @@ function MerchantBillingView() {
       : "—";
   const planLabel = current?.plan
     ? current.plan.charAt(0).toUpperCase() + current.plan.slice(1)
-    : "ยังไม่มีแพ็กเกจ";
+    : "Free";
+  const isBusiness = current?.plan?.toLowerCase() === "business";
 
   const cancelPlan = async () => {
     if (!current || canceling) return;
@@ -1581,13 +1755,50 @@ function MerchantBillingView() {
     );
   };
 
-  if (loading) {
-    return (
-      <div className="grid min-h-64 place-items-center rounded-xl border border-gray-100 bg-white">
-        <Loader className="h-5 w-5 animate-spin text-emerald-700" />
-      </div>
-    );
-  }
+  const upgradeToBusiness = async () => {
+    if (upgrading) return;
+    setError("");
+    setCheckoutMessage("");
+    setUpgrading(true);
+    const response = await api.billing.createCheckout("business", "monthly");
+    if (!response.success || !response.data?.checkoutUrl) {
+      setError(response.error?.message ?? "ไม่สามารถเริ่มการชำระเงินได้");
+      setUpgrading(false);
+      return;
+    }
+    window.location.assign(response.data.checkoutUrl);
+  };
+
+  const purchaseAddon = async (logs: ConsentLogAddon) => {
+    if (purchasingAddon) return;
+    setError("");
+    setCheckoutMessage("");
+    setPurchasingAddon(logs);
+    const response = await api.billing.createAddonCheckout(logs);
+    if (!response.success || !response.data?.checkoutUrl) {
+      setError(response.error?.message ?? "ไม่สามารถเริ่มการชำระเงิน Add-on ได้");
+      setPurchasingAddon(null);
+      return;
+    }
+    window.location.assign(response.data.checkoutUrl);
+  };
+
+  const cancelAddon = async (subscriptionId: string) => {
+    if (cancelingAddonId) return;
+    setCancelingAddonId(subscriptionId);
+    const response = await api.billing.cancelSubscription(subscriptionId);
+    setCancelingAddonId(null);
+    if (!response.success || !response.data) {
+      setError(response.error?.message ?? "ไม่สามารถยกเลิก Add-on ได้");
+      return;
+    }
+    setHistory((previous) => previous ? {
+      ...previous,
+      subscriptions: previous.subscriptions.map((item) =>
+        item.id === subscriptionId ? response.data! : item,
+      ),
+    } : previous);
+  };
 
   return (
     <div>
@@ -1606,14 +1817,185 @@ function MerchantBillingView() {
         </p>
         <h1 className="text-2xl font-bold text-gray-900">แพ็กเกจและการชำระเงิน</h1>
         <p className="mt-1 text-sm text-gray-500">
-          ตรวจสอบรอบบริการ สถานะแพ็กเกจ และประวัติการชำระเงินของบัญชีคุณ
+          เลือกความจุ Consent Log ที่เหมาะกับงาน และตรวจสอบสถานะแพ็กเกจของบัญชีคุณ
         </p>
       </div>
 
-      {error ? (
+      {checkoutMessage ? (
+        <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          {checkoutMessage}
+        </div>
+      ) : null}
+
+      {loading ? (
+        <div className="grid min-h-64 place-items-center rounded-xl border border-gray-100 bg-white">
+          <div className="text-center">
+            <Loader className="mx-auto h-5 w-5 animate-spin text-emerald-700" />
+            <p className="mt-3 text-xs text-gray-400">กำลังโหลดสถานะแพ็กเกจ...</p>
+          </div>
+        </div>
+      ) : error ? (
         <div className="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       ) : (
         <>
+          <section className="mb-6">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">
+                  Plans
+                </p>
+                <h2 className="mt-1 text-lg font-bold text-gray-900">เลือกแพ็กเกจที่เหมาะกับจำนวน Consent Log</h2>
+              </div>
+              <p className="text-xs text-gray-500">สร้างเอกสาร PDPA ได้ฟรีทุกแพ็กเกจ</p>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <article className="relative flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+                {!current ? (
+                  <span className="absolute right-5 top-5 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold text-slate-600">
+                    แพ็กเกจปัจจุบัน
+                  </span>
+                ) : null}
+                <p className="font-mono text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Free</p>
+                <div className="mt-3 flex items-end gap-2">
+                  <span className="text-4xl font-black tracking-tight text-gray-950">฿0</span>
+                  <span className="pb-1 text-sm text-gray-500">ตลอดการใช้งาน</span>
+                </div>
+                <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-xs text-slate-500">ความจุ Consent Log</p>
+                  <p className="mt-1 text-2xl font-black text-slate-900">100 <span className="text-sm font-semibold text-slate-500">รายการ</span></p>
+                </div>
+                <ul className="mt-5 space-y-3 text-sm text-gray-700">
+                  {[
+                    "สร้างเอกสาร PDPA ได้",
+                    "ดูประวัติการให้ความยินยอมได้",
+                    "ถอนความยินยอมได้",
+                    "ระบบแจ้งเตือนเมื่อ Consent Log เต็ม",
+                  ].map((feature) => (
+                    <li key={feature} className="flex items-start gap-2.5">
+                      <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+              </article>
+
+              <article className="relative flex flex-col overflow-hidden rounded-xl border-2 border-emerald-600 bg-white p-6 shadow-[0_12px_30px_rgba(5,150,105,0.10)]">
+                <div className="absolute inset-x-0 top-0 h-1 bg-emerald-600" />
+                <span className="absolute right-5 top-5 rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-700">
+                  {isBusiness ? "แพ็กเกจปัจจุบัน" : "สำหรับธุรกิจ"}
+                </span>
+                <p className="font-mono text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">Business</p>
+                <div className="mt-3 flex items-end gap-2">
+                  <span className="text-4xl font-black tracking-tight text-gray-950">฿289</span>
+                  <span className="pb-1 text-sm text-gray-500">/ เดือน</span>
+                </div>
+                <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+                  <p className="text-xs text-emerald-700">ความจุ Consent Log</p>
+                  <p className="mt-1 text-2xl font-black text-emerald-950">500 <span className="text-sm font-semibold text-emerald-700">รายการ</span></p>
+                </div>
+                <ul className="mt-5 space-y-3 text-sm text-gray-700">
+                  {[
+                    "สร้างเอกสาร PDPA ได้",
+                    "แก้ไขและจัดการข้อมูลลูกค้าได้",
+                    "จัดการการยกเลิกและถอนความยินยอมได้",
+                    "เก็บประวัติการเปลี่ยนแปลง",
+                    "ซื้อจำนวน Consent Log เพิ่มได้",
+                  ].map((feature) => (
+                    <li key={feature} className="flex items-start gap-2.5">
+                      <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+                {!isBusiness ? (
+                  <button
+                    type="button"
+                    disabled={upgrading || Boolean(current)}
+                    onClick={() => void upgradeToBusiness()}
+                    className="mt-6 w-full rounded-lg bg-emerald-700 px-4 py-3 text-sm font-bold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {upgrading ? "กำลังเปิดหน้าชำระเงิน..." : current ? "มีแพ็กเกจที่ใช้งานอยู่แล้ว" : "อัปเกรดเป็น BUSINESS"}
+                  </button>
+                ) : null}
+              </article>
+            </div>
+          </section>
+
+          <section className="mb-6 rounded-xl border border-gray-200 bg-white p-6">
+            <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Consent Log Add-on</p>
+                <h2 className="mt-1 text-lg font-bold text-gray-900">เพิ่มความจุ Consent Log ได้ทั้ง FREE และ BUSINESS</h2>
+                <p className="mt-1 text-xs text-gray-500">โควตา Add-on จะบวกจากแพ็กเกจปัจจุบันตลอดรอบรายเดือน สิทธิ์ Export ยังเป็นของ BUSINESS</p>
+              </div>
+              <span className="text-xs font-semibold text-gray-500">เรียกเก็บรายเดือน</span>
+            </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              {([
+                { logs: 500 as const, price: 99 },
+                { logs: 2000 as const, price: 209 },
+                { logs: 5000 as const, price: 409 },
+              ]).map((addon) => {
+                const policyType = `consent_logs_${addon.logs}`;
+                const subscription = activeAddons.find((item) => item.policyType === policyType);
+                return (
+                  <article key={addon.logs} className="flex flex-col rounded-lg border border-gray-200 p-5">
+                    <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">เพิ่ม {addon.logs.toLocaleString()} Log</p>
+                    <p className="mt-3 text-3xl font-black text-gray-950">฿{addon.price}<span className="ml-1 text-sm font-medium text-gray-500">/ เดือน</span></p>
+                    <p className="mt-2 text-xs text-gray-500">
+                      {isBusiness ? "BUSINESS" : "FREE"} รวมเป็นอย่างน้อย {((isBusiness ? 500 : 100) + addon.logs).toLocaleString()} Log
+                    </p>
+                    {subscription ? (
+                      <div className="mt-5 space-y-2">
+                        <p className="rounded bg-emerald-50 px-3 py-2 text-center text-xs font-bold text-emerald-700">
+                          {subscription.cancelAtPeriodEnd ? "ยกเลิกแล้ว · ใช้ได้ถึงสิ้นรอบ" : "Add-on กำลังใช้งาน"}
+                        </p>
+                        <dl className="grid grid-cols-2 gap-2 rounded border border-gray-100 bg-slate-50 p-3 text-xs">
+                          <div>
+                            <dt className="text-gray-400">เริ่มรอบ</dt>
+                            <dd className="mt-1 font-semibold text-gray-700">{formatDate(subscription.currentPeriodStart)}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-gray-400">รอบถัดไป</dt>
+                            <dd className="mt-1 font-semibold text-gray-700">{formatDate(subscription.currentPeriodEnd)}</dd>
+                          </div>
+                          <div className="col-span-2">
+                            <dt className="text-gray-400">การต่ออายุ</dt>
+                            <dd className="mt-1 font-semibold text-gray-700">
+                              {subscription.cancelAtPeriodEnd ? "สิ้นสุดเมื่อครบรอบ" : "ต่ออายุอัตโนมัติรายเดือน"}
+                            </dd>
+                          </div>
+                        </dl>
+                        {!subscription.cancelAtPeriodEnd ? (
+                          <button
+                            type="button"
+                            disabled={cancelingAddonId !== null}
+                            onClick={() => void cancelAddon(subscription.id)}
+                            className="w-full border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 disabled:opacity-50"
+                          >
+                            {cancelingAddonId === subscription.id ? "กำลังยกเลิก..." : "ยกเลิกเมื่อสิ้นสุดรอบ"}
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={purchasingAddon !== null}
+                        onClick={() => void purchaseAddon(addon.logs)}
+                        className="mt-5 w-full rounded-lg bg-emerald-700 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {purchasingAddon === addon.logs
+                          ? "กำลังเปิดหน้าชำระเงิน..."
+                          : "ซื้อ Add-on"}
+                      </button>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+
           {current && ["past_due", "unpaid"].includes(current.status) ? (
             <div className="mb-5 border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               <p className="font-bold">
@@ -1624,7 +2006,7 @@ function MerchantBillingView() {
               <p className="mt-1 text-xs leading-5">
                 {graceDaysLeft === 0
                   ? "คุณยังเข้าสู่ระบบและดูประวัติการชำระเงินได้ แต่ฟีเจอร์ในแพ็กเกจและเอกสารสาธารณะถูกหยุดแล้ว"
-                  : "ยังดูข้อมูลและเอกสารเดิมได้ แต่สร้างหรือแก้ไข Policy ไม่ได้"}
+                  : "ยังสร้างและแก้ไข Policy ได้ฟรี แต่ฟีเจอร์เสริมในแพ็กเกจจะถูกจำกัดชั่วคราว"}
                 {graceDaysLeft !== null && graceDaysLeft > 0
                   ? ` · เหลือ ${graceDaysLeft} วันก่อนหยุดสิทธิ์แพ็กเกจอัตโนมัติ`
                   : graceDaysLeft === null
@@ -1639,7 +2021,7 @@ function MerchantBillingView() {
                 <p className="text-xs text-emerald-100">แพ็กเกจปัจจุบัน</p>
                 <p className="mt-2 text-3xl font-black tracking-tight">{planLabel}</p>
                 <p className="mt-2 text-xs text-emerald-100">
-                  {current?.billingCycle === "annual" ? "เรียกเก็บรายปี" : current ? "เรียกเก็บรายเดือน" : "เลือกแพ็กเกจเมื่อสร้างนโยบาย"}
+                  {current ? "เรียกเก็บรายเดือน" : "เลือกแพ็กเกจเพื่อเปิดใช้ฟีเจอร์เพิ่มเติม"}
                 </p>
               </div>
               <div className="text-left md:text-right">
@@ -1662,7 +2044,7 @@ function MerchantBillingView() {
               {[
                 ["สถานะ", current?.status ?? "ไม่มีรายการ"],
                 ["เริ่มรอบปัจจุบัน", formatDate(current?.currentPeriodStart)],
-                ["การยกเลิก", current?.cancelAtPeriodEnd ? "สิ้นสุดเมื่อครบรอบ" : "ต่ออายุอัตโนมัติ"],
+                ["การต่ออายุ", current ? (current.cancelAtPeriodEnd ? "สิ้นสุดเมื่อครบรอบ" : "ต่ออายุอัตโนมัติ") : "ไม่มีการต่ออายุ"],
               ].map(([label, value]) => (
                 <div key={label} className="p-4">
                   <p className="text-[11px] text-gray-400">{label}</p>
@@ -1679,19 +2061,24 @@ function MerchantBillingView() {
               </span>
               <div>
                 <h2 className="text-sm font-bold text-gray-900">ประวัติการชำระเงิน</h2>
-                <p className="text-xs text-gray-400">แสดงสูงสุด 100 รายการล่าสุด</p>
+                <p className="text-xs text-gray-400">แสดงหน้าละ 10 รายการ</p>
               </div>
             </header>
             {payments.length ? (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[680px] text-left text-sm">
                   <thead className="bg-slate-50 text-[11px] text-gray-500">
-                    <tr><th className="px-5 py-3">เลขอ้างอิงใบแจ้งหนี้</th><th className="px-5 py-3">วันที่</th><th className="px-5 py-3">ยอดชำระ</th><th className="px-5 py-3">สถานะ</th></tr>
+                    <tr><th className="px-5 py-3">เลขอ้างอิงใบแจ้งหนี้</th><th className="px-5 py-3">รายการ</th><th className="px-5 py-3">วันที่</th><th className="px-5 py-3">ยอดชำระ</th><th className="px-5 py-3">สถานะ</th></tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {visiblePayments.map((payment) => (
                       <tr key={payment.id} className="hover:bg-slate-50/70">
                         <td className="px-5 py-4 font-mono text-xs text-gray-600">{payment.invoiceReference}</td>
+                        <td className="px-5 py-4 text-gray-600">
+                          {payment.policyType?.startsWith("consent_logs_")
+                            ? `Add-on +${Number(payment.policyType.replace("consent_logs_", "")).toLocaleString()} Log`
+                            : "BUSINESS"}
+                        </td>
                         <td className="px-5 py-4 text-gray-600">{formatDate(payment.paidAt ?? payment.createdAt)}</td>
                         <td className="px-5 py-4 font-semibold text-gray-900">{new Intl.NumberFormat("th-TH", { style: "currency", currency: payment.currency.toUpperCase() }).format(payment.amountPaid / 100)}</td>
                         <td className="px-5 py-4"><StatusBadge status={payment.status} /></td>
@@ -1703,7 +2090,7 @@ function MerchantBillingView() {
             ) : (
               <div className="px-5 py-12 text-center text-sm text-gray-400">ยังไม่มีประวัติการชำระเงินที่บันทึกจาก Stripe</div>
             )}
-            {payments.length > pageSize ? (
+            {payments.length ? (
               <footer className="flex items-center justify-between border-t border-gray-100 px-5 py-3">
                 <p className="text-xs text-gray-400">
                   แสดง {(paymentPage - 1) * pageSize + 1}–{Math.min(paymentPage * pageSize, payments.length)} จาก {payments.length} รายการ
@@ -2125,16 +2512,18 @@ function AccountSettings({ user }: { user: AuthUser }) {
                 {user.plan}
               </span>
               <span className="text-xs text-gray-400">
-                ชำระครั้งเดียว ตลอดชีพ
+                {user.plan?.toLowerCase() === "business"
+                  ? "฿289/เดือน · ต่ออายุอัตโนมัติ"
+                  : "฿0 · ใช้งานได้ตลอด"}
               </span>
             </div>
           </div>
           <Link
-            to="/#contact"
+            to="/dashboard?view=billing"
             className="text-sm font-semibold transition-colors"
             style={{ color: "var(--blue)" }}
           >
-            อัปเกรดแผน →
+            จัดการแพ็กเกจ →
           </Link>
         </div>
       </div>
@@ -2215,20 +2604,34 @@ function AccountSettings({ user }: { user: AuthUser }) {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user: sessionUser, logout } = useAuth();
-  const location = useLocation();
-  const requestedView = (location.state as { view?: string } | null)?.view;
-  const [activeView, setActiveView] = useState(
-    requestedView === "settings" ||
-      requestedView === "policies" ||
-      requestedView === "activity" ||
-      requestedView === "consents" ||
-      requestedView === "templates" ||
-      requestedView === "billing"
-      ? requestedView
-      : "overview",
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedView = searchParams.get("view");
+  const activeView = navItems.some((item) => item.key === requestedView && item.key !== "new")
+    ? requestedView!
+    : "overview";
+  const setActiveView = useCallback(
+    (view: string) => {
+      if (view === "overview") setSearchParams({}, { replace: true });
+      else setSearchParams({ view }, { replace: true });
+    },
+    [setSearchParams],
   );
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
+
+  useEffect(() => {
+    const prefetch = () => {
+      void Promise.all([
+        api.billing.history(),
+        api.consents.listForms(),
+        api.consents.listRecords({ page: 1, limit: 10 }),
+        api.consents.listActivityLogs(),
+        api.templates.list(),
+      ]);
+    };
+    const timer = window.setTimeout(prefetch, 250);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const user: AuthUser = sessionUser ?? {
     name: "User",

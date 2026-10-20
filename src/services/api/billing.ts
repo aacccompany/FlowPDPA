@@ -1,8 +1,8 @@
 import { apiRequest } from "./client";
 import { API_ENDPOINTS } from "./endpoints";
 
-export type BillingPlan = "personal" | "business" | "enterprise";
-export type BillingCycle = "monthly" | "annual";
+export type BillingPlan = "business";
+export type BillingCycle = "monthly";
 
 export interface CheckoutSession {
   sessionId: string;
@@ -11,8 +11,18 @@ export interface CheckoutSession {
   billingCycle: BillingCycle;
 }
 
+export type ConsentLogAddon = 500 | 2000 | 5000;
+
+export interface AddonCheckoutSession {
+  sessionId: string;
+  checkoutUrl: string;
+  logs: ConsentLogAddon;
+  billingCycle: "monthly";
+}
+
 export interface SubscriptionSummary {
   id: string;
+  policyType?: string;
   status: string;
   cancelAtPeriodEnd?: boolean;
   currentPeriodStart?: string | null;
@@ -30,6 +40,7 @@ export interface MerchantPayment {
   status: string;
   paidAt: string | null;
   createdAt: string | null;
+  policyType?: string | null;
 }
 
 export interface MerchantBillingHistory {
@@ -51,6 +62,11 @@ export const billingApi = {
       method: "POST",
       body: { plan, billingCycle },
     }),
+  createAddonCheckout: (logs: ConsentLogAddon) =>
+    apiRequest<AddonCheckoutSession>(API_ENDPOINTS.billing.addonCheckoutSessions, {
+      method: "POST",
+      body: { logs },
+    }),
   verifyCheckout: (sessionId: string) =>
     apiRequest<CheckoutVerification>(
       API_ENDPOINTS.billing.checkoutSession(sessionId),
@@ -58,7 +74,7 @@ export const billingApi = {
   subscriptions: () =>
     apiRequest<SubscriptionSummary[]>(API_ENDPOINTS.billing.subscriptions),
   history: () =>
-    apiRequest<MerchantBillingHistory>(API_ENDPOINTS.billing.history),
+    apiRequest<MerchantBillingHistory>(API_ENDPOINTS.billing.history, { cache: false }),
   cancelSubscription: (subscriptionId: string) =>
     apiRequest<SubscriptionSummary>(
       API_ENDPOINTS.billing.cancelSubscription(subscriptionId),

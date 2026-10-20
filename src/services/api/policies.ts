@@ -13,6 +13,16 @@ import type {
 export const policiesApi = {
   list: () => apiRequest<SavedPolicy[]>(API_ENDPOINTS.policies.root),
   get: (id: string) => apiRequest<SavedPolicy>(API_ENDPOINTS.policies.byId(id)),
+  acceptTerms: (policyType: PolicyQuestionnaire['policyType']) =>
+    apiRequest<{ acceptedAt: string; termsVersion: string; privacyPolicyVersion: string }>(
+      API_ENDPOINTS.policies.termsAcceptance,
+      { method: 'POST', body: { policyType } },
+    ),
+  acceptCompanyAuthority: (policyType: PolicyQuestionnaire['policyType']) =>
+    apiRequest<{ acceptedAt: string; declarationVersion: string }>(
+      API_ENDPOINTS.policies.companyAuthorityAcceptance,
+      { method: 'POST', body: { policyType } },
+    ),
   create: (data: PolicyQuestionnaire) => apiRequest<SavedPolicy>(API_ENDPOINTS.policies.root, { method: 'POST', body: data, timeout: 120000 }),
   regenerate: (id: string, data: PolicyQuestionnaire) =>
     apiRequest<SavedPolicy>(API_ENDPOINTS.policies.byId(id), { method: 'PUT', body: data, timeout: 120000 }),

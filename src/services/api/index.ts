@@ -26,7 +26,7 @@ export const api = {
   companyRegistry: companyRegistryApi,
 }
 
-export { apiRequest } from './client'
+export { apiRequest, apiDownload, peekApiCache } from './client'
 export { API_ENDPOINTS } from './endpoints'
 export { fileSha256 } from './companyDocuments'
 export { useApiLoading } from './useApiLoading'

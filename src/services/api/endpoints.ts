@@ -27,6 +27,7 @@ export const API_ENDPOINTS = {
   templates: { root: '/templates' },
   billing: {
     checkoutSessions: '/billing/checkout-sessions',
+    addonCheckoutSessions: '/billing/addon-checkout-sessions',
     checkoutSession: (sessionId: string) =>
       `/billing/checkout-sessions/${encodeURIComponent(sessionId)}`,
     subscriptions: '/billing/subscriptions',
@@ -39,14 +40,18 @@ export const API_ENDPOINTS = {
     forms: '/consents/forms',
     form: (formId: string) => `/consents/forms/${encodeURIComponent(formId)}`,
     records: '/consents/records',
+    exportRecords: '/consents/records/export',
     activityLogs: '/consents/activity-logs',
     publicForPolicy: (slug: string) => `/consents/public/policy/${encodeURIComponent(slug)}`,
     publicResponses: (token: string) => `/consents/public/${encodeURIComponent(token)}/responses`,
     events: (recordId: string) => `/consents/records/${encodeURIComponent(recordId)}/events`,
+    record: (recordId: string) => `/consents/records/${encodeURIComponent(recordId)}`,
     withdraw: (recordId: string) => `/consents/records/${encodeURIComponent(recordId)}/withdraw`,
   },
   policies: {
     root: '/policies',
+    termsAcceptance: '/policies/terms-acceptance',
+    companyAuthorityAcceptance: '/policies/company-authority-acceptance',
     byId: (policyId: string) => `/policies/${encodeURIComponent(policyId)}`,
     changeRequests: (policyId: string) => `/policies/${encodeURIComponent(policyId)}/change-requests`,
     changeRequest: (policyId: string, requestId: string) => `/policies/${encodeURIComponent(policyId)}/change-requests/${encodeURIComponent(requestId)}`,

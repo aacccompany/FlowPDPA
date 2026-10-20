@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Download,
   Plus,
   Search,
   X,
@@ -12,12 +14,14 @@ import type {
   ConsentField,
   ConsentForm,
   ConsentRecord,
+  ConsentUsage,
   DocumentTemplate,
   SavedPolicy,
 } from "@/services/api";
 
 const consentStatusLabel: Record<ConsentRecord["status"], string> = {
   active: "ใช้งานอยู่",
+  granted: "ใช้งานอยู่",
   rejected: "ปฏิเสธ",
   withdrawn: "ถอนความยินยอม",
 };
@@ -27,14 +31,32 @@ export default function ConsentManagement() {
   const [policies, setPolicies] = useState<SavedPolicy[]>([]);
   const [records, setRecords] = useState<ConsentRecord[]>([]);
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
+  const [usage, setUsage] = useState<ConsentUsage>({
+    plan: "free",
+    limit: 100,
+    total: 0,
+    visible: 0,
+    locked: 0,
+    reached: false,
+    addons: [],
+  });
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
   const [editingForm, setEditingForm] = useState<ConsentForm | null>(null);
+  const [editingRecord, setEditingRecord] = useState<ConsentRecord | null>(null);
+  const [recordSaving, setRecordSaving] = useState(false);
+  const [recordDraft, setRecordDraft] = useState({
+    subjectName: "",
+    subjectEmail: "",
+    subjectReference: "",
+    fieldValues: {} as Record<string, string | boolean>,
+  });
   const [createStep, setCreateStep] = useState<"choice" | "editor">("choice");
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [error, setError] = useState("");
+  const [exporting, setExporting] = useState<"csv" | "pdf" | null>(null);
   const [draft, setDraft] = useState({
     policyId: "",
     name: "",
@@ -50,6 +72,7 @@ export default function ConsentManagement() {
         if (response.success && response.data) {
           setRecords(response.data.records);
           setPagination(response.data.pagination);
+          setUsage(response.data.usage);
         } else
           setError(
             response.error?.message || "ไม่สามารถโหลดรายการความยินยอมได้",
@@ -76,6 +99,7 @@ export default function ConsentManagement() {
         if (recordsResponse.success && recordsResponse.data) {
           setRecords(recordsResponse.data.records);
           setPagination(recordsResponse.data.pagination);
+          setUsage(recordsResponse.data.usage);
         }
         if (templatesResponse.success && templatesResponse.data) {
           setTemplates(templatesResponse.data);
@@ -214,6 +238,52 @@ export default function ConsentManagement() {
     else setError(response.error?.message || "ไม่สามารถถอนความยินยอมได้");
   };
 
+  const openRecordEditor = (record: ConsentRecord) => {
+    setEditingRecord(record);
+    setRecordDraft({
+      subjectName: record.subjectName || "",
+      subjectEmail: record.subjectEmail,
+      subjectReference: record.subjectReference || "",
+      fieldValues: { ...(record.fieldValues || {}) },
+    });
+    setError("");
+  };
+
+  const saveRecord = async () => {
+    if (!editingRecord || recordSaving) return;
+    setRecordSaving(true);
+    const response = await api.consents.updateRecord(editingRecord.id, recordDraft);
+    setRecordSaving(false);
+    if (!response.success || !response.data) {
+      setError(response.error?.message || "ไม่สามารถแก้ไขข้อมูลลูกค้าได้");
+      return;
+    }
+    setRecords((current) => current.map((item) =>
+      item.id === editingRecord.id ? response.data! : item,
+    ));
+    setEditingRecord(null);
+  };
+
+  const exportRecords = async (format: "csv" | "pdf") => {
+    if (exporting || usage.plan !== "business") return;
+    setExporting(format);
+    setError("");
+    const response = await api.consents.exportRecords(format, { status, search });
+    setExporting(null);
+    if (!response.success || !response.data) {
+      setError(response.error?.message || "ไม่สามารถส่งออก Consent Log ได้");
+      return;
+    }
+    const url = URL.createObjectURL(response.data.blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = response.data.filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div>
       <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -239,10 +309,49 @@ export default function ConsentManagement() {
           {error}
         </p>
       )}
+      <section
+        className={`mb-5 border px-5 py-4 ${usage.reached ? "border-amber-300 bg-amber-50" : "border-emerald-200 bg-emerald-50/60"}`}
+      >
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-3">
+              <p className={`text-sm font-bold ${usage.reached ? "text-amber-900" : "text-emerald-900"}`}>
+                {usage.reached
+                  ? `Consent Log ถึงขีดจำกัด ${usage.limit} รายการแล้ว`
+                  : `ใช้ Consent Log แล้ว ${usage.total} จาก ${usage.limit} รายการ`}
+              </p>
+              <span className="shrink-0 font-mono text-xs font-bold text-gray-700">
+                {Math.min(usage.total, usage.limit)}/{usage.limit}
+              </span>
+            </div>
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/80">
+              <div
+                className={`h-full rounded-full ${usage.reached ? "bg-amber-500" : "bg-emerald-600"}`}
+                style={{ width: `${Math.min(100, (usage.total / usage.limit) * 100)}%` }}
+              />
+            </div>
+            <p className={`mt-2 text-xs ${usage.reached ? "text-amber-800" : "text-emerald-800"}`}>
+              {usage.locked > 0
+                ? `มี ${usage.locked} รายการที่ระบบบันทึกไว้อย่างปลอดภัย แต่ถูกล็อกไม่ให้ดูหรือ Export ตามแพ็กเกจปัจจุบัน`
+                : usage.plan === "free"
+                  ? `เหลืออีก ${Math.max(0, usage.limit - usage.total)} รายการ · อัปเกรด BUSINESS เพื่อดูได้สูงสุด 500 รายการ`
+                  : `เหลืออีก ${Math.max(0, usage.limit - usage.total)} รายการในแพ็กเกจ BUSINESS`}
+            </p>
+          </div>
+          {usage.plan === "free" ? (
+            <Link
+              to="/dashboard?view=billing"
+              className="btn-green shrink-0 px-4 py-2.5 text-center text-xs font-bold"
+            >
+              {usage.reached ? "อัปเกรดเพื่อปลดล็อก" : "ดูแพ็กเกจ BUSINESS"}
+            </Link>
+          ) : null}
+        </div>
+      </section>
       <section className="mb-5 grid gap-3 sm:grid-cols-3">
         {[
           { label: "แบบฟอร์ม", value: forms.length },
-          { label: "รายการความยินยอม", value: pagination.total },
+          { label: "Consent Log ที่บันทึกทั้งหมด", value: usage.total },
           {
             label: "ใช้งานอยู่ในหน้านี้",
             value: records.filter((row) => row.status === "active").length,
@@ -337,6 +446,23 @@ export default function ConsentManagement() {
         >
           ค้นหา
         </button>
+        {(["csv", "pdf"] as const).map((format) => (
+          <button
+            key={format}
+            type="button"
+            disabled={usage.plan !== "business" || exporting !== null || pagination.total === 0}
+            title={usage.plan === "business" ? undefined : "Export ใช้ได้เฉพาะแพ็กเกจ BUSINESS ที่ยังใช้งานอยู่"}
+            onClick={() => void exportRecords(format)}
+            className="flex h-9 items-center justify-center gap-2 border border-emerald-700 px-4 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Download className="h-3.5 w-3.5" />
+            {exporting === format
+              ? "กำลังสร้าง..."
+              : usage.plan === "business"
+                ? `Export ${format.toUpperCase()}`
+                : `${format.toUpperCase()} · BUSINESS`}
+          </button>
+        ))}
       </div>
       <section className="overflow-hidden border border-gray-100 bg-white">
         <div className="overflow-x-auto">
@@ -371,14 +497,34 @@ export default function ConsentManagement() {
                     {new Date(record.createdAt).toLocaleString("th-TH")}
                   </td>
                   <td className="px-4 py-3">
-                    {record.status === "active" && (
-                      <button
-                        onClick={() => void withdraw(record)}
-                        className="text-xs font-semibold text-red-700"
-                      >
-                        ถอนความยินยอม
-                      </button>
-                    )}
+                    <div className="flex flex-wrap items-center gap-3">
+                      {usage.plan === "business" ? (
+                        <button
+                          type="button"
+                          onClick={() => openRecordEditor(record)}
+                          className="text-xs font-semibold text-emerald-700"
+                        >
+                          แก้ไขข้อมูล
+                        </button>
+                      ) : (
+                        <Link
+                          to="/dashboard?view=billing"
+                          className="text-xs font-semibold text-gray-400"
+                          title="แก้ไขข้อมูลลูกค้าได้เฉพาะ BUSINESS"
+                        >
+                          แก้ไข · BUSINESS
+                        </Link>
+                      )}
+                      {["active", "granted"].includes(record.status) ? (
+                        <button
+                          type="button"
+                          onClick={() => void withdraw(record)}
+                          className="text-xs font-semibold text-red-700"
+                        >
+                          ถอนความยินยอม
+                        </button>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -386,9 +532,12 @@ export default function ConsentManagement() {
           </table>
         </div>
         <footer className="flex items-center justify-between border-t border-gray-100 px-4 py-3">
-          <p className="text-xs text-gray-400">
-            ทั้งหมด {pagination.total} รายการ
-          </p>
+          <div>
+            <p className="text-xs text-gray-400">ดูได้ {pagination.total} รายการ</p>
+            {usage.locked > 0 ? (
+              <p className="mt-1 text-xs font-semibold text-amber-700">ล็อกไว้ {usage.locked} รายการ</p>
+            ) : null}
+          </div>
           <div className="flex gap-1">
             <button
               disabled={pagination.page <= 1}
@@ -412,6 +561,93 @@ export default function ConsentManagement() {
           </div>
         </footer>
       </section>
+      {editingRecord ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4">
+          <section className="max-h-[92vh] w-full max-w-xl overflow-y-auto border border-gray-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b px-5 py-4">
+              <div>
+                <h2 className="text-sm font-semibold">แก้ไขข้อมูลลูกค้า</h2>
+                <p className="mt-1 text-xs text-gray-400">ไม่สามารถแก้ไขตัวเลือกการยินยอมได้</p>
+              </div>
+              <button type="button" onClick={() => setEditingRecord(null)} aria-label="ปิด">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-4 p-5">
+              <label className="block text-xs font-semibold text-gray-700">
+                ชื่อ
+                <input
+                  value={recordDraft.subjectName}
+                  onChange={(event) => setRecordDraft((current) => ({ ...current, subjectName: event.target.value }))}
+                  className="mt-1 h-10 w-full border border-gray-300 px-3 text-sm"
+                />
+              </label>
+              <label className="block text-xs font-semibold text-gray-700">
+                อีเมล
+                <input
+                  type="email"
+                  required
+                  value={recordDraft.subjectEmail}
+                  onChange={(event) => setRecordDraft((current) => ({ ...current, subjectEmail: event.target.value }))}
+                  className="mt-1 h-10 w-full border border-gray-300 px-3 text-sm"
+                />
+              </label>
+              <label className="block text-xs font-semibold text-gray-700">
+                เลขอ้างอิง
+                <input
+                  value={recordDraft.subjectReference}
+                  onChange={(event) => setRecordDraft((current) => ({ ...current, subjectReference: event.target.value }))}
+                  className="mt-1 h-10 w-full border border-gray-300 px-3 text-sm"
+                />
+              </label>
+              {(forms.find((form) => form.id === editingRecord.formId)?.fields || []).map((field) => (
+                <label key={field.id} className="block text-xs font-semibold text-gray-700">
+                  {field.label}
+                  {field.type === "checkbox" ? (
+                    <input
+                      type="checkbox"
+                      checked={Boolean(recordDraft.fieldValues[field.id])}
+                      onChange={(event) => setRecordDraft((current) => ({
+                        ...current,
+                        fieldValues: { ...current.fieldValues, [field.id]: event.target.checked },
+                      }))}
+                      className="ml-3"
+                    />
+                  ) : field.type === "select" ? (
+                    <select
+                      value={String(recordDraft.fieldValues[field.id] ?? "")}
+                      onChange={(event) => setRecordDraft((current) => ({
+                        ...current,
+                        fieldValues: { ...current.fieldValues, [field.id]: event.target.value },
+                      }))}
+                      className="mt-1 h-10 w-full border border-gray-300 bg-white px-3 text-sm"
+                    >
+                      <option value="">เลือก...</option>
+                      {field.options.map((option) => <option key={option} value={option}>{option}</option>)}
+                    </select>
+                  ) : (
+                    <input
+                      type={field.type === "email" ? "email" : "text"}
+                      value={String(recordDraft.fieldValues[field.id] ?? "")}
+                      onChange={(event) => setRecordDraft((current) => ({
+                        ...current,
+                        fieldValues: { ...current.fieldValues, [field.id]: event.target.value },
+                      }))}
+                      className="mt-1 h-10 w-full border border-gray-300 px-3 text-sm"
+                    />
+                  )}
+                </label>
+              ))}
+              <div className="flex justify-end gap-2 border-t pt-4">
+                <button type="button" onClick={() => setEditingRecord(null)} className="border border-gray-200 px-4 py-2 text-sm">ยกเลิก</button>
+                <button type="button" disabled={recordSaving || !recordDraft.subjectEmail} onClick={() => void saveRecord()} className="btn-green px-4 py-2 text-sm disabled:opacity-50">
+                  {recordSaving ? "กำลังบันทึก..." : "บันทึกข้อมูล"}
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
       {creating && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4">
           <section className="max-h-[92vh] w-full max-w-2xl overflow-y-auto border border-gray-200 bg-white shadow-2xl">

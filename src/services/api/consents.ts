@@ -1,4 +1,4 @@
-import { apiRequest } from "./client";
+import { apiDownload, apiRequest } from "./client";
 import { API_ENDPOINTS } from "./endpoints";
 
 export interface ConsentPurpose {
@@ -36,11 +36,21 @@ export interface ConsentRecord {
   subjectName?: string;
   subjectEmail: string;
   subjectReference?: string;
-  status: "active" | "rejected" | "withdrawn";
+  status: "active" | "granted" | "rejected" | "withdrawn";
   choices: Record<string, boolean>;
+  fieldValues: Record<string, string | boolean>;
   grantedAt?: string;
   withdrawnAt?: string;
   createdAt: string;
+}
+export interface ConsentUsage {
+  plan: "free" | "business";
+  limit: number;
+  total: number;
+  visible: number;
+  locked: number;
+  reached: boolean;
+  addons: number[];
 }
 export interface PublicConsentForm {
   token: string;
@@ -143,7 +153,17 @@ export const consentsApi = {
     return apiRequest<{
       records: ConsentRecord[];
       pagination: { page: number; limit: number; total: number; pages: number };
-    }>(`${API_ENDPOINTS.consents.records}?${query}`);
+      usage: ConsentUsage;
+    }>(`${API_ENDPOINTS.consents.records}?${query}`, { cache: false });
+  },
+  exportRecords: (
+    format: "csv" | "pdf",
+    params: { status?: string; search?: string } = {},
+  ) => {
+    const query = new URLSearchParams({ format });
+    if (params.status) query.set("status", params.status);
+    if (params.search) query.set("search", params.search);
+    return apiDownload(`${API_ENDPOINTS.consents.exportRecords}?${query}`);
   },
   listEvents: (id: string) =>
     apiRequest<
@@ -159,5 +179,18 @@ export const consentsApi = {
     apiRequest<ConsentRecord>(API_ENDPOINTS.consents.withdraw(id), {
       method: "POST",
       body: { reason },
+    }),
+  updateRecord: (
+    id: string,
+    data: {
+      subjectName?: string;
+      subjectEmail: string;
+      subjectReference?: string;
+      fieldValues: Record<string, string | boolean>;
+    },
+  ) =>
+    apiRequest<ConsentRecord>(API_ENDPOINTS.consents.record(id), {
+      method: "PUT",
+      body: data,
     }),
 };

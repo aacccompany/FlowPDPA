@@ -19,6 +19,7 @@ export interface RequestConfig {
   timeout?: number
   authenticated?: boolean
   retryAuth?: boolean
+  cache?: boolean
 }
 
 export interface ApiUser {

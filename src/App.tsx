@@ -75,7 +75,7 @@ function VerifiedRoute({ children }: { children: React.ReactNode }) {
         <button
           type="button"
           className="btn-green w-full py-3 text-sm"
-          onClick={() => navigate('/dashboard', { replace: true, state: { view: 'settings' } })}
+          onClick={() => navigate('/dashboard?view=settings', { replace: true })}
         >
           ไปที่ตั้งค่าบัญชี
         </button>

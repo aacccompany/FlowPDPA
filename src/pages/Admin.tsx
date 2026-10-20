@@ -131,6 +131,8 @@ const auditActionLabels: Record<string, string> = {
   legal_user_status_changed: "เปลี่ยนสถานะฝ่ายกฎหมาย",
   legal_user_deleted: "ลบผู้ใช้ฝ่ายกฎหมาย",
   policy_created: "สร้างนโยบาย",
+  terms_privacy_accepted: "ยอมรับเงื่อนไขและนโยบายความเป็นส่วนตัว",
+  company_authority_accepted: "ยืนยันอำนาจดำเนินการแทนนิติบุคคล",
   policy_regenerated: "สร้างนโยบายใหม่",
   policy_archived: "จัดเก็บนโยบาย",
   subscription_cancelled: "ยกเลิกการต่ออายุ",

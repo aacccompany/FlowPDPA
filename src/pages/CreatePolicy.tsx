@@ -14,7 +14,6 @@ import {
   AlertCircle,
   UserRound,
   Languages,
-  CreditCard,
   Upload,
   FileText,
 } from "lucide-react";
@@ -68,9 +67,6 @@ async function lookupThaiCompany(
 
 // ── Types ─────────────────────────────────────────────────────
 type PolicyType = "privacy" | "hr" | "cctv" | "recruitment" | "vendor" | "dpa";
-type CheckoutPackage = "personal" | "business" | "enterprise";
-type BillingCycle = "monthly" | "annual";
-
 interface FormData {
   policyType: PolicyType | null;
   agreedToTerms: boolean;
@@ -109,43 +105,43 @@ const policyTypes = [
   {
     key: "privacy",
     label: "Privacy + Cookies Policy",
-    price: "เริ่มต้น 590 ฿/เดือน",
-    free: false,
+    price: "ฟรี",
+    free: true,
     comingSoon: false,
   },
   {
     key: "hr",
     label: "HR Privacy Policy",
-    price: "1,199 ฿",
-    free: false,
+    price: "ฟรี",
+    free: true,
     comingSoon: true,
   },
   {
     key: "cctv",
     label: "CCTV Policy",
-    price: "899 ฿",
-    free: false,
+    price: "ฟรี",
+    free: true,
     comingSoon: true,
   },
   {
     key: "recruitment",
     label: "Recruitment Privacy Policy",
-    price: "1,299 ฿",
-    free: false,
+    price: "ฟรี",
+    free: true,
     comingSoon: true,
   },
   {
     key: "vendor",
     label: "Vendor Privacy Policy",
-    price: "1,299 ฿",
-    free: false,
+    price: "ฟรี",
+    free: true,
     comingSoon: true,
   },
   {
     key: "dpa",
     label: "Data Processing Agreement",
-    price: "1,499 ฿",
-    free: false,
+    price: "ฟรี",
+    free: true,
     comingSoon: true,
   },
 ];
@@ -222,65 +218,6 @@ const steps = [
   { num: 6, label: "ตรวจสอบ" },
 ];
 
-const checkoutPackages: Array<{
-  id: CheckoutPackage;
-  name: string;
-  audience: string;
-  monthlyPrice: number;
-  annualPrice: number;
-  annualMonthlyAverage: number;
-  description: string;
-  features: string[];
-  recommended?: boolean;
-}> = [
-  {
-    id: "personal",
-    name: "Personal",
-    audience: "บุคคลธรรมดา / Freelancer / ร้านเล็ก",
-    monthlyPrice: 590,
-    annualPrice: 5900,
-    annualMonthlyAverage: 492,
-    description: "สำหรับผู้ประกอบการรายบุคคลและธุรกิจขนาดเล็ก",
-    features: [
-      "สร้างและเผยแพร่นโยบาย",
-      "Consent Management",
-      "บันทึกกิจกรรมและหลักฐาน",
-    ],
-  },
-  {
-    id: "business",
-    name: "Business",
-    audience: "นิติบุคคล รายได้ไม่เกิน 50 ล้านบาท/ปี",
-    monthlyPrice: 1990,
-    annualPrice: 19900,
-    annualMonthlyAverage: 1658,
-    description: "สำหรับธุรกิจที่ต้องจัดการเอกสารและ Consent อย่างต่อเนื่อง",
-    features: [
-      "นโยบายสูงสุด 10 ฉบับ",
-      "Consent Management และหลักฐาน",
-      "ส่งตรวจฝ่ายกฎหมาย",
-      "ส่งออก PDF และ DOCX",
-    ],
-    recommended: true,
-  },
-  {
-    id: "enterprise",
-    name: "Enterprise",
-    audience: "นิติบุคคล รายได้มากกว่า 50 ล้านบาท/ปี",
-    monthlyPrice: 4990,
-    annualPrice: 49900,
-    annualMonthlyAverage: 4158,
-    description: "สำหรับองค์กรที่มีเอกสารและกระบวนการหลายรูปแบบ",
-    features: [
-      "นโยบายไม่จำกัด",
-      "ทุกฟีเจอร์ใน Business",
-      "ตรวจสอบด้านกฎหมายแบบเร่งด่วน",
-      "บันทึกกิจกรรมขั้นสูง",
-    ],
-  },
-];
-
-// ── Shared input styles ───────────────────────────────────────
 const inputCls =
   "w-full border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-800 focus:outline-none transition-colors";
 const onInputFocus = (
@@ -409,6 +346,33 @@ function Step1({
   data: FormData;
   setData: (d: Partial<FormData>) => void;
 }) {
+  const [recordingAcceptance, setRecordingAcceptance] = useState(false);
+  const [acceptanceError, setAcceptanceError] = useState("");
+
+  const handleTermsAcceptance = async (checked: boolean) => {
+    if (!checked) {
+      setAcceptanceError("");
+      setData({ agreedToTerms: false });
+      return;
+    }
+    if (!data.policyType || recordingAcceptance) {
+      setAcceptanceError("กรุณาเลือกประเภท Policy ก่อนยอมรับเงื่อนไข");
+      return;
+    }
+
+    setRecordingAcceptance(true);
+    setAcceptanceError("");
+    const response = await api.policies.acceptTerms(data.policyType);
+    setRecordingAcceptance(false);
+    if (!response.success) {
+      setAcceptanceError(
+        response.error?.message || "ไม่สามารถบันทึกการยอมรับได้ กรุณาลองใหม่อีกครั้ง",
+      );
+      return;
+    }
+    setData({ agreedToTerms: true });
+  };
+
   return (
     <div>
       <h2 className="text-xl font-black text-gray-900 mb-1">
@@ -427,7 +391,12 @@ function Step1({
               type="button"
               disabled={comingSoon}
               onClick={() =>
-                !comingSoon && setData({ policyType: key as PolicyType })
+                !comingSoon &&
+                setData({
+                  policyType: key as PolicyType,
+                  agreedToTerms:
+                    data.policyType === key ? data.agreedToTerms : false,
+                })
               }
               className="text-left p-5 rounded-xl border-2 transition-all relative overflow-hidden"
               style={{
@@ -531,7 +500,8 @@ function Step1({
           type="checkbox"
           className="hidden"
           checked={data.agreedToTerms}
-          onChange={(e) => setData({ agreedToTerms: e.target.checked })}
+          disabled={recordingAcceptance}
+          onChange={(e) => void handleTermsAcceptance(e.target.checked)}
         />
         <span className="text-sm text-gray-600 leading-relaxed">
           ฉันยอมรับ{" "}
@@ -552,7 +522,15 @@ function Step1({
           </Link>{" "}
           ของ FlowPDPA
         </span>
+        {recordingAcceptance && (
+          <Loader2 className="w-4 h-4 shrink-0 mt-0.5 animate-spin text-emerald-600" />
+        )}
       </label>
+      {acceptanceError && (
+        <p className="mt-2 text-sm text-red-600" role="alert">
+          {acceptanceError}
+        </p>
+      )}
     </div>
   );
 }
@@ -562,10 +540,21 @@ function CompanyConsentModal({
   onAccept,
   onDecline,
 }: {
-  onAccept: () => void;
+  onAccept: () => Promise<string | null>;
   onDecline: () => void;
 }) {
   const [checked, setChecked] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleAccept = async () => {
+    if (!checked || submitting) return;
+    setSubmitting(true);
+    setError("");
+    const acceptanceError = await onAccept();
+    if (acceptanceError) setError(acceptanceError);
+    setSubmitting(false);
+  };
 
   return (
     <div
@@ -684,14 +673,26 @@ function CompanyConsentModal({
           </button>
           <button
             type="button"
-            disabled={!checked}
-            onClick={onAccept}
+            disabled={!checked || submitting}
+            onClick={() => void handleAccept()}
             className="flex-1 py-3 text-sm font-bold text-white rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ backgroundColor: "var(--green)", borderRadius: "8px" }}
           >
-            ยืนยันและดำเนินการต่อ
+            {submitting ? (
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                กำลังบันทึก...
+              </span>
+            ) : (
+              "ยืนยันและดำเนินการต่อ"
+            )}
           </button>
         </div>
+        {error && (
+          <p className="px-6 pb-5 text-sm text-red-600" role="alert">
+            {error}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -892,10 +893,23 @@ function Step2({
           <SectionHeading>ประเภทผู้ควบคุมข้อมูล</SectionHeading>
           {showConsent && (
             <CompanyConsentModal
-              onAccept={() => {
+              onAccept={async () => {
+                if (!data.policyType) {
+                  return "ไม่พบประเภท Policy กรุณากลับไปเลือกประเภทอีกครั้ง";
+                }
+                const response = await api.policies.acceptCompanyAuthority(
+                  data.policyType,
+                );
+                if (!response.success) {
+                  return (
+                    response.error?.message ||
+                    "ไม่สามารถบันทึกคำยืนยันได้ กรุณาลองใหม่อีกครั้ง"
+                  );
+                }
                 setShowConsent(false);
                 setData({ ownerType: "company" });
                 resetRd();
+                return null;
               }}
               onDecline={() => setShowConsent(false)}
             />
@@ -1696,178 +1710,6 @@ function Step6({ data }: { data: FormData }) {
   );
 }
 
-function Step7({
-  selectedPackage,
-  onSelect,
-  billingCycle,
-  onBillingCycleChange,
-}: {
-  selectedPackage: CheckoutPackage;
-  onSelect: (value: CheckoutPackage) => void;
-  billingCycle: BillingCycle;
-  onBillingCycleChange: (value: BillingCycle) => void;
-}) {
-  const selected = checkoutPackages.find(
-    (item) => item.id === selectedPackage,
-  )!;
-  const selectedPrice =
-    billingCycle === "monthly" ? selected.monthlyPrice : selected.annualPrice;
-
-  return (
-    <div>
-      <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">
-            ขั้นตอนชำระเงิน
-          </p>
-          <h2 className="text-xl font-black text-gray-900">
-            เลือกแพ็กเกจที่เหมาะกับคุณ
-          </h2>
-          <p className="mt-1 text-sm text-gray-400">
-            เปรียบเทียบราคาและสิทธิ์ที่ได้รับก่อนยืนยัน
-          </p>
-        </div>
-        <span className="w-fit rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
-          ชำระเงินอย่างปลอดภัยผ่าน Stripe
-        </span>
-      </div>
-
-      <div className="mb-7 flex justify-center">
-        <div
-          className="inline-flex rounded-lg bg-slate-100 p-1"
-          aria-label="รอบการชำระเงิน"
-        >
-          {[
-            { value: "monthly" as const, label: "ชำระรายเดือน" },
-            { value: "annual" as const, label: "ชำระรายปี · ประหยัด 2 เดือน" },
-          ].map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => onBillingCycleChange(option.value)}
-              className="rounded-md px-4 py-2 text-xs font-bold transition"
-              style={{
-                backgroundColor:
-                  billingCycle === option.value ? "#fff" : "transparent",
-                color:
-                  billingCycle === option.value ? "var(--navy)" : "#94a3b8",
-                boxShadow:
-                  billingCycle === option.value
-                    ? "0 1px 3px rgba(15,23,42,0.1)"
-                    : "none",
-              }}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        {checkoutPackages.map((item) => {
-          const active = selectedPackage === item.id;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              aria-pressed={active}
-              onClick={() => onSelect(item.id)}
-              className="relative flex h-full flex-col rounded-xl border-2 p-5 text-left transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
-              style={{
-                borderColor: active ? "var(--green)" : "#e5e7eb",
-                backgroundColor: active ? "rgba(5,150,105,0.035)" : "#fff",
-              }}
-            >
-              {item.recommended && (
-                <span className="absolute -top-3 right-4 rounded-full bg-emerald-700 px-3 py-1 text-[10px] font-bold text-white">
-                  แนะนำ
-                </span>
-              )}
-              <div className="flex w-full items-start justify-between gap-3">
-                <div>
-                  <p className="text-base font-black text-gray-900">
-                    {item.name}
-                  </p>
-                  <p className="mt-1 min-h-10 text-xs leading-5 text-gray-500">
-                    {item.audience}
-                  </p>
-                </div>
-                <span
-                  className="grid h-5 w-5 shrink-0 place-items-center rounded-full border"
-                  style={{
-                    borderColor: active ? "var(--green)" : "#d1d5db",
-                    backgroundColor: active ? "var(--green)" : "#fff",
-                  }}
-                >
-                  {active && (
-                    <Check className="h-3 w-3 text-white" strokeWidth={3} />
-                  )}
-                </span>
-              </div>
-              <div className="my-5">
-                <span className="text-3xl font-black tracking-tight text-gray-900">
-                  ฿
-                  {(billingCycle === "monthly"
-                    ? item.monthlyPrice
-                    : item.annualPrice
-                  ).toLocaleString("th-TH")}
-                </span>
-                <span className="ml-1 text-xs text-gray-400">
-                  {billingCycle === "monthly" ? "ต่อเดือน" : "ต่อปี"}
-                </span>
-                {billingCycle === "annual" && (
-                  <p className="mt-1 text-xs font-semibold text-emerald-700">
-                    เฉลี่ย ฿{item.annualMonthlyAverage.toLocaleString("th-TH")}
-                    /เดือน
-                  </p>
-                )}
-              </div>
-              <p className="mb-4 text-xs leading-5 text-gray-500">
-                {item.description}
-              </p>
-              <ul className="mt-auto space-y-2.5 border-t border-gray-100 pt-4">
-                {item.features.map((feature) => (
-                  <li
-                    key={feature}
-                    className="flex items-start gap-2 text-xs leading-5 text-gray-600"
-                  >
-                    <CheckCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="mt-6 flex flex-col gap-4 rounded-xl border border-slate-200 bg-slate-50 p-5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-white text-emerald-700 shadow-sm">
-            <CreditCard className="h-4 w-4" />
-          </span>
-          <div>
-            <p className="text-xs font-semibold text-gray-500">สรุปรายการ</p>
-            <p className="mt-1 text-sm font-black text-gray-900">
-              แพ็กเกจ {selected.name}
-            </p>
-            <p className="mt-0.5 text-xs text-gray-500">
-              Privacy + Cookies Policy ·{" "}
-              {billingCycle === "monthly" ? "รายเดือน" : "รายปี"}
-            </p>
-          </div>
-        </div>
-        <div className="sm:text-right">
-          <p className="text-xs text-gray-400">ยอดชำระ</p>
-          <p className="mt-1 text-2xl font-black text-gray-900">
-            ฿{selectedPrice.toLocaleString("th-TH")}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function WaitingReviewScreen({
   data,
   slug,
@@ -2165,14 +2007,8 @@ export default function CreatePolicy() {
   const [done, setDone] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [data, setDataRaw] = useState<FormData>(initialDataFromSession);
-  const [selectedPackage, setSelectedPackage] =
-    useState<CheckoutPackage>("business");
-  const [billingCycle, setBillingCycle] = useState<BillingCycle>("annual");
   const [savedSlug, setSavedSlug] = useState("");
   const [generationError, setGenerationError] = useState("");
-  const [checkoutLoading, setCheckoutLoading] = useState(false);
-  const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
-  const checkoutReturnHandled = useRef(false);
 
   const setData = useCallback(
     (partial: Partial<FormData>) =>
@@ -2188,22 +2024,14 @@ export default function CreatePolicy() {
     }
 
     let active = true;
-    void Promise.all([api.profile.get(), api.billing.subscriptions()]).then(
-      ([profileResponse, subscriptionsResponse]) => {
+    void api.profile.get().then(
+      (profileResponse) => {
         if (!active) return;
         if (profileResponse.success && profileResponse.data) {
           setDataRaw((current) =>
             prefillFromProfile(current, profileResponse.data!),
           );
         }
-        setHasActiveSubscription(
-          Boolean(
-            subscriptionsResponse.success &&
-              subscriptionsResponse.data?.some((item) =>
-                ["active", "trialing"].includes(item.status),
-              ),
-          ),
-        );
       },
     );
     return () => {
@@ -2285,117 +2113,6 @@ export default function CreatePolicy() {
     }
     setGenerationError(
       response.error?.message ?? "Unable to create policy. Please try again.",
-    );
-  };
-
-  useEffect(() => {
-    if (checkoutReturnHandled.current) return;
-    const checkoutParams = new URLSearchParams(window.location.search);
-    const checkoutResult = checkoutParams.get("checkout");
-    const checkoutSessionId = checkoutParams.get("session_id");
-    if (!checkoutResult) return;
-    checkoutReturnHandled.current = true;
-    const raw = sessionStorage.getItem("flowpdpa_pending_policy");
-    if (!raw) return;
-    try {
-      const pending = JSON.parse(raw) as {
-        data: FormData;
-        selectedPackage: CheckoutPackage;
-        billingCycle: BillingCycle;
-        sessionId?: string;
-      };
-      const sessionId = checkoutSessionId || pending.sessionId || null;
-      setDataRaw(pending.data);
-      setSelectedPackage(pending.selectedPackage);
-      setBillingCycle(pending.billingCycle);
-      setStep(7);
-      if (checkoutResult === "cancel") {
-        setGenerationError("ยกเลิกการชำระเงินแล้ว คุณสามารถเลือกแพ็กเกจและลองใหม่ได้");
-        return;
-      }
-      void (async () => {
-        setCheckoutLoading(true);
-        for (let attempt = 0; attempt < 12; attempt += 1) {
-          if (sessionId) {
-            const verification = await api.billing.verifyCheckout(sessionId);
-            if (verification.success && verification.data?.active) {
-              setCheckoutLoading(false);
-              sessionStorage.removeItem("flowpdpa_pending_policy");
-              await startGeneration(pending.data);
-              window.history.replaceState({}, "", window.location.pathname);
-              return;
-            }
-          }
-          const subscriptions = await api.billing.subscriptions();
-          if (
-            subscriptions.success &&
-            subscriptions.data?.some((item) =>
-              ["active", "trialing"].includes(item.status),
-            )
-          ) {
-            setCheckoutLoading(false);
-            sessionStorage.removeItem("flowpdpa_pending_policy");
-            await startGeneration(pending.data);
-            window.history.replaceState({}, "", window.location.pathname);
-            return;
-          }
-          await new Promise((resolve) => window.setTimeout(resolve, 1000));
-        }
-        setCheckoutLoading(false);
-        setGenerationError(
-          "ได้รับผลการชำระเงินแล้ว แต่ระบบยังยืนยันแพ็กเกจไม่เสร็จ กรุณารีเฟรชหน้านี้อีกครั้ง",
-        );
-      })();
-    } catch {
-      sessionStorage.removeItem("flowpdpa_pending_policy");
-      setGenerationError("ไม่สามารถกู้คืนข้อมูลก่อนชำระเงินได้");
-    }
-  }, []);
-
-  const handleCheckout = async () => {
-    if (checkoutLoading) return;
-    setCheckoutLoading(true);
-    setGenerationError("");
-    const subscriptions = await api.billing.subscriptions();
-    const alreadyActive = Boolean(
-      subscriptions.success &&
-        subscriptions.data?.some((item) =>
-          ["active", "trialing"].includes(item.status),
-        ),
-    );
-    if (alreadyActive) {
-      setHasActiveSubscription(true);
-      setCheckoutLoading(false);
-      await startGeneration();
-      return;
-    }
-    const response = await api.billing.createCheckout(
-      selectedPackage,
-      billingCycle,
-    );
-    if (response.success && response.data?.checkoutUrl) {
-      sessionStorage.setItem(
-        "flowpdpa_pending_policy",
-        JSON.stringify({
-          data,
-          selectedPackage,
-          billingCycle,
-          sessionId: response.data.sessionId,
-        }),
-      );
-      window.location.assign(response.data.checkoutUrl);
-      return;
-    }
-    if (response.error?.code === "SUBSCRIPTION_ALREADY_ACTIVE") {
-      setHasActiveSubscription(true);
-      setCheckoutLoading(false);
-      await startGeneration();
-      return;
-    }
-    setCheckoutLoading(false);
-    setGenerationError(
-      response.error?.message ??
-        "ไม่สามารถเริ่มการชำระเงินได้ กรุณาลองใหม่อีกครั้ง",
     );
   };
 
@@ -2558,15 +2275,6 @@ export default function CreatePolicy() {
               {step === 4 && <Step4 data={data} setData={setData} />}
               {step === 5 && <Step5 data={data} setData={setData} />}
               {step === 6 && <Step6 data={data} />}
-              {step === 7 && (
-                <Step7
-                  selectedPackage={selectedPackage}
-                  onSelect={setSelectedPackage}
-                  billingCycle={billingCycle}
-                  onBillingCycleChange={setBillingCycle}
-                />
-              )}
-
               {/* Navigation */}
               <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-100">
                 <button
@@ -2580,52 +2288,32 @@ export default function CreatePolicy() {
                   {step === 1 ? "ยกเลิก" : "ย้อนกลับ"}
                 </button>
 
-                {step < 7 ? (
+                {step < steps.length ? (
                   <button
                     type="button"
                     disabled={!canProceed()}
-                    onClick={() => {
-                      if (step === 6 && hasActiveSubscription) {
-                        void startGeneration();
-                        return;
-                      }
-                      setStep((s) => s + 1);
-                    }}
+                    onClick={() => setStep((s) => s + 1)}
                     className="btn-green px-8 py-3 text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none"
                     style={{ borderRadius: "8px" }}
                   >
-                    {step === 6 ? (
-                      <>
-                        {hasActiveSubscription ? (
-                          <><CheckCircle className="w-4 h-4" /> สร้างเอกสาร</>
-                        ) : (
-                          <><CreditCard className="w-4 h-4" /> ไปหน้า Checkout</>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        ถัดไป <ChevronRight className="w-4 h-4" />
-                      </>
-                    )}
+                    ถัดไป <ChevronRight className="w-4 h-4" />
                   </button>
-                ) : (
+                ) : step === steps.length ? (
                   <button
                     type="button"
-                    onClick={() => void handleCheckout()}
-                    disabled={checkoutLoading}
+                    onClick={() => void startGeneration()}
+                    disabled={generating}
                     className="btn-green px-8 py-3 text-sm flex items-center gap-2"
                     style={{ borderRadius: "8px" }}
                   >
-                    {checkoutLoading ? (
+                    {generating ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
-                      <CreditCard className="w-4 h-4" />
+                      <CheckCircle className="w-4 h-4" />
                     )}
-                    {checkoutLoading
-                      ? "กำลังเปิดหน้าชำระเงิน..."
-                      : "ชำระเงินด้วย Stripe"}
+                    {generating ? "กำลังสร้างเอกสาร..." : "สร้างเอกสารฟรี"}
                   </button>
-                )}
+                ) : null}
               </div>
             </div>
           )}
