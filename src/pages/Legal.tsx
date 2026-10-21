@@ -1041,26 +1041,29 @@ export default function Legal() {
   );
   useEffect(() => {
     let active = true;
-    void Promise.all([
-      api.legal.dashboard(),
-      api.legal.listSubmissions(),
-      api.legal.listChangeRequests(),
-    ]).then(([dashboardResponse, submissionsResponse, changesResponse]) => {
+    void api.legal.dashboard().then((response) => {
       if (!active) return;
-      if (dashboardResponse.success && dashboardResponse.data)
-        setDashboard(dashboardResponse.data);
-      if (submissionsResponse.success && submissionsResponse.data)
-        setSubmissions(submissionsResponse.data.map(submissionFromApi));
-      else setSubmissions([]);
-      if (changesResponse.success && changesResponse.data)
-        setChanges(changesResponse.data.map(changeFromApi));
-      else setChanges([]);
-      const error =
-        dashboardResponse.error ||
-        submissionsResponse.error ||
-        changesResponse.error;
-      setLoadError(error?.message || "");
+      if (response.success && response.data) setDashboard(response.data);
+      else setLoadError(response.error?.message || "Unable to load dashboard.");
       setLoading(false);
+    });
+    void api.legal.listSubmissions().then((response) => {
+      if (!active) return;
+      if (response.success && response.data)
+        setSubmissions(response.data.map(submissionFromApi));
+      else {
+        setSubmissions([]);
+        setLoadError((current) => current || response.error?.message || "Unable to load submissions.");
+      }
+    });
+    void api.legal.listChangeRequests().then((response) => {
+      if (!active) return;
+      if (response.success && response.data)
+        setChanges(response.data.map(changeFromApi));
+      else {
+        setChanges([]);
+        setLoadError((current) => current || response.error?.message || "Unable to load change requests.");
+      }
     });
     return () => {
       active = false;

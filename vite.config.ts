@@ -26,7 +26,21 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      {
+        name: 'flowpdpa-preview-cache-headers',
+        configurePreviewServer(server) {
+          server.middlewares.use((request, response, next) => {
+            if (request.url?.startsWith('/assets/')) {
+              response.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+            }
+            next()
+          })
+        },
+      },
+    ],
     server: { proxy: apiProxy },
     preview: {
       allowedHosts: ['flowpdpa-test.aacc-ai.com'],

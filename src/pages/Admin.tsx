@@ -3560,8 +3560,13 @@ export default function Admin() {
   const [loadError, setLoadError] = useState("");
   useEffect(() => {
     let active = true;
+    void api.admin.overview().then((response) => {
+      if (!active) return;
+      if (response.success && response.data) setOverview(response.data);
+      else setLoadError(response.error?.message || "Unable to load admin overview.");
+      setLoading(false);
+    });
     void Promise.all([
-      api.admin.overview(),
       api.admin.listMerchants({ limit: 200 }),
       api.admin.listPolicies({ limit: 200 }),
       api.admin.listLegalUsers(),
@@ -3573,7 +3578,6 @@ export default function Admin() {
       api.admin.legalReviews({ limit: 200 }),
     ]).then(
       ([
-        overviewResponse,
         merchantsResponse,
         policiesResponse,
         legalUsersResponse,
@@ -3585,8 +3589,6 @@ export default function Admin() {
         reviewsResponse,
       ]) => {
         if (!active) return;
-        if (overviewResponse.success && overviewResponse.data)
-          setOverview(overviewResponse.data);
         if (merchantsResponse.success && merchantsResponse.data)
           setMerchants(merchantsResponse.data.merchants);
         if (policiesResponse.success && policiesResponse.data)
@@ -3606,7 +3608,6 @@ export default function Admin() {
         if (reviewsResponse.success && reviewsResponse.data)
           setReviews(reviewsResponse.data.reviews);
         const failed = [
-          overviewResponse,
           merchantsResponse,
           policiesResponse,
           legalUsersResponse,
@@ -3618,7 +3619,6 @@ export default function Admin() {
           reviewsResponse,
         ].find((response) => !response.success);
         setLoadError(failed?.error?.message || "");
-        setLoading(false);
       },
     );
     return () => {

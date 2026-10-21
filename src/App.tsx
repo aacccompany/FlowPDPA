@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
 import { MailCheck } from 'lucide-react'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
@@ -6,28 +7,33 @@ import Navbar from '@/components/layout/Navbar'
 import Footer from '@/components/layout/Footer'
 import CookieBanner from '@/components/layout/CookieBanner'
 import ScrollToTop from '@/components/layout/ScrollToTop'
-import Home from '@/pages/Home'
-import About from '@/pages/About'
-import FAQPage from '@/pages/FAQPage'
-import PrivacyPolicy from '@/pages/PrivacyPolicy'
-import PrivacyNotice from '@/pages/PrivacyNotice'
-import Terms from '@/pages/Terms'
-import WhyUs from '@/pages/WhyUs'
-import Support from '@/pages/Support'
-import Helpdesk from '@/pages/Helpdesk'
-import HelpdeskTrack from '@/pages/HelpdeskTrack'
-import Login from '@/pages/Login'
-import Register from '@/pages/Register'
-import ForgotPassword from '@/pages/ForgotPassword'
-import Dashboard from '@/pages/Dashboard'
-import CreatePolicy from '@/pages/CreatePolicy'
-import Admin from '@/pages/Admin'
-import Legal from '@/pages/Legal'
-import PolicyView from '@/pages/PolicyView'
-import PolicyEdit from '@/pages/PolicyEdit'
-import NotFound from '@/pages/NotFound'
 import { roleHome, type UserRole } from '@/utils/storage'
 import PrivacyNoticeGate from '@/components/auth/PrivacyNoticeGate'
+
+const Home = lazy(() => import('@/pages/Home'))
+const About = lazy(() => import('@/pages/About'))
+const FAQPage = lazy(() => import('@/pages/FAQPage'))
+const PrivacyPolicy = lazy(() => import('@/pages/PrivacyPolicy'))
+const PrivacyNotice = lazy(() => import('@/pages/PrivacyNotice'))
+const Terms = lazy(() => import('@/pages/Terms'))
+const WhyUs = lazy(() => import('@/pages/WhyUs'))
+const Support = lazy(() => import('@/pages/Support'))
+const Helpdesk = lazy(() => import('@/pages/Helpdesk'))
+const HelpdeskTrack = lazy(() => import('@/pages/HelpdeskTrack'))
+const Login = lazy(() => import('@/pages/Login'))
+const Register = lazy(() => import('@/pages/Register'))
+const ForgotPassword = lazy(() => import('@/pages/ForgotPassword'))
+const Dashboard = lazy(() => import('@/pages/Dashboard'))
+const CreatePolicy = lazy(() => import('@/pages/CreatePolicy'))
+const Admin = lazy(() => import('@/pages/Admin'))
+const Legal = lazy(() => import('@/pages/Legal'))
+const PolicyView = lazy(() => import('@/pages/PolicyView'))
+const PolicyEdit = lazy(() => import('@/pages/PolicyEdit'))
+const NotFound = lazy(() => import('@/pages/NotFound'))
+
+function RouteFallback() {
+  return <div className="min-h-screen" style={{ backgroundColor: '#f8fafc' }} aria-busy="true" />
+}
 
 function ProtectedRoute({ children, roles }: { children: React.ReactNode; roles: UserRole[] }) {
   const location = useLocation()
@@ -111,6 +117,7 @@ export default function App() {
       <BrowserRouter>
         <AuthProvider>
           <ScrollToTop />
+          <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/admin" element={<ProtectedRoute roles={['admin']}><Admin /></ProtectedRoute>} />
             <Route path="/legal" element={<ProtectedRoute roles={['legal']}><Legal /></ProtectedRoute>} />
@@ -136,6 +143,7 @@ export default function App() {
               }
             />
           </Routes>
+          </Suspense>
         </AuthProvider>
       </BrowserRouter>
     </ErrorBoundary>

@@ -21,6 +21,7 @@ export interface StoredAuth extends AuthUser {
 }
 
 const AUTH_KEY = 'flowpdpa_auth'
+const AUTH_PROFILE_KEY = 'flowpdpa_auth_profile'
 const LEGACY_SENSITIVE_PREFIXES = ['flowpdpa_reg_', 'flowpdpa_profile_']
 const LEGACY_ROLE_KEYS = ['flowpdpa_admin', 'flowpdpa_legal']
 const LEGACY_POLICY_PREFIX = 'flowpdpa_policies_'
@@ -99,14 +100,28 @@ const readAuth = (): StoredAuth | null => {
     const claims = decodeJwtPayload(value.token)
     const email = typeof claims.sub === 'string' ? claims.sub : ''
 
+    const cachedProfile = (() => {
+      try {
+        const profile = JSON.parse(sessionStorage.getItem(AUTH_PROFILE_KEY) ?? 'null') as Partial<AuthUser> | null
+        return profile?.email === email ? profile : null
+      } catch {
+        sessionStorage.removeItem(AUTH_PROFILE_KEY)
+        return null
+      }
+    })()
+
     return {
       id: typeof claims.user_id === 'string' ? claims.user_id : undefined,
       email,
-      name: '',
+      name: cachedProfile?.name ?? '',
       role: normalizeRole(typeof claims.role === 'string' ? claims.role : undefined),
-      plan: typeof claims.plan === 'string' ? claims.plan : 'Free',
-      emailVerified: false,
-      privacyNoticeAccepted: false,
+      plan: cachedProfile?.plan ?? (typeof claims.plan === 'string' ? claims.plan : 'Free'),
+      company: cachedProfile?.company,
+      phone: cachedProfile?.phone,
+      emailVerified: cachedProfile?.emailVerified ?? false,
+      privacyNoticeAccepted: cachedProfile?.privacyNoticeAccepted ?? false,
+      privacyNoticeVersion: cachedProfile?.privacyNoticeVersion,
+      privacyNoticeAcceptedAt: cachedProfile?.privacyNoticeAcceptedAt,
       token: value.token,
       refreshToken: value.refreshToken,
       expiresAt: value.expiresAt,
@@ -128,10 +143,24 @@ export const storage = {
     get: readAuth,
     set: (auth: StoredAuth) => {
       localStorage.setItem(AUTH_KEY, JSON.stringify(credentialsOnly(auth)))
+      sessionStorage.setItem(AUTH_PROFILE_KEY, JSON.stringify({
+        id: auth.id,
+        email: auth.email,
+        name: auth.name,
+        role: auth.role,
+        plan: auth.plan,
+        company: auth.company,
+        phone: auth.phone,
+        emailVerified: auth.emailVerified,
+        privacyNoticeAccepted: auth.privacyNoticeAccepted,
+        privacyNoticeVersion: auth.privacyNoticeVersion,
+        privacyNoticeAcceptedAt: auth.privacyNoticeAcceptedAt,
+      }))
       notifyAuthChanged(auth)
     },
     clear: () => {
       localStorage.removeItem(AUTH_KEY)
+      sessionStorage.removeItem(AUTH_PROFILE_KEY)
       notifyAuthChanged(null)
     },
   },

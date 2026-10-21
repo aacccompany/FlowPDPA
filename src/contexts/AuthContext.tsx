@@ -32,7 +32,10 @@ export const useAuth = () => {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [auth, setAuth] = useState<StoredAuth | null>(() => storage.auth.get())
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => {
+    const current = storage.auth.get()
+    return Boolean(current?.role === 'merchant' && !current.name)
+  })
 
   useEffect(() => {
     const syncAuth = (event: Event) => {
@@ -92,7 +95,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const result = await api.auth.verify()
       if (result.success && result.data?.user) {
         const latest = storage.auth.get()
-        if (latest && active) setAuth(hydrateUser(latest, result.data.user))
+        if (latest && active) {
+          const hydrated = hydrateUser(latest, result.data.user)
+          storage.auth.set(hydrated)
+          setAuth(hydrated)
+        }
       }
       if (active) {
         setLoading(false)
