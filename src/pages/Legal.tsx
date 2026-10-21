@@ -102,96 +102,6 @@ const changeFromApi = (request: PolicyChangeRequest): ChangeRequest => ({
   legalComment: request.legalComment,
 });
 
-const seedSubmissions: Submission[] = [
-  {
-    id: "f2ddc823-7fc7-4612-b984-5ecfca8796c7",
-    slug: "baan-aroon-privacy-f2ddc823",
-    websiteName: "Baan Aroon Living",
-    domain: "baanaroon.co.th",
-    ownerName: "Baan Aroon Co., Ltd.",
-    ownerEmail: "privacy@baanaroon.co.th",
-    language: "both",
-    status: "pending_review",
-    approvalDeadline: "2026-06-22T09:00:00Z",
-    createdAt: "2026-06-20T08:12:00Z",
-    contentTh:
-      "# นโยบายความเป็นส่วนตัว\n\nบริษัท บ้านอรุณ จำกัด ให้ความสำคัญกับการคุ้มครองข้อมูลส่วนบุคคล...",
-    contentEn:
-      "# Privacy Policy\n\nBaan Aroon Co., Ltd. is committed to protecting personal data...",
-    reviewComment: "",
-  },
-  {
-    id: "a40c16d5-5598-4565-bcbc-8e780e19cc14",
-    slug: "northstar-clinic-privacy-a40c16d5",
-    websiteName: "Northstar Clinic",
-    domain: "northstarclinic.com",
-    ownerName: "Northstar Health Co., Ltd.",
-    ownerEmail: "dpo@northstarclinic.com",
-    language: "th",
-    status: "pending_review",
-    approvalDeadline: "2026-06-21T16:30:00Z",
-    createdAt: "2026-06-19T11:40:00Z",
-    contentTh:
-      "# นโยบายความเป็นส่วนตัว\n\nคลินิกเก็บรวบรวมข้อมูลเพื่อให้บริการด้านสุขภาพ...",
-    contentEn: "",
-    reviewComment: "",
-  },
-  {
-    id: "e3f4620f-9d57-4218-a749-826f87e23544",
-    slug: "siam-supply-privacy-e3f4620f",
-    websiteName: "Siam Supply",
-    domain: "siamsupply.co.th",
-    ownerName: "Siam Supply Partnership",
-    ownerEmail: "contact@siamsupply.co.th",
-    language: "both",
-    status: "approved",
-    approvalDeadline: "2026-06-19T10:00:00Z",
-    createdAt: "2026-06-17T07:20:00Z",
-    contentTh: "# นโยบายความเป็นส่วนตัว\n\nฉบับตรวจสอบแล้ว...",
-    contentEn: "# Privacy Policy\n\nReviewed version...",
-    reviewComment: "",
-  },
-  {
-    id: "cf50353f-b282-47e8-af26-32c5468ee438",
-    slug: "paperplane-privacy-cf50353f",
-    websiteName: "Paperplane Studio",
-    domain: "paperplane.studio",
-    ownerName: "Paperplane Studio",
-    ownerEmail: "hello@paperplane.studio",
-    language: "en",
-    status: "rejected",
-    approvalDeadline: "2026-06-18T10:00:00Z",
-    createdAt: "2026-06-16T06:50:00Z",
-    contentTh: "",
-    contentEn: "# Privacy Policy\n\nDraft policy...",
-    reviewComment:
-      "Please clarify the legal basis for marketing communications.",
-  },
-];
-
-const seedChanges: ChangeRequest[] = [
-  {
-    id: "cr-9221a410",
-    policySlug: "siam-supply-privacy-e3f4620f",
-    websiteName: "Siam Supply",
-    sectionTitle: "3. วัตถุประสงค์ในการประมวลผลข้อมูล",
-    requestedChange:
-      "Remove analytics because the website no longer uses analytics tools.",
-    requesterName: "Narin S.",
-    status: "pending_review",
-    createdAt: "2026-06-20T10:30:00Z",
-  },
-  {
-    id: "cr-187cad21",
-    policySlug: "baan-aroon-privacy-f2ddc823",
-    websiteName: "Baan Aroon Living",
-    sectionTitle: "Data retention",
-    requestedChange: "Update retention period from two years to seven years.",
-    requesterName: "Merchant team",
-    status: "resolved",
-    createdAt: "2026-06-18T14:10:00Z",
-  },
-];
 
 const statusMeta: Record<
   PolicyStatus | ChangeStatus,
@@ -212,7 +122,7 @@ const formatDate = (value: string) =>
     hour: "2-digit",
     minute: "2-digit",
   });
-const MOCK_NOW = new Date("2026-06-21T12:00:00Z").getTime();
+const currentTime = () => Date.now();
 
 function StatusBadge({ status }: { status: PolicyStatus | ChangeStatus }) {
   const meta = statusMeta[status];
@@ -303,7 +213,7 @@ function Deadline({ row }: { row: Submission }) {
       </span>
     );
   const hours = Math.ceil(
-    (new Date(row.approvalDeadline).getTime() - MOCK_NOW) / 3600000,
+    (new Date(row.approvalDeadline).getTime() - currentTime()) / 3600000,
   );
   const overdue = hours < 0;
   const text = overdue
@@ -510,7 +420,7 @@ function Dashboard({
       value:
         summary?.overduePolicies ??
         pending.filter(
-          (row) => new Date(row.approvalDeadline).getTime() < MOCK_NOW,
+          (row) => new Date(row.approvalDeadline).getTime() < currentTime(),
         ).length,
       Icon: AlertTriangle,
       color: "#b42318",
@@ -1027,8 +937,8 @@ export default function Legal() {
   const [view, setView] = useState<LegalView>("dashboard");
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
-  const [submissions, setSubmissions] = useState(seedSubmissions);
-  const [changes, setChanges] = useState(seedChanges);
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [changes, setChanges] = useState<ChangeRequest[]>([]);
   const [dashboard, setDashboard] = useState<LegalDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
