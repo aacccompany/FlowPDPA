@@ -905,6 +905,46 @@ type MerchantActivityRow = {
   policyEvidence?: PolicyActivityLog;
 };
 
+type MerchantActivitySnapshot = {
+  savedAt: number;
+  logs: MerchantActivityRow[];
+  usage: ConsentUsage | null;
+};
+
+const MERCHANT_ACTIVITY_CACHE_TTL_MS = 10 * 60 * 1000;
+const merchantActivityCacheKey = (email?: string) =>
+  `flowpdpa:merchant-activity:v1:${email || "anonymous"}`;
+
+const readMerchantActivitySnapshot = (email?: string): MerchantActivitySnapshot | null => {
+  try {
+    const raw = window.sessionStorage.getItem(merchantActivityCacheKey(email));
+    if (!raw) return null;
+    const snapshot = JSON.parse(raw) as MerchantActivitySnapshot;
+    if (Date.now() - snapshot.savedAt > MERCHANT_ACTIVITY_CACHE_TTL_MS) {
+      window.sessionStorage.removeItem(merchantActivityCacheKey(email));
+      return null;
+    }
+    return snapshot;
+  } catch {
+    return null;
+  }
+};
+
+const writeMerchantActivitySnapshot = (
+  email: string | undefined,
+  logs: MerchantActivityRow[],
+  usage: ConsentUsage | null,
+) => {
+  try {
+    window.sessionStorage.setItem(
+      merchantActivityCacheKey(email),
+      JSON.stringify({ savedAt: Date.now(), logs, usage } satisfies MerchantActivitySnapshot),
+    );
+  } catch {
+    // Cache is best effort and must never block the live response.
+  }
+};
+
 const merchantActivityLabel: Record<MerchantActivityType, string> = {
   document_acknowledged: "รับทราบเอกสารแล้ว",
   customer_consent: "ลูกค้าให้ความยินยอม",
@@ -1149,8 +1189,12 @@ function ConsentEvidenceDialog({
 }
 
 function ActivityLogsView() {
-  const [logs, setLogs] = useState<MerchantActivityRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
+  const [initialSnapshot] = useState(() => readMerchantActivitySnapshot(user?.email));
+  const [logs, setLogs] = useState<MerchantActivityRow[]>(
+    () => initialSnapshot?.logs ?? [],
+  );
+  const [loading, setLoading] = useState(() => !initialSnapshot);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [type, setType] = useState<"all" | MerchantActivityType>("all");
@@ -1163,7 +1207,9 @@ function ActivityLogsView() {
     useState<PolicyActivityLog | null>(null);
   const [page, setPage] = useState(1);
   const [exportingConsent, setExportingConsent] = useState<"csv" | "pdf" | null>(null);
-  const [consentUsage, setConsentUsage] = useState<ConsentUsage | null>(null);
+  const [consentUsage, setConsentUsage] = useState<ConsentUsage | null>(
+    () => initialSnapshot?.usage ?? null,
+  );
   const pageSize = 10;
 
   const exportConsentLogs = async (format: "csv" | "pdf") => {
@@ -1235,15 +1281,16 @@ function ActivityLogsView() {
               consent: log,
             }))
           : [];
-      if (recordsResponse.success && recordsResponse.data) {
-        setConsentUsage(recordsResponse.data.usage);
-      }
-      setLogs(
-        [...policyRows, ...consentRows].toSorted(
+      const nextUsage = recordsResponse.success && recordsResponse.data
+        ? recordsResponse.data.usage
+        : initialSnapshot?.usage ?? null;
+      const nextLogs = [...policyRows, ...consentRows].toSorted(
           (a, b) =>
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-        ),
       );
+      setConsentUsage(nextUsage);
+      setLogs(nextLogs);
+      writeMerchantActivitySnapshot(user?.email, nextLogs, nextUsage);
       setError(
         responses.find((item) => !item.response.success)?.response.error
           ?.message ||
@@ -2618,16 +2665,36 @@ export default function Dashboard() {
   );
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
+  const [visitedViews, setVisitedViews] = useState<Set<string>>(
+    () => new Set([activeView]),
+  );
+
+  useEffect(() => {
+    setVisitedViews((current) => {
+      if (current.has(activeView)) return current;
+      const next = new Set(current);
+      next.add(activeView);
+      return next;
+    });
+  }, [activeView]);
 
   useEffect(() => {
     const prefetch = () => {
+      const policiesRequest = api.policies.list();
       void Promise.all([
+        policiesRequest,
         api.billing.history(),
         api.consents.listForms(),
         api.consents.listRecords({ page: 1, limit: 10 }),
         api.consents.listActivityLogs(),
         api.templates.list(),
       ]);
+      void policiesRequest.then((response) => {
+        if (!response.success || !response.data) return;
+        void Promise.all(
+          response.data.map((policy) => api.policies.listActivityLogs(policy.id)),
+        );
+      });
     };
     const timer = window.setTimeout(prefetch, 250);
     return () => window.clearTimeout(timer);
@@ -2853,15 +2920,29 @@ export default function Dashboard() {
 
           {/* Page content */}
           <main className="merchant-content flex-1 px-4 py-5 lg:px-5 lg:py-6">
-            {activeView === "overview" && (
-              <Overview setView={setActiveView} user={user} />
+            {visitedViews.has("overview") && (
+              <section hidden={activeView !== "overview"}>
+                <Overview setView={setActiveView} user={user} />
+              </section>
             )}
-            {activeView === "policies" && <PoliciesList />}
-            {activeView === "activity" && <ActivityLogsView />}
-            {activeView === "consents" && <ConsentManagement />}
-            {activeView === "templates" && <DocumentTemplates />}
-            {activeView === "billing" && <MerchantBillingView />}
-            {activeView === "settings" && <AccountSettings user={user} />}
+            {visitedViews.has("policies") && (
+              <section hidden={activeView !== "policies"}><PoliciesList /></section>
+            )}
+            {visitedViews.has("activity") && (
+              <section hidden={activeView !== "activity"}><ActivityLogsView /></section>
+            )}
+            {visitedViews.has("consents") && (
+              <section hidden={activeView !== "consents"}><ConsentManagement /></section>
+            )}
+            {visitedViews.has("templates") && (
+              <section hidden={activeView !== "templates"}><DocumentTemplates /></section>
+            )}
+            {visitedViews.has("billing") && (
+              <section hidden={activeView !== "billing"}><MerchantBillingView /></section>
+            )}
+            {visitedViews.has("settings") && (
+              <section hidden={activeView !== "settings"}><AccountSettings user={user} /></section>
+            )}
           </main>
         </div>
       </div>
