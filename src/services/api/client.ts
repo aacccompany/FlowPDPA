@@ -3,7 +3,7 @@ import { API_ENDPOINTS } from './endpoints'
 import type { ApiError, ApiResponse, RefreshTokenResponse, RequestConfig } from './types'
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '')
-const GET_CACHE_PREFIX = 'flowpdpa:get-cache:v1:'
+const GET_CACHE_PREFIX = 'flowpdpa:get-cache:v2:'
 const GET_CACHE_TTL_MS = 2 * 60 * 1000
 
 type CachedGetResponse = {
