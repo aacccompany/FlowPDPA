@@ -1896,7 +1896,7 @@ function MerchantBillingView() {
               <p className="text-xs text-gray-500">สร้างเอกสาร PDPA ได้ฟรีทุกแพ็กเกจ</p>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid gap-4 lg:grid-cols-3">
               <article className="relative flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
                 {!current ? (
                   <span className="absolute right-5 top-5 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold text-slate-600">
@@ -1965,6 +1965,37 @@ function MerchantBillingView() {
                     {upgrading ? "กำลังเปิดหน้าชำระเงิน..." : current ? "มีแพ็กเกจที่ใช้งานอยู่แล้ว" : "อัปเกรดเป็น BUSINESS"}
                   </button>
                 ) : null}
+              </article>
+
+              <article className="relative flex flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-950 p-6 text-white shadow-[0_12px_30px_rgba(15,23,42,0.16)]">
+                <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-500" />
+                <span className="absolute right-5 top-5 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-bold text-slate-200">
+                  FULL OPTIONS
+                </span>
+                <p className="font-mono text-xs font-bold uppercase tracking-[0.18em] text-emerald-400">Tech Hunt</p>
+                <div className="mt-3 flex items-end gap-2">
+                  <span className="text-4xl font-black tracking-tight text-white">฿9,252</span>
+                  <span className="pb-1 text-sm text-slate-400">/ เดือน</span>
+                </div>
+                <div className="mt-5 rounded-lg border border-white/10 bg-white/[0.06] px-4 py-3">
+                  <p className="text-xs text-slate-400">ความจุ Consent Log</p>
+                  <p className="mt-1 text-2xl font-black text-white">ไม่จำกัด <span className="text-sm font-semibold text-emerald-400">Unlimited</span></p>
+                </div>
+                <ul className="mt-5 space-y-3 text-sm text-slate-200">
+                  {[
+                    "สร้างเอกสาร PDPA ได้ไม่จำกัด",
+                    "Consent Log ไม่จำกัดจำนวน",
+                    "แก้ไขและจัดการข้อมูลลูกค้าได้",
+                    "จัดการการยกเลิกและถอนความยินยอมได้",
+                    "ดูและส่งออกประวัติทั้งหมดได้",
+                    "เปิดใช้งานทุกฟีเจอร์",
+                  ].map((feature) => (
+                    <li key={feature} className="flex items-start gap-2.5">
+                      <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
               </article>
             </div>
           </section>
