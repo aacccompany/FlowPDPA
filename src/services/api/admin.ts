@@ -219,7 +219,10 @@ export const adminApi = {
     `${API_ENDPOINTS.admin.companyDocuments}${query(params)}`,
   ),
   getCompanyDocument: (documentId: string) =>
-    apiRequest<AdminCompanyDocument>(API_ENDPOINTS.admin.companyDocument(documentId)),
+    apiRequest<AdminCompanyDocument>(
+      API_ENDPOINTS.admin.companyDocument(documentId),
+      { cache: false },
+    ),
   getCompanyDocumentViewUrl: (documentId: string) =>
     apiRequest<{ url: string; expiresIn: number }>(API_ENDPOINTS.admin.companyDocumentViewUrl(documentId)),
   approveCompanyDocument: (documentId: string, note = "") =>

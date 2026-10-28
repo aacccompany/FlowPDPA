@@ -100,7 +100,12 @@ export const companyDocumentsApi = {
         timeout: 120_000,
       },
     ),
-  get: (documentId: string) => apiRequest<CompanyDocument>(API_ENDPOINTS.companyDocuments.detail(documentId)),
+  // Validation status changes asynchronously; a cached PROCESSING response
+  // would prevent polling from ever seeing PASSED/FAILED.
+  get: (documentId: string) => apiRequest<CompanyDocument>(
+    API_ENDPOINTS.companyDocuments.detail(documentId),
+    { cache: false },
+  ),
   retry: (documentId: string) => apiRequest<{ documentId: string; validationStatus: CompanyDocumentValidationStatus }>(
     API_ENDPOINTS.companyDocuments.retry(documentId), { method: "POST" },
   ),
