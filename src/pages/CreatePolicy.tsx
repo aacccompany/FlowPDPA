@@ -721,6 +721,9 @@ function Step2({
   const documentStatusMessage = () => {
     if (data.companyDocumentStatus === "PASSED") return "ตรวจสอบแล้ว ชื่อบริษัทหรือเลขทะเบียนตรงกับเอกสาร";
     if (data.companyDocumentStatus === "FAILED") {
+      if (documentFailureReason === "REGISTRATION_NUMBER_MISMATCH") {
+        return "เลขทะเบียนนิติบุคคลที่กรอกไม่ตรงกับเลขในหนังสือรับรอง กรุณาตรวจสอบเลขทะเบียนหรืออัปโหลดเอกสารใหม่";
+      }
       if (documentFailureReason === "COMPANY_NAME_MISMATCH") {
         return "ชื่อบริษัทที่กรอกไม่ตรงกับชื่อในหนังสือรับรอง กรุณาตรวจสอบชื่อบริษัทหรืออัปโหลดเอกสารใหม่";
       }
