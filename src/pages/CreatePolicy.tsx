@@ -716,6 +716,30 @@ function Step2({
   const [showConsent, setShowConsent] = useState(false);
   const [documentUploading, setDocumentUploading] = useState(false);
   const [documentError, setDocumentError] = useState("");
+  const [documentFailureReason, setDocumentFailureReason] = useState<string | null>(null);
+
+  const documentStatusMessage = () => {
+    if (data.companyDocumentStatus === "PASSED") return "ตรวจสอบแล้ว ชื่อบริษัทหรือเลขทะเบียนตรงกับเอกสาร";
+    if (data.companyDocumentStatus === "FAILED") {
+      if (documentFailureReason === "COMPANY_NAME_MISMATCH") {
+        return "ชื่อบริษัทที่กรอกไม่ตรงกับชื่อในหนังสือรับรอง กรุณาตรวจสอบชื่อบริษัทหรืออัปโหลดเอกสารใหม่";
+      }
+      return "เอกสารไม่ผ่านการตรวจสอบ กรุณาตรวจสอบข้อมูลบริษัทและอัปโหลดเอกสารใหม่";
+    }
+    if (data.companyDocumentStatus === "NEEDS_REVIEW") {
+      if (documentFailureReason === "LOW_CONFIDENCE_OR_NAME_MISSING") {
+        return "อ่านข้อความในเอกสารได้ไม่ชัดเจนหรือไม่พบชื่อบริษัท กรุณาอัปโหลดเอกสารที่ชัดเจนกว่าเดิม";
+      }
+      return "เอกสารต้องได้รับการตรวจสอบเพิ่มเติม กรุณาอัปโหลดเอกสารใหม่หรือติดต่อผู้ดูแลระบบ";
+    }
+    if (data.companyDocumentStatus === "ERROR") {
+      if (documentFailureReason === "OCR_PROCESSING_ERROR") {
+        return "ระบบ OCR ไม่สามารถประมวลผลเอกสารได้ กรุณาอัปโหลดใหม่หรือติดต่อผู้ดูแลระบบ";
+      }
+      return "ตรวจเอกสารไม่สำเร็จ กรุณาอัปโหลดใหม่";
+    }
+    return "ระบบกำลังตรวจสอบเอกสาร คุณสามารถกรอกข้อมูลส่วนอื่นต่อได้";
+  };
 
   useEffect(() => {
     if (!data.companyDocumentId || !["QUEUED", "PROCESSING", "RETRYING", "UPLOADED"].includes(data.companyDocumentStatus)) return;
@@ -731,12 +755,15 @@ function Step2({
       const response = await api.companyDocuments.get(data.companyDocumentId);
       if (!active) return;
       if (response.success && response.data) {
+        setDocumentError("");
+        setDocumentFailureReason(response.data.failureReason);
         setData({ companyDocumentStatus: response.data.validationStatus });
         if (["QUEUED", "PROCESSING", "RETRYING", "UPLOADED"].includes(response.data.validationStatus)) {
           timeoutId = window.setTimeout(poll, 3000);
         }
       } else {
-        setDocumentError(response.error?.message || "ไม่สามารถตรวจสอบสถานะเอกสารได้");
+        setDocumentError(response.error?.message || "ไม่สามารถตรวจสอบสถานะเอกสารได้ ระบบกำลังลองใหม่");
+        timeoutId = window.setTimeout(poll, 3000);
       }
     };
     timeoutId = window.setTimeout(poll, 1000);
@@ -761,6 +788,7 @@ function Step2({
 
   const uploadCompanyDocument = async (file: File) => {
     setDocumentError("");
+    setDocumentFailureReason(null);
     if (!data.companyName.trim() || !data.companyRegNumber.trim()) {
       setDocumentError("กรุณากรอกชื่อบริษัทและเลขทะเบียนนิติบุคคลก่อนแนบเอกสาร");
       return;
@@ -857,8 +885,9 @@ function Step2({
         setData({
           companyName: result.juristicName,
           companyRegNumber: result.juristicId,
-          businessObjective: result.juristicObjective,
-          registeredCapital: result.registeredCapital,
+          businessObjective: result.juristicObjective || data.businessObjective,
+          registeredCapital: result.registeredCapital || data.registeredCapital,
+          address: result.address || data.address,
           companyDocumentId: "",
           companyDocumentDraftId: "",
           companyDocumentStatus: "",
@@ -872,7 +901,7 @@ function Step2({
       }
     } catch {
       setRdState("error");
-      setRdError("เชื่อมต่อฐานข้อมูลกรมพัฒนาธุรกิจการค้าไม่ได้ กรุณาลองใหม่ภายหลัง");
+      setRdError("เชื่อมต่อฐานข้อมูลกรมสรรพากรและ DBD ไม่ได้ กรุณาลองใหม่ภายหลัง");
     } finally {
       lookupInFlightRef.current = false;
     }
@@ -1027,7 +1056,7 @@ function Step2({
                 >
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                      ค้นหาจากฐานข้อมูลกรมพัฒนาธุรกิจการค้า (DBD)
+                      ค้นหาข้อมูลนิติบุคคล (กรมสรรพากร / DBD)
                     </p>
                     {rdState === "found" && (
                       <button
@@ -1141,8 +1170,8 @@ function Step2({
                       style={{ color: "var(--green)" }}
                     >
                       <CheckCircle className="w-3.5 h-3.5 shrink-0" />
-                      ดึงข้อมูลจากกรมพัฒนาธุรกิจการค้าเรียบร้อย —
-                      ชื่อบริษัทและเลขทะเบียนถูกเติมให้อัตโนมัติ
+                      ดึงข้อมูลนิติบุคคลเรียบร้อย — ชื่อบริษัท เลขทะเบียน
+                      และที่อยู่ถูกเติมให้อัตโนมัติเมื่อมีข้อมูล
                     </p>
                   )}
                   {rdState === "error" && rdError && (
@@ -1194,7 +1223,7 @@ function Step2({
                   {data.companyDocumentStatus ? (
                     <div className={`mt-3 flex items-start gap-2 rounded-lg px-3 py-2 text-xs ${data.companyDocumentStatus === "PASSED" ? "bg-emerald-50 text-emerald-700" : ["FAILED", "ERROR", "NEEDS_REVIEW"].includes(data.companyDocumentStatus) ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>
                       {data.companyDocumentStatus === "PASSED" ? <CheckCircle className="h-4 w-4 shrink-0" /> : ["FAILED", "ERROR", "NEEDS_REVIEW"].includes(data.companyDocumentStatus) ? <AlertCircle className="h-4 w-4 shrink-0" /> : <Loader2 className="h-4 w-4 shrink-0 animate-spin" />}
-                      <span>{data.companyDocumentStatus === "PASSED" ? "ตรวจสอบแล้ว ชื่อบริษัทตรงกับเอกสาร" : data.companyDocumentStatus === "FAILED" ? "ชื่อบริษัทไม่ตรงกับเอกสาร กรุณาตรวจสอบชื่อหรืออัปโหลดใหม่" : data.companyDocumentStatus === "NEEDS_REVIEW" ? "เอกสารไม่ถูกต้องหรือไม่พบชื่อบริษัท กรุณาตรวจสอบและอัปโหลดใหม่" : data.companyDocumentStatus === "ERROR" ? "ตรวจเอกสารไม่สำเร็จ กรุณาอัปโหลดใหม่" : "ระบบกำลังตรวจสอบเอกสาร คุณสามารถกรอกข้อมูลส่วนอื่นต่อได้"}</span>
+                      <span>{documentStatusMessage()}</span>
                     </div>
                   ) : null}
                   {documentError ? <p className="mt-2 text-xs text-red-600">{documentError}</p> : null}

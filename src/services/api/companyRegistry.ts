@@ -8,6 +8,10 @@ export interface DBDCompany {
   juristicStatus: string;
   juristicObjective: string;
   registeredCapital: string;
+  address?: string;
+  branchNumber?: string;
+  businessFirstDate?: string;
+  source?: "rd" | "dbd" | "rd+dbd";
 }
 
 export const companyRegistryApi = {
