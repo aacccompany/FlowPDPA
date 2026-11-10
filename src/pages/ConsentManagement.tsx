@@ -456,7 +456,7 @@ export default function ConsentManagement() {
             {exporting === format
               ? "กำลังสร้าง..."
               : usage.plan === "business"
-                ? `Export ${format.toUpperCase()}`
+                ? `ส่งออก ${format.toUpperCase()}`
                 : `${format.toUpperCase()} · BUSINESS`}
           </button>
         ))}
