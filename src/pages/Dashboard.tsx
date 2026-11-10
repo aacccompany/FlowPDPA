@@ -6,7 +6,8 @@ import {
   Plus,
   Settings,
   LogOut,
-  Bell,
+  Menu,
+  ArrowRight,
   ChevronRight,
   Download,
   Copy,
@@ -16,7 +17,6 @@ import {
   Globe,
   Lock,
   X,
-  ShieldCheck,
   ExternalLink,
   Loader,
   MailCheck,
@@ -129,15 +129,15 @@ const statusDisplay: Record<
   { label: string; color: string; bg: string }
 > = {
   pending_review: {
-    label: "Review",
-    color: "#d97706",
-    bg: "rgba(217,119,6,0.1)",
+    label: "รอตรวจสอบ",
+    color: "#8a4f05",
+    bg: "rgba(138,79,5,0.1)",
   },
-  approved: { label: "Reviewed", color: "#059669", bg: "rgba(5,150,105,0.12)" },
-  rejected: { label: "Rejected", color: "#dc2626", bg: "rgba(220,38,38,0.1)" },
-  edited: { label: "Edited", color: "#7c3aed", bg: "rgba(124,58,237,0.1)" },
-  Draft: { label: "Draft", color: "#64748b", bg: "rgba(100,116,139,0.1)" },
-  Active: { label: "Active", color: "#059669", bg: "rgba(5,150,105,0.12)" },
+  approved: { label: "อนุมัติแล้ว", color: "#066a4f", bg: "rgba(6,106,79,0.12)" },
+  rejected: { label: "ไม่อนุมัติ", color: "#b42318", bg: "rgba(180,35,24,0.1)" },
+  edited: { label: "ฝ่ายกฎหมายแก้ไขแล้ว", color: "#5b21b6", bg: "rgba(91,33,182,0.1)" },
+  Draft: { label: "ฉบับร่าง", color: "#475467", bg: "rgba(71,84,103,0.1)" },
+  Active: { label: "ใช้งานอยู่", color: "#066a4f", bg: "rgba(6,106,79,0.12)" },
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -148,8 +148,8 @@ function StatusBadge({ status }: { status: string }) {
   };
   return (
     <span
-      className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded"
-      style={{ backgroundColor: cfg.bg, color: cfg.color }}
+      className="inline-flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap"
+      style={{ color: cfg.color }}
     >
       <span
         className="w-1.5 h-1.5 rounded-full"
@@ -169,49 +169,33 @@ function Overview({
   user: AuthUser;
 }) {
   const { policies: userPolicies, loading } = useMerchantPolicies();
-  const activePolicies = userPolicies.filter(
-    (p) => p.status === "approved",
-  ).length;
-
+  const countBy = (status: string) =>
+    userPolicies.filter((p) => p.status === status).length;
+  const needsAction = userPolicies.filter((p) => p.status === "rejected");
+  const recent = [...userPolicies]
+    .sort(
+      (a, b) =>
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    )
+    .slice(0, 5);
   const stats = [
-    {
-      label: "นโยบายทั้งหมด",
-      value: loading ? "—" : String(userPolicies.length),
-      Icon: FileText,
-      color: "var(--blue)",
-    },
-    {
-      label: "อนุมัติแล้ว",
-      value: loading ? "—" : String(activePolicies),
-      Icon: CheckCircle,
-      color: "var(--green)",
-    },
-    {
-      label: "PDPA Status",
-      value: "Compliant",
-      Icon: ShieldCheck,
-      color: "var(--green)",
-    },
+    { label: "นโยบายทั้งหมด", value: userPolicies.length, alert: false },
+    { label: "รอตรวจสอบ", value: countBy("pending_review"), alert: false },
+    { label: "อนุมัติแล้ว", value: countBy("approved"), alert: false },
+    { label: "ต้องแก้ไข", value: needsAction.length, alert: true },
   ];
 
   return (
     <div>
-      {/* Welcome */}
       <div className="mb-7 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
-          <p
-            className="text-[11px] font-medium uppercase mb-2"
-            style={{ color: "#087a5b", fontFamily: "IBM Plex Mono, monospace" }}
-          >
-            Merchant workspace
-          </p>
           <h1
             className="text-2xl font-bold text-gray-900 mb-1"
             style={{ fontFamily: "Noto Serif Thai, serif" }}
           >
             ภาพรวมของ {user.name}
           </h1>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-gray-600">
             ติดตามเอกสาร การตรวจสอบ และคำขอจากที่เดียว
           </p>
         </div>
@@ -223,116 +207,123 @@ function Overview({
         </Link>
       </div>
 
-      {/* Stats */}
-      <div
-        className="grid grid-cols-1 sm:grid-cols-3 bg-white border border-gray-100 mb-8"
-        style={{ borderRadius: "6px" }}
-      >
-        {stats.map(({ label, value, Icon, color }) => (
-          <div key={label} className="merchant-stat p-5 flex items-start gap-4">
-            <Icon className="w-4 h-4 mt-1 shrink-0" style={{ color }} />
-            <div>
-              <div
-                className="text-xl font-semibold text-gray-900 mb-0.5"
-                style={{ fontFamily: "IBM Plex Mono, monospace" }}
-              >
-                {value}
-              </div>
-              <div className="text-xs text-gray-500">{label}</div>
-            </div>
+      <section className="merchant-kpis mb-7" aria-label="สรุปนโยบาย">
+        {stats.map(({ label, value, alert }) => (
+          <div key={label} className="merchant-kpi">
+            <p
+              className="text-3xl font-semibold tabular-nums"
+              style={{ color: alert && value > 0 ? "#b42318" : undefined }}
+            >
+              {loading ? "—" : value}
+            </p>
+            <p className="text-sm text-gray-600 mt-1">{label}</p>
           </div>
         ))}
-      </div>
+      </section>
 
-      {/* Recent policies */}
-      <div className="bg-white rounded-xl border border-gray-100 mb-6">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="font-bold text-gray-900 text-sm">นโยบายล่าสุด</h2>
-          <button
-            onClick={() => setView("policies")}
-            className="text-xs font-semibold flex items-center gap-1 transition-colors"
-            style={{ color: "var(--green)" }}
-          >
-            ดูทั้งหมด <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-        {loading ? (
-          <div className="divide-y divide-gray-50" aria-label="กำลังโหลดนโยบาย">
-            {[0, 1, 2].map((item) => (
-              <div key={item} className="flex items-center gap-3 px-6 py-4 animate-pulse">
-                <div className="h-4 w-4 rounded bg-gray-100" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-3 w-40 rounded bg-gray-100" />
-                  <div className="h-2.5 w-24 rounded bg-gray-100" />
-                </div>
-                <div className="h-6 w-16 rounded bg-gray-100" />
-              </div>
-            ))}
-          </div>
-        ) : userPolicies.length === 0 ? (
-          <div className="px-6 py-8 text-center">
-            <p className="text-xs text-gray-400 mb-3">ยังไม่มีนโยบาย</p>
-            <Link
-              to="/create/policy"
-              className="text-xs font-semibold underline"
-              style={{ color: "var(--green)" }}
+      <div className="merchant-overview-grid">
+        <section className="merchant-panel">
+          <div className="merchant-panel-head">
+            <h2 className="text-base font-semibold text-gray-900">
+              นโยบายล่าสุด
+            </h2>
+            <button
+              onClick={() => setView("policies")}
+              className="merchant-button"
             >
-              สร้างนโยบายแรก →
-            </Link>
+              ดูทั้งหมด <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
-        ) : (
-          <div className="divide-y divide-gray-50">
-            {userPolicies.slice(0, 3).map((p) => (
-              <div
-                key={p.id}
-                className="flex items-center justify-between px-6 py-4"
-              >
-                <div className="flex items-center gap-3">
-                  <FileText className="w-4 h-4" style={{ color: "#087a5b" }} />
-                  <div>
-                    <div className="text-sm font-semibold text-gray-900">
-                      {p.typeName}
-                    </div>
-                    <div className="text-xs text-gray-400 flex items-center gap-1">
-                      <Globe className="w-3 h-3" /> {p.domain}
-                    </div>
-                  </div>
+          {loading ? (
+            <div aria-label="กำลังโหลดนโยบาย">
+              {[0, 1, 2].map((item) => (
+                <div key={item} className="merchant-list-row animate-pulse">
+                  <div className="h-4 w-40 rounded bg-gray-200/70" />
+                  <div className="h-3 w-24 rounded bg-gray-200/70 mt-2" />
                 </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-xs text-gray-400 hidden sm:block">
-                    {langDisplay[p.language] || p.language}
-                  </span>
-                  <StatusBadge status={p.status} />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+              ))}
+            </div>
+          ) : recent.length === 0 ? (
+            <div className="merchant-empty-state">
+              <FileText className="w-6 h-6 mx-auto mb-3" />
+              <p className="text-sm font-semibold text-gray-700">
+                ยังไม่มีนโยบาย
+              </p>
+              <p className="text-xs mt-1 mb-4">
+                สร้างนโยบายฉบับแรก ฝ่ายกฎหมายจะตรวจสอบก่อนเผยแพร่
+              </p>
+              <Link to="/create/policy" className="merchant-button primary">
+                <Plus className="w-4 h-4" /> สร้างนโยบายแรก
+              </Link>
+            </div>
+          ) : (
+            <ul>
+              {recent.map((p) => (
+                <li key={p.id}>
+                  <Link
+                    to={`/dashboard/policies/${p.id}`}
+                    className="merchant-list-row merchant-list-link"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate">
+                        {p.typeName}
+                      </p>
+                      <p className="text-xs text-gray-600 flex items-center gap-1 mt-0.5 truncate">
+                        <Globe className="w-4 h-4 shrink-0" /> {p.domain}
+                        <span aria-hidden="true">·</span>
+                        {langDisplay[p.language] || p.language}
+                      </p>
+                    </div>
+                    <StatusBadge status={p.status} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
-      {/* Quick actions */}
-      <div
-        className="rounded-xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
-        style={{ background: "#edf5f2", border: "1px solid #c8ded6" }}
-      >
-        <div>
-          <p
-            className="font-semibold text-sm mb-1"
-            style={{ color: "#074f3e" }}
-          >
-            สร้างเอกสารฉบับถัดไป
-          </p>
-          <p className="text-xs" style={{ color: "#477064" }}>
-            ข้อมูลจะถูกส่งให้ฝ่ายกฎหมายตรวจสอบก่อนเผยแพร่
-          </p>
-        </div>
-        <Link
-          to="/create/policy"
-          className="btn-green text-sm px-6 py-2.5 shrink-0 flex items-center gap-2"
-          style={{ borderRadius: "8px" }}
-        >
-          <Plus className="w-4 h-4" /> สร้าง Policy ใหม่
-        </Link>
+        <section className="merchant-panel self-start">
+          <div className="merchant-panel-head">
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">
+                ต้องดำเนินการ
+              </h2>
+              <p className="text-xs text-gray-600 mt-1">
+                นโยบายที่ฝ่ายกฎหมายส่งกลับให้แก้ไข
+              </p>
+            </div>
+          </div>
+          {needsAction.length === 0 ? (
+            <div className="merchant-empty-state">
+              <CheckCircle className="w-6 h-6 mx-auto mb-3" />
+              <p className="text-sm font-semibold text-gray-700">
+                ไม่มีรายการที่ต้องแก้ไข
+              </p>
+            </div>
+          ) : (
+            <ul>
+              {needsAction.map((p) => (
+                <li key={p.id} className="merchant-list-row merchant-list-stack">
+                  <p className="text-sm font-semibold text-gray-900">
+                    {p.typeName}
+                  </p>
+                  <p className="text-xs text-gray-600 mt-0.5">{p.domain}</p>
+                  <p className="text-sm text-gray-700 mt-2 line-clamp-3">
+                    {p.reviewComment
+                      ? "เหตุผลจากฝ่ายกฎหมาย: " + p.reviewComment
+                      : "ฝ่ายกฎหมายไม่อนุมัติ โปรดตรวจสอบและแก้ไข"}
+                  </p>
+                  <Link
+                    to={`/dashboard/policies/${p.id}`}
+                    className="merchant-button mt-3"
+                  >
+                    แก้ไขนโยบาย <ArrowRight className="w-4 h-4" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
     </div>
   );
@@ -342,17 +333,17 @@ const downloadFormats = [
   {
     key: "pdf",
     label: "PDF",
-    description: "Portable document",
+    description: "เอกสารพกพา (PDF)",
     Icon: FileText,
   },
   {
     key: "docx",
     label: "Word (.docx)",
-    description: "Editable Word file",
+    description: "ไฟล์ Word แก้ไขได้",
     Icon: FileType2,
   },
-  { key: "txt", label: "TXT", description: "Plain text file", Icon: FileText },
-  { key: "html", label: "HTML", description: "Web page file", Icon: Code2 },
+  { key: "txt", label: "TXT", description: "ไฟล์ข้อความธรรมดา", Icon: FileText },
+  { key: "html", label: "HTML", description: "ไฟล์เว็บเพจ", Icon: Code2 },
 ] as const;
 
 function PolicyDownloadsDialog({
@@ -386,7 +377,7 @@ function PolicyDownloadsDialog({
         <header className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
           <div>
             <h2 className="text-base font-semibold text-gray-900">
-              Download policy files
+              ดาวน์โหลดไฟล์นโยบาย
             </h2>
             <p className="mt-1 text-xs text-gray-500">
               {policy.typeName} · {policy.websiteName}
@@ -405,10 +396,10 @@ function PolicyDownloadsDialog({
             <div className="border border-dashed border-gray-300 px-5 py-10 text-center">
               <Clock className="mx-auto mb-3 h-5 w-5 text-gray-400" />
               <p className="text-sm font-semibold text-gray-700">
-                Files are not ready yet
+                ไฟล์ยังไม่พร้อมให้ดาวน์โหลด
               </p>
               <p className="mt-1 text-xs text-gray-500">
-                Exports become available after Legal approves the policy.
+                ไฟล์จะพร้อมให้ดาวน์โหลดหลังฝ่ายกฎหมายอนุมัตินโยบาย
               </p>
             </div>
           ) : (
@@ -633,7 +624,7 @@ function PoliciesList() {
                 setPage(1);
               }}
               className="h-9 border border-gray-300 bg-white px-3 text-sm"
-              aria-label="Filter by status"
+              aria-label="กรองตามสถานะ"
             >
               <option value="all">ทุกสถานะ</option>
               <option value="pending_review">รอตรวจสอบ</option>
@@ -648,7 +639,7 @@ function PoliciesList() {
                 setPage(1);
               }}
               className="h-9 border border-gray-300 bg-white px-3 text-sm"
-              aria-label="Filter by language"
+              aria-label="กรองตามภาษา"
             >
               <option value="all">ทุกภาษา</option>
               <option value="th">ไทย</option>
@@ -739,11 +730,11 @@ function PoliciesList() {
                   {/* Actions */}
                   <div className="col-span-2 flex items-center justify-end gap-1">
                     <Link
-                      title="Open policy workspace"
+                      title="เปิดหน้านโยบาย"
                       to={`/dashboard/policies/${p.id}`}
                       className="w-7 h-7 flex items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700"
                     >
-                      <FileEdit className="w-3.5 h-3.5" />
+                      <FileEdit className="w-4 h-4" />
                     </Link>
                     {(p.status === "approved" || p.status === "edited") && (
                       <>
@@ -762,11 +753,11 @@ function PoliciesList() {
                               (e.currentTarget.style.backgroundColor = "transparent")
                             }
                           >
-                            <Copy className="w-3.5 h-3.5" />
+                            <Copy className="w-4 h-4" />
                           </button>
                         ) : null}
                         <button
-                          title="Download policy files"
+                          title="ดาวน์โหลดไฟล์นโยบาย"
                           onClick={() => setDownloadPolicy(p)}
                           className="flex h-7 items-center gap-1.5 rounded border border-gray-200 px-2 text-xs font-medium text-gray-600 hover:border-emerald-600 hover:text-emerald-700"
                         >
@@ -789,7 +780,7 @@ function PoliciesList() {
                               e.currentTarget.style.color = "#9ca3af";
                             }}
                           >
-                            <ExternalLink className="w-3.5 h-3.5" />
+                            <ExternalLink className="w-4 h-4" />
                           </a>
                         ) : null}
                       </>
@@ -808,7 +799,7 @@ function PoliciesList() {
                         e.currentTarget.style.color = "#9ca3af";
                       }}
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -1859,9 +1850,6 @@ function MerchantBillingView() {
         onCancel={() => !canceling && setCancelOpen(false)}
       />
       <div className="mb-6">
-        <p className="mb-2 font-mono text-[11px] uppercase tracking-wider text-emerald-700">
-          Billing account
-        </p>
         <h1 className="text-2xl font-bold text-gray-900">แพ็กเกจและการชำระเงิน</h1>
         <p className="mt-1 text-sm text-gray-500">
           เลือกความจุ Consent Log ที่เหมาะกับงาน และตรวจสอบสถานะแพ็กเกจของบัญชีคุณ
@@ -2558,7 +2546,7 @@ function AccountSettings({ user }: { user: AuthUser }) {
             className="btn-green text-sm px-8 py-2.5 flex items-center gap-2"
             style={{ borderRadius: "8px", opacity: saving ? 0.7 : 1 }}
           >
-            {saving && <Loader className="w-3.5 h-3.5 animate-spin" />}
+            {saving && <Loader className="w-4 h-4 animate-spin" />}
             {saving ? "กำลังบันทึก..." : "บันทึกการเปลี่ยนแปลง"}
           </button>
           {saved && (
@@ -2835,12 +2823,11 @@ export default function Dashboard() {
                         <Icon className="w-4 h-4 shrink-0" />
                         {label}
                         {key === "new" && (
-                          <span
-                            className="ml-auto text-xs font-bold"
+                          <Plus
+                            className="ml-auto w-4 h-4"
                             style={{ color: "#4ade80" }}
-                          >
-                            +
-                          </span>
+                            aria-hidden="true"
+                          />
                         )}
                       </button>
                     );
@@ -2863,7 +2850,7 @@ export default function Dashboard() {
                 >
                   {user.name}
                 </div>
-                <div className="text-xs truncate" style={{ color: "#475569" }}>
+                <div className="text-xs truncate" style={{ color: "#94a3b8" }}>
                   {user.plan}
                 </div>
               </div>
@@ -2871,14 +2858,14 @@ export default function Dashboard() {
             <button
               onClick={handleLogout}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
-              style={{ color: "#64748b" }}
+              style={{ color: "#94a3b8" }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor = "rgba(239,68,68,0.1)";
                 e.currentTarget.style.color = "#fca5a5";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = "transparent";
-                e.currentTarget.style.color = "#64748b";
+                e.currentTarget.style.color = "#94a3b8";
               }}
             >
               <LogOut className="w-4 h-4 shrink-0" />
@@ -2896,20 +2883,11 @@ export default function Dashboard() {
             <div className="flex items-center gap-3">
               {/* Mobile hamburger */}
               <button
-                className="lg:hidden p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
+                className="merchant-icon-button lg:hidden"
                 onClick={() => setSidebarOpen(true)}
+                aria-label="เปิดเมนู"
               >
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  className="w-5 h-5"
-                >
-                  <line x1="3" y1="6" x2="21" y2="6" />
-                  <line x1="3" y1="12" x2="21" y2="12" />
-                  <line x1="3" y1="18" x2="21" y2="18" />
-                </svg>
+                <Menu className="w-5 h-5" />
               </button>
               <div>
                 <h1
@@ -2918,23 +2896,10 @@ export default function Dashboard() {
                 >
                   {currentNav?.label ?? "Dashboard"}
                 </h1>
-                <p
-                  className="text-xs hidden sm:block"
-                  style={{ color: "#98a2b3" }}
-                >
-                  พื้นที่จัดการเอกสารและการตรวจสอบ
-                </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-              <button className="relative w-9 h-9 flex items-center justify-center rounded-lg transition-colors text-gray-500 hover:bg-gray-100">
-                <Bell className="w-4 h-4" />
-                <span
-                  className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full"
-                  style={{ backgroundColor: "var(--green)" }}
-                />
-              </button>
               <button
                 onClick={() => setActiveView("settings")}
                 className="flex items-center gap-2 pl-3 pr-4 py-1.5 rounded-lg transition-colors hover:bg-gray-100"

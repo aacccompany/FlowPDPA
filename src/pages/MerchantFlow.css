@@ -1,0 +1,78 @@
+/* Merchant standalone pages (create / edit policy): same rounded + glass + minimal system
+   as the dashboard (Dashboard.css) and the Legal portal. Scoped to .merchant-flow. */
+.merchant-flow {
+  --radius-small: 8px;
+  --radius-control: 10px;
+  --radius-nav: 10px;
+  --radius-panel: 16px;
+  --glass-bg: rgba(255, 255, 255, 0.55);
+  --glass-bg-strong: rgba(255, 255, 255, 0.70);
+  --glass-border: rgba(255, 255, 255, 0.85);
+  --glass-edge: rgba(23, 35, 59, 0.10);
+  --glass-blur: blur(30px) saturate(1.9);
+  --glass-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    0 14px 36px -24px rgba(23, 35, 59, 0.24);
+}
+.merchant-flow.merchant-flow {
+  background:
+    radial-gradient(640px 480px at 22% 10%, rgba(16, 185, 129, 0.34), transparent 70%),
+    radial-gradient(600px 460px at 78% 6%, rgba(59, 130, 246, 0.28), transparent 70%),
+    radial-gradient(720px 520px at 50% 70%, rgba(20, 184, 166, 0.20), transparent 70%),
+    #e8eef6 !important;
+  background-attachment: fixed;
+}
+
+/* radius scale */
+.merchant-flow .rounded { border-radius: var(--radius-small); }
+.merchant-flow .rounded-lg,
+.merchant-flow .rounded-md { border-radius: var(--radius-control); }
+.merchant-flow .rounded-xl,
+.merchant-flow .rounded-2xl { border-radius: var(--radius-panel); }
+.merchant-flow input,
+.merchant-flow select,
+.merchant-flow textarea { border-radius: var(--radius-control) !important; }
+.merchant-flow .btn-green,
+.merchant-flow .btn-outline-green { border-radius: var(--radius-control) !important; box-shadow: none !important; transform: none !important; }
+
+/* glass: header, stepper bar, cards */
+.merchant-flow header,
+.merchant-flow .bg-white.border-b {
+  background: var(--glass-bg-strong) !important;
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border-color: var(--glass-edge) !important;
+  box-shadow: none !important;
+}
+.merchant-flow .bg-white.rounded-xl,
+.merchant-flow .bg-white.rounded-2xl,
+.merchant-flow :is(section, form, aside > div).bg-white {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+.merchant-flow :is(section, form, aside > div).bg-white { border-radius: var(--radius-panel); }
+
+/* readability on translucent plates */
+.merchant-flow :is(.text-gray-400, .text-gray-500) { color: #4b5563; }
+.merchant-flow .uppercase { text-transform: none; }
+.merchant-flow [class*="tracking-"] { letter-spacing: normal; }
+.merchant-flow .font-mono,
+.merchant-flow [style*="IBM Plex Mono"] { font-family: inherit !important; font-variant-numeric: tabular-nums; }
+
+/* one icon weight */
+.merchant-flow svg.lucide { stroke-width: 1.75; flex-shrink: 0; }
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .merchant-flow { --glass-bg: #ffffff; --glass-bg-strong: #ffffff; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .merchant-flow { --glass-bg: #ffffff; --glass-bg-strong: #ffffff; }
+  .merchant-flow header,
+  .merchant-flow .bg-white.border-b,
+  .merchant-flow .bg-white.rounded-xl,
+  .merchant-flow .bg-white.rounded-2xl,
+  .merchant-flow :is(section, form, aside > div).bg-white { -webkit-backdrop-filter: none; backdrop-filter: none; }
+}

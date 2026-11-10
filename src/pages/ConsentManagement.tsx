@@ -288,9 +288,6 @@ export default function ConsentManagement() {
     <div>
       <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="mb-2 text-[11px] font-medium uppercase text-emerald-700">
-            ทะเบียนความยินยอม
-          </p>
           <h1 className="text-xl font-black text-gray-900">จัดการความยินยอม</h1>
           <p className="mt-1 text-sm text-gray-400">
             สร้างแบบฟอร์มตามวัตถุประสงค์ และตรวจสอบหลักฐานจากนโยบายของคุณ

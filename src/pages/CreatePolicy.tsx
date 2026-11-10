@@ -30,6 +30,7 @@ import { api } from "@/services/api";
 import { fileSha256 } from "@/services/api";
 import type { CompanyDocumentValidationStatus, PolicyQuestionnaire, UserProfile } from "@/services/api";
 
+import "./MerchantFlow.css";
 // ── Thai RD Company Lookup ────────────────────────────────────
 // Replace with real Thai RD VAT API calls via your backend proxy
 // (https://rdws.rd.go.th/serviceRD3/vatregistrationRI.asmx)
@@ -443,7 +444,7 @@ function Step1({
                     className="text-xs font-bold px-2 py-0.5 rounded-full"
                     style={{ backgroundColor: "#f1f5f9", color: "#64748b" }}
                   >
-                    Coming Soon
+                    เร็วๆ นี้
                   </span>
                 ) : (
                   <span
@@ -2153,7 +2154,7 @@ export default function CreatePolicy() {
 
   return (
     <div
-      className="min-h-screen flex flex-col"
+      className="merchant-flow min-h-screen flex flex-col"
       style={{ backgroundColor: "#f8fafc" }}
     >
       {/* Header */}

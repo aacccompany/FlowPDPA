@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
+  AlertTriangle,
   ArrowLeft,
   CheckCircle2,
   Clock3,
@@ -12,6 +13,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/services/api";
+import "./MerchantFlow.css";
 import type {
   ChangeRequestPriority,
   PolicyActivityLog,
@@ -23,18 +25,18 @@ import type {
 
 const requestStatus: Record<string, { label: string; className: string }> = {
   pending_review: {
-    label: "Pending Legal review",
+    label: "รอฝ่ายกฎหมายตรวจสอบ",
     className: "bg-amber-50 text-amber-700",
   },
-  resolved: { label: "Resolved", className: "bg-emerald-50 text-emerald-700" },
-  rejected: { label: "Rejected", className: "bg-red-50 text-red-700" },
+  resolved: { label: "ดำเนินการแล้ว", className: "bg-emerald-50 text-emerald-700" },
+  rejected: { label: "ไม่ดำเนินการ", className: "bg-red-50 text-red-700" },
 };
 
 const activityLabel: Record<PolicyActivityLog["type"], string> = {
-  document_acknowledged: "Customer acknowledged document",
-  customer_consent: "Customer consented",
-  merchant_change_requested: "Sent change request to Legal",
-  legal_document_updated: "Legal updated document",
+  document_acknowledged: "ลูกค้ารับทราบเอกสาร",
+  customer_consent: "ลูกค้าให้ความยินยอม",
+  merchant_change_requested: "ส่งคำขอแก้ไขให้ฝ่ายกฎหมาย",
+  legal_document_updated: "ฝ่ายกฎหมายแก้ไขเอกสาร",
 };
 
 export default function PolicyEdit() {
@@ -93,7 +95,7 @@ export default function PolicyEdit() {
           language: policyResponse.data!.language,
         }));
       } else {
-        loadError = policyResponse.error?.message || "Unable to load policy.";
+        loadError = policyResponse.error?.message || "ไม่สามารถโหลดนโยบายได้";
       }
       if (requestsResponse.success && requestsResponse.data)
         setRequests(requestsResponse.data);
@@ -127,7 +129,7 @@ export default function PolicyEdit() {
     });
     setSaving(false);
     if (!response.success || !response.data) {
-      setError(response.error?.message || "Unable to send request to Legal.");
+      setError(response.error?.message || "ไม่สามารถส่งคำขอให้ฝ่ายกฎหมายได้");
       return;
     }
     setRequests((current) => [response.data!, ...current]);
@@ -173,14 +175,14 @@ export default function PolicyEdit() {
   );
 
   return (
-    <div className="min-h-screen bg-[#f4f6f9] text-[#172033]">
+    <div className="merchant-flow min-h-screen bg-[#f4f6f9] text-[#172033]">
       <header className="flex h-16 items-center justify-between border-b border-gray-200 bg-white px-4 lg:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <Link
             to="/dashboard"
             state={{ view: "policies" }}
             className="grid h-8 w-8 shrink-0 place-items-center rounded border border-gray-200 text-gray-600 hover:bg-gray-50"
-            aria-label="Back to policies"
+            aria-label="กลับไปยังรายการนโยบาย"
           >
             <ArrowLeft className="h-4 w-4" />
           </Link>
@@ -223,27 +225,42 @@ export default function PolicyEdit() {
                   className={`h-8 rounded border px-3 text-xs font-semibold ${previewLanguage === language ? "border-emerald-700 bg-emerald-50 text-emerald-700" : "border-gray-200 text-gray-600"}`}
                 >
                   <Globe2 className="mr-1.5 inline h-3.5 w-3.5" />
-                  {language === "th" ? "Thai" : "English"}
+                  {language === "th" ? "ภาษาไทย" : "English"}
                 </button>
               ))}
             </div>
           </div>
           {html ? (
             <iframe
-              title={`${previewLanguage} policy preview`}
+              title={`ตัวอย่างนโยบายภาษา${previewLanguage === "th" ? "ไทย" : "อังกฤษ"}`}
               srcDoc={html}
               sandbox=""
               className="h-[calc(100vh-150px)] min-h-[620px] w-full border-0 bg-white"
             />
           ) : (
             <div className="grid min-h-[620px] place-items-center text-sm text-gray-400">
-              No {previewLanguage === "th" ? "Thai" : "English"} content
-              available.
+              ไม่มีเนื้อหาภาษา{previewLanguage === "th" ? "ไทย" : "อังกฤษ"}
             </div>
           )}
         </section>
 
         <aside className="space-y-4">
+          {policy.status === "rejected" && (
+            <section
+              role="status"
+              className="rounded-xl border border-red-200 bg-red-50 p-4"
+            >
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-red-800">
+                <AlertTriangle className="h-4 w-4" />
+                ฝ่ายกฎหมายไม่อนุมัตินโยบายนี้
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-red-900 whitespace-pre-wrap">
+                {policy.reviewComment
+                  ? "เหตุผล: " + policy.reviewComment
+                  : "ฝ่ายกฎหมายไม่ได้ระบุเหตุผลไว้"}
+              </p>
+            </section>
+          )}
           <form
             onSubmit={submit}
             className="rounded border border-gray-200 bg-white p-4"
@@ -363,7 +380,7 @@ export default function PolicyEdit() {
               className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded bg-emerald-700 text-sm font-semibold text-white disabled:opacity-60"
             >
               <Send className="h-4 w-4" />
-              {saving ? "Sending..." : "Send to Legal"}
+              {saving ? "กำลังส่ง..." : "ส่งให้ฝ่ายกฎหมาย"}
             </button>
           </form>
 
@@ -376,7 +393,7 @@ export default function PolicyEdit() {
             </div>
             {requests.length === 0 ? (
               <div className="px-4 py-8 text-center text-xs text-gray-400">
-                No change requests yet.
+                ยังไม่มีคำขอแก้ไข
               </div>
             ) : (
               <div className="max-h-96 divide-y divide-gray-100 overflow-y-auto">
@@ -388,7 +405,7 @@ export default function PolicyEdit() {
                     <article key={request.id} className="p-4">
                       <div className="flex items-start justify-between gap-3">
                         <p className="text-xs font-semibold text-gray-800">
-                          {request.sectionTitle || "General policy request"}
+                          {request.sectionTitle || "คำขอทั่วไปเกี่ยวกับนโยบาย"}
                         </p>
                         <span
                           className={`shrink-0 rounded px-2 py-1 text-[10px] font-semibold ${status.className}`}
@@ -428,16 +445,16 @@ export default function PolicyEdit() {
                   className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400"
                   aria-hidden="true"
                 />
-                <span className="sr-only">Search activity logs</span>
+                <span className="sr-only">ค้นหากิจกรรม</span>
                 <input
                   value={activitySearch}
                   onChange={(event) => setActivitySearch(event.target.value)}
                   className="h-9 w-full rounded border border-gray-200 pl-9 pr-3 text-xs"
-                  placeholder="Search ID, field, description"
+                  placeholder="ค้นหา รหัส ข้อมูล หรือรายละเอียด"
                 />
               </label>
               <label>
-                <span className="sr-only">Filter activity type</span>
+                <span className="sr-only">กรองตามประเภทกิจกรรม</span>
                 <select
                   value={activityType}
                   onChange={(event) =>
@@ -447,31 +464,31 @@ export default function PolicyEdit() {
                   }
                   className="h-9 w-full rounded border border-gray-200 bg-white px-3 text-xs text-gray-700"
                 >
-                  <option value="all">All activity types</option>
+                  <option value="all">กิจกรรมทุกประเภท</option>
                   <option value="document_acknowledged">
-                    Document acknowledgement
+                    การรับทราบเอกสาร
                   </option>
-                  <option value="customer_consent">Customer consent</option>
+                  <option value="customer_consent">ความยินยอมของลูกค้า</option>
                   <option value="merchant_change_requested">
-                    Merchant change request
+                    คำขอแก้ไขจากผู้ประกอบการ
                   </option>
                   <option value="legal_document_updated">
-                    Legal document update
+                    ฝ่ายกฎหมายแก้ไขเอกสาร
                   </option>
                 </select>
               </label>
               <p className="text-[11px] text-gray-400 sm:col-span-2">
-                Showing {filteredActivityLogs.length} of {activityLogs.length}{" "}
-                events
+                แสดง {filteredActivityLogs.length} จาก {activityLogs.length}{" "}
+                รายการ
               </p>
             </div>
             {activityLogs.length === 0 ? (
               <div className="px-4 py-8 text-center text-xs text-gray-400">
-                No activity recorded yet.
+                ยังไม่มีกิจกรรมที่บันทึกไว้
               </div>
             ) : filteredActivityLogs.length === 0 ? (
               <div className="px-4 py-8 text-center text-xs text-gray-400">
-                No activity matches these filters.
+                ไม่มีกิจกรรมที่ตรงกับตัวกรอง
               </div>
             ) : (
               <div className="max-h-96 overflow-auto">
@@ -479,9 +496,9 @@ export default function PolicyEdit() {
                   <thead className="sticky top-0 bg-gray-50 text-gray-500">
                     <tr>
                       <th className="px-3 py-2 font-semibold">ID</th>
-                      <th className="px-3 py-2 font-semibold">Related field</th>
-                      <th className="px-3 py-2 font-semibold">Description</th>
-                      <th className="px-3 py-2 font-semibold">Created</th>
+                      <th className="px-3 py-2 font-semibold">ข้อมูลที่เกี่ยวข้อง</th>
+                      <th className="px-3 py-2 font-semibold">รายละเอียด</th>
+                      <th className="px-3 py-2 font-semibold">เวลา</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">

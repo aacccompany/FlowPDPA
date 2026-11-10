@@ -97,9 +97,6 @@ export default function DocumentTemplates() {
   return (
     <div>
       <div className="mb-6">
-        <p className="mb-1 text-xs font-bold uppercase tracking-widest text-emerald-700">
-          PDPA document kit
-        </p>
         <h1 className="text-xl font-black text-gray-900">คลังแบบฟอร์ม PDPA</h1>
         <p className="mt-1 text-sm text-gray-500">
           เลือกแบบฟอร์มเริ่มต้น แล้วปรับข้อความให้ตรงกับกระบวนการจริงขององค์กร
