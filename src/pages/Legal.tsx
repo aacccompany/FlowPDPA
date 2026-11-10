@@ -39,7 +39,12 @@ const LegalPolicyEditor = lazy(() =>
 );
 
 type LegalView = "dashboard" | "submissions" | "changes";
-type PolicyStatus = "pending_review" | "approved" | "edited" | "rejected";
+type PolicyStatus =
+  | "pending_review"
+  | "approved"
+  | "edited"
+  | "rejected"
+  | "archived";
 type ChangeStatus = "pending_review" | "resolved" | "rejected";
 
 interface Submission {
@@ -51,7 +56,9 @@ interface Submission {
   ownerEmail: string;
   language: "th" | "en" | "both";
   status: PolicyStatus;
-  approvalDeadline: string;
+  typeName: string;
+  assignmentNote: string | null;
+  approvalDeadline: string | null;
   createdAt: string;
   contentTh: string;
   contentEn: string;
@@ -65,6 +72,9 @@ interface ChangeRequest {
   sectionTitle: string;
   requestedChange: string;
   requesterName: string;
+  priority: PolicyChangeRequest["priority"];
+  reason: string | null;
+  selectedText: string | null;
   status: ChangeStatus;
   createdAt: string;
   legalComment?: string | null;
@@ -78,8 +88,10 @@ const submissionFromApi = (policy: SavedPolicy): Submission => ({
   ownerName: policy.ownerName || policy.websiteName,
   ownerEmail: policy.ownerEmail,
   language: policy.language,
-  status: policy.status === "archived" ? "rejected" : policy.status,
-  approvalDeadline: policy.approvalDeadline || policy.updatedAt,
+  status: policy.status,
+  typeName: policy.typeName || policy.type,
+  assignmentNote: policy.assignmentNote || null,
+  approvalDeadline: policy.approvalDeadline || null,
   createdAt: policy.createdAt,
   contentTh: normalizePolicyMarkdown(
     policy.contentByLanguage?.th || policy.htmlContentByLanguage.th || "",
@@ -94,8 +106,11 @@ const changeFromApi = (request: PolicyChangeRequest): ChangeRequest => ({
   id: request.id,
   policySlug: request.policySlug,
   websiteName: request.websiteName || request.policySlug,
-  sectionTitle: request.sectionTitle || "-",
+  sectionTitle: request.sectionTitle || "ไม่ระบุหัวข้อ",
   requestedChange: request.requestedChange,
+  priority: request.priority,
+  reason: request.reason ?? null,
+  selectedText: request.selectedText ?? null,
   requesterName: request.requesterName || request.requesterEmail,
   status: request.status,
   createdAt: request.createdAt,
@@ -107,12 +122,22 @@ const statusMeta: Record<
   PolicyStatus | ChangeStatus,
   { label: string; color: string; bg: string }
 > = {
-  pending_review: { label: "รอตรวจสอบ", color: "#a86207", bg: "#fff6e5" },
-  approved: { label: "อนุมัติแล้ว", color: "#087a5b", bg: "#e8f4ef" },
+  pending_review: { label: "รอตรวจสอบ", color: "#8a4f05", bg: "#fff6e5" },
+  approved: { label: "อนุมัติแล้ว", color: "#066a4f", bg: "#e8f4ef" },
   edited: { label: "แก้ไขแล้ว", color: "#2457a6", bg: "#eaf0fa" },
   rejected: { label: "ไม่อนุมัติ", color: "#b42318", bg: "#fdf0ef" },
-  resolved: { label: "ดำเนินการแล้ว", color: "#087a5b", bg: "#e8f4ef" },
+  resolved: { label: "ดำเนินการแล้ว", color: "#066a4f", bg: "#e8f4ef" },
+  archived: { label: "เก็บถาวร", color: "#475467", bg: "#f2f4f7" },
 };
+
+const priorityLabel: Record<PolicyChangeRequest["priority"], string> = {
+  low: "ต่ำ",
+  normal: "ปกติ",
+  high: "สูง",
+  urgent: "ด่วนมาก",
+};
+const isHighPriority = (priority: PolicyChangeRequest["priority"]) =>
+  priority === "high" || priority === "urgent";
 
 const formatDate = (value: string) =>
   new Date(value).toLocaleString("th-TH", {
@@ -136,7 +161,15 @@ function StatusBadge({ status }: { status: PolicyStatus | ChangeStatus }) {
   );
 }
 
-const LEGAL_PAGE_SIZE = 3;
+const LEGAL_PAGE_SIZE = 10;
+
+// Soonest deadline first; items with no deadline go last.
+const byUrgency = (a: Submission, b: Submission) => {
+  const ta = a.approvalDeadline ? new Date(a.approvalDeadline).getTime() : Infinity;
+  const tb = b.approvalDeadline ? new Date(b.approvalDeadline).getTime() : Infinity;
+  if (ta === tb) return 0;
+  return ta < tb ? -1 : 1;
+};
 
 function usePagination<T>(rows: T[], pageSize = LEGAL_PAGE_SIZE) {
   const [requestedPage, setRequestedPage] = useState(1);
@@ -206,9 +239,15 @@ function Pagination({
 }
 
 function Deadline({ row }: { row: Submission }) {
+  if (!row.approvalDeadline)
+    return (
+      <span className="text-xs text-gray-500 whitespace-nowrap">
+        ไม่ได้กำหนด
+      </span>
+    );
   if (row.status !== "pending_review")
     return (
-      <span className="text-xs text-gray-400">
+      <span className="text-xs text-gray-500 whitespace-nowrap">
         {formatDate(row.approvalDeadline)}
       </span>
     );
@@ -221,15 +260,15 @@ function Deadline({ row }: { row: Submission }) {
     : "เหลือ " + hours + " ชม.";
   return (
     <span
-      className="inline-flex items-center gap-1.5 text-xs font-semibold"
+      className="inline-flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap"
       style={{
-        color: overdue ? "#b42318" : hours <= 24 ? "#a86207" : "#475467",
+        color: overdue ? "#b42318" : hours <= 24 ? "#8a4f05" : "#475467",
       }}
     >
       {overdue ? (
-        <AlertTriangle className="w-3.5 h-3.5" />
+        <AlertTriangle className="w-4 h-4" />
       ) : (
-        <CalendarClock className="w-3.5 h-3.5" />
+        <CalendarClock className="w-4 h-4" />
       )}
       {text}
     </span>
@@ -242,12 +281,14 @@ function Sidebar({
   open,
   close,
   logout,
+  reviewer,
 }: {
   view: LegalView;
   changeView: (view: LegalView) => void;
   open: boolean;
   close: () => void;
   logout: () => void;
+  reviewer?: LegalDashboard["reviewer"];
 }) {
   const items = [
     { id: "dashboard" as const, label: "ภาพรวม", Icon: BarChart3 },
@@ -279,13 +320,9 @@ function Sidebar({
             <p className="text-sm font-extrabold" style={{ color: "#ffffff" }}>
               Flow<span style={{ color: "#4ade80" }}>PDPA</span>
             </p>
-            <p className="text-[10px]" style={{ color: "#475569" }}>
-              พื้นที่ทำงานฝ่ายกฎหมาย
-            </p>
           </div>
         </div>
         <nav className="portal-nav">
-          <p className="portal-nav-label">พื้นที่ทำงาน</p>
           {items.map(({ id, label, Icon }) => (
             <button
               key={id}
@@ -304,7 +341,7 @@ function Sidebar({
         <div className="portal-account">
           <div className="flex items-center gap-3 mb-3">
             <span
-              className="w-8 h-8 grid place-items-center rounded"
+              className="w-8 h-8 grid place-items-center rounded-[var(--radius-control)]"
               style={{
                 backgroundColor: "rgba(8,122,91,0.25)",
                 color: "#4ade80",
@@ -313,12 +350,17 @@ function Sidebar({
               <UserRound className="w-4 h-4" />
             </span>
             <div className="min-w-0">
-              <p className="text-xs font-semibold" style={{ color: "#e2e8f0" }}>
-                ผู้ตรวจสอบฝ่ายกฎหมาย
+              <p
+                className="text-sm font-semibold truncate"
+                style={{ color: "#e2e8f0" }}
+              >
+                {reviewer?.name || "ผู้ตรวจสอบฝ่ายกฎหมาย"}
               </p>
-              <p className="text-[11px] truncate" style={{ color: "#475569" }}>
-                legal@flowpdpa.co.th
-              </p>
+              {reviewer?.email && (
+                <p className="text-xs truncate" style={{ color: "#94a3b8" }}>
+                  {reviewer.email}
+                </p>
+              )}
             </div>
           </div>
           <button className="portal-nav-item" onClick={logout}>
@@ -334,15 +376,24 @@ function Sidebar({
 function SubmissionTable({
   rows,
   select,
+  searching = false,
 }: {
   rows: Submission[];
   select: (row: Submission) => void;
+  searching?: boolean;
 }) {
   if (!rows.length)
     return (
       <div className="portal-empty">
-        <FileText className="w-7 h-7 mx-auto mb-3" />
-        <p className="text-sm">ไม่มีรายการในคิวนี้</p>
+        <FileText className="w-6 h-6 mx-auto mb-3" />
+        <p className="text-sm font-semibold text-gray-700">
+          {searching ? "ไม่พบรายการที่ตรงกับคำค้น" : "ไม่มีรายการในคิวนี้"}
+        </p>
+        <p className="text-xs mt-1">
+          {searching
+            ? "ลองค้นหาด้วยชื่อเว็บไซต์ โดเมน หรือชื่อผู้ประกอบการ"
+            : "เมื่อมีนโยบายใหม่ที่ได้รับมอบหมาย จะแสดงที่นี่"}
+        </p>
       </div>
     );
   return (
@@ -362,29 +413,34 @@ function SubmissionTable({
           <tr key={row.id}>
             <td>
               <p className="font-semibold">{row.websiteName}</p>
-              <p className="text-xs text-gray-400 mt-1">
-                {row.domain} · Privacy + Cookies Policy
+              <p className="text-xs text-gray-500 mt-1">
+                {row.domain} · {row.typeName}
               </p>
+              {row.assignmentNote && (
+                <p className="text-xs text-gray-700 mt-1">
+                  หมายเหตุ: {row.assignmentNote}
+                </p>
+              )}
             </td>
-            <td>
+            <td data-label="ผู้ประกอบการ">
               <p>{row.ownerName}</p>
-              <p className="text-xs text-gray-400">{row.ownerEmail}</p>
+              <p className="text-xs text-gray-500">{row.ownerEmail}</p>
             </td>
-            <td>
+            <td data-label="ภาษา">
               <span className="inline-flex items-center gap-1.5 text-xs">
-                <Languages className="w-3.5 h-3.5 text-gray-400" />
+                <Languages className="w-4 h-4 text-gray-500" />
                 {row.language.toUpperCase()}
               </span>
             </td>
-            <td>
+            <td data-label="กำหนดส่ง">
               <Deadline row={row} />
             </td>
-            <td>
+            <td data-label="สถานะ">
               <StatusBadge status={row.status} />
             </td>
             <td>
               <button className="portal-button" onClick={() => select(row)}>
-                ตรวจสอบ <ChevronRight className="w-3.5 h-3.5" />
+                ตรวจสอบ <ChevronRight className="w-4 h-4" />
               </button>
             </td>
           </tr>
@@ -399,28 +455,35 @@ function Dashboard({
   changes,
   summary,
   openQueue,
+  openChanges,
   select,
 }: {
   submissions: Submission[];
   changes: ChangeRequest[];
   summary?: LegalDashboard["summary"];
   openQueue: () => void;
+  openChanges: () => void;
   select: (row: Submission) => void;
 }) {
-  const pending = submissions.filter((row) => row.status === "pending_review");
+  const pending = submissions
+    .filter((row) => row.status === "pending_review")
+    .sort(byUrgency);
+  const pendingChanges = changes.filter((row) => row.status === "pending_review");
   const stats = [
     {
       label: "รายการรอตรวจสอบ",
       value: summary?.pendingPolicies ?? pending.length,
       Icon: CalendarClock,
-      color: "#a86207",
+      color: "#8a4f05",
     },
     {
       label: "เกินกำหนด",
       value:
         summary?.overduePolicies ??
         pending.filter(
-          (row) => new Date(row.approvalDeadline).getTime() < currentTime(),
+          (row) =>
+            !!row.approvalDeadline &&
+            new Date(row.approvalDeadline).getTime() < currentTime(),
         ).length,
       Icon: AlertTriangle,
       color: "#b42318",
@@ -450,46 +513,93 @@ function Dashboard({
         description="นโยบายที่ได้รับมอบหมายและคำขอแก้ไขจากลูกค้า"
       />
       <section className="portal-kpis">
-        {stats.map(({ label, value, Icon, color }) => (
+        {stats.map(({ label, value, color }) => (
           <div className="portal-kpi" key={label}>
-            <Icon className="w-4 h-4 mb-4" style={{ color }} />
-            <p className="text-2xl font-semibold">{value}</p>
-            <p className="text-xs text-gray-500 mt-1">{label}</p>
+            <p
+              className="text-3xl font-semibold tabular-nums"
+              style={{ color: color === "#b42318" && value > 0 ? color : undefined }}
+            >
+              {value}
+            </p>
+            <p className="text-sm text-gray-600 mt-1">{label}</p>
           </div>
         ))}
       </section>
-      <section className="portal-panel">
-        <div className="portal-panel-head">
-          <div>
-            <h2 className="text-sm font-semibold">คิวเร่งด่วน</h2>
-            <p className="text-xs text-gray-400 mt-1">
-              เรียงตามกำหนดส่งที่ใกล้ที่สุด
-            </p>
+      <div className="portal-dashboard-grid">
+        <section className="portal-panel">
+          <div className="portal-panel-head">
+            <div>
+              <h2 className="text-base font-semibold">คิวเร่งด่วน</h2>
+              <p className="text-xs text-gray-500 mt-1">
+                เรียงตามกำหนดส่งที่ใกล้ที่สุด
+              </p>
+            </div>
+            <button className="portal-button" onClick={openQueue}>
+              ดูทั้งหมด <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
-          <button className="portal-button" onClick={openQueue}>
-            ดูทั้งหมด <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-        <div className="portal-table-wrap">
-          <SubmissionTable rows={pending.slice(0, 4)} select={select} />
-        </div>
-      </section>
-    </>
+          <div className="portal-table-wrap">
+            <SubmissionTable rows={pending.slice(0, 4)} select={select} />
+          </div>
+        </section>
+        <section className="portal-panel self-start">
+          <div className="portal-panel-head">
+            <div>
+              <h2 className="text-base font-semibold">คำขอแก้ไขที่รอดำเนินการ</h2>
+              <p className="text-xs text-gray-500 mt-1">
+                จากผู้ประกอบการ รอฝ่ายกฎหมายตอบกลับ
+              </p>
+            </div>
+          </div>
+          {pendingChanges.length === 0 ? (
+            <div className="portal-empty">
+              <MessageSquareText className="w-6 h-6 mx-auto mb-3" />
+              <p className="text-sm font-semibold text-gray-700">ไม่มีคำขอที่รอดำเนินการ</p>
+            </div>
+          ) : (
+            <ul>
+              {pendingChanges.slice(0, 4).map((row) => (
+                <li key={row.id} className="portal-list-row">
+                  <p className="text-sm font-semibold">{row.websiteName}</p>
+                  <p className="text-sm text-gray-700 mt-1 line-clamp-2">
+                    {row.requestedChange}
+                  </p>
+                  {isHighPriority(row.priority) && (
+                    <p
+                      className="text-xs font-semibold mt-1"
+                      style={{ color: "#b42318" }}
+                    >
+                      ความสำคัญ: {priorityLabel[row.priority]}
+                    </p>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1.5">
+                    {row.requesterName} · {formatDate(row.createdAt)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="portal-panel-foot">
+            <button className="portal-button" onClick={openChanges}>
+              ดูคำขอทั้งหมด <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </section>
+      </div>
+  </>
   );
 }
 
 function PageTitle({
-  eyebrow,
   title,
   description,
 }: {
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
   description: string;
 }) {
   return (
     <header className="mb-6">
-      <p className="text-[11px] font-medium text-green-700 mb-2">{eyebrow}</p>
       <h1 className="text-2xl font-bold">{title}</h1>
       <p className="text-sm text-gray-500 mt-1">{description}</p>
     </header>
@@ -505,13 +615,19 @@ function Queue({
 }) {
   const [filter, setFilter] = useState<"all" | PolicyStatus>("pending_review");
   const [query, setQuery] = useState("");
-  const rows = submissions.filter(
-    (row) =>
-      (filter === "all" || row.status === filter) &&
-      (row.websiteName + row.domain + row.ownerName)
-        .toLowerCase()
-        .includes(query.toLowerCase()),
-  );
+  const rows = submissions
+    .filter(
+      (row) =>
+        (filter === "all" || row.status === filter) &&
+        (row.websiteName + row.domain + row.ownerName)
+          .toLowerCase()
+          .includes(query.toLowerCase()),
+    )
+    .sort(byUrgency);
+  const countOf = (item: "all" | PolicyStatus) =>
+    item === "all"
+      ? submissions.length
+      : submissions.filter((row) => row.status === item).length;
   const pagination = usePagination(rows);
   return (
     <>
@@ -531,10 +647,11 @@ function Queue({
             onClick={() => setFilter(item)}
           >
             {item === "all" ? "ทั้งหมด" : statusMeta[item].label}
+            <span className="portal-count">{countOf(item)}</span>
           </button>
         ))}
         <div className="relative ml-auto w-full sm:w-auto">
-          <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+          <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-500" />
           <input
             className="portal-search"
             value={query}
@@ -545,7 +662,11 @@ function Queue({
       </div>
       <section className="portal-panel">
         <div className="portal-table-wrap">
-          <SubmissionTable rows={pagination.pageRows} select={select} />
+          <SubmissionTable
+            rows={pagination.pageRows}
+            select={select}
+            searching={query.trim() !== ""}
+          />
         </div>
         <Pagination {...pagination} total={rows.length} />
       </section>
@@ -591,12 +712,17 @@ function Changes({
               onClick={() => setFilter(item)}
             >
               {item === "all" ? "ทั้งหมด" : statusMeta[item].label}
+              <span className="portal-count">
+                {item === "all"
+                  ? rows.length
+                  : rows.filter((row) => row.status === item).length}
+              </span>
             </button>
           ),
         )}
       </div>
       {error && (
-        <p className="mb-4 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+        <p role="alert" className="mb-4 rounded-[var(--radius-control)] border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
         </p>
       )}
@@ -618,17 +744,32 @@ function Changes({
                 <tr key={row.id}>
                   <td>
                     <p className="font-semibold">{row.websiteName}</p>
-                    <p className="text-xs text-gray-400">{row.policySlug}</p>
+                    <p className="text-xs text-gray-500">{row.policySlug}</p>
                   </td>
-                  <td>{row.sectionTitle}</td>
-                  <td className="max-w-sm">{row.requestedChange}</td>
-                  <td>
+                  <td data-label="หัวข้อ">{row.sectionTitle}</td>
+                  <td className="max-w-sm" data-label="คำขอ">
+                    <p>{row.requestedChange}</p>
+                    {row.reason && (
+                      <p className="text-xs text-gray-600 mt-1">
+                        เหตุผล: {row.reason}
+                      </p>
+                    )}
+                    <p
+                      className="text-xs font-semibold mt-1"
+                      style={{
+                        color: isHighPriority(row.priority) ? "#b42318" : "#4b5563",
+                      }}
+                    >
+                      ความสำคัญ: {priorityLabel[row.priority]}
+                    </p>
+                  </td>
+                  <td data-label="ผู้ขอ">
                     {row.requesterName}
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-gray-500">
                       {formatDate(row.createdAt)}
                     </p>
                   </td>
-                  <td>
+                  <td data-label="สถานะ">
                     <StatusBadge status={row.status} />
                   </td>
                   <td>
@@ -637,7 +778,7 @@ function Changes({
                       disabled={openingId === row.id}
                       onClick={() => void openEditor(row)}
                     >
-                      <FileEdit className="w-3.5 h-3.5" />
+                      <FileEdit className="w-4 h-4" />
                       {openingId === row.id
                         ? "กำลังเปิด..."
                         : row.status === "pending_review"
@@ -689,7 +830,13 @@ function Editor({
     Record<string, string>
   >({});
   const [requestSavingId, setRequestSavingId] = useState<string | null>(null);
+  const [confirmLeave, setConfirmLeave] = useState(false);
   const [requestError, setRequestError] = useState("");
+  const dirty =
+    draft.contentTh !== initial.contentTh ||
+    draft.contentEn !== initial.contentEn ||
+    draft.reviewComment !== initial.reviewComment ||
+    decision !== null;
   const content = language === "th" ? draft.contentTh : draft.contentEn;
   const setContent = (value: string) =>
     setDraft((current) =>
@@ -699,7 +846,7 @@ function Editor({
     );
   const submit = async () => {
     if (decision === "rejected" && !draft.reviewComment.trim()) {
-      setError("A review comment is required when rejecting a policy.");
+      setError("กรุณากรอกความเห็นก่อนไม่อนุมัตินโยบาย");
       return;
     }
     setSaving(true);
@@ -712,7 +859,7 @@ function Editor({
     const comment = requestComments[id]?.trim() || "";
     if (!comment) {
       setRequestError(
-        "A legal comment is required to resolve or reject a request.",
+        "กรุณากรอกเหตุผลก่อนไม่ดำเนินการตามคำขอ",
       );
       return;
     }
@@ -724,7 +871,20 @@ function Editor({
   };
   return (
     <>
-      <button className="portal-button mb-5" onClick={back}>
+      <ConfirmDialog
+        open={confirmLeave}
+        title="ออกโดยไม่บันทึก?"
+        description="การแก้ไขและความเห็นที่ยังไม่ได้บันทึกจะหายไป"
+        confirmLabel="ออกโดยไม่บันทึก"
+        cancelLabel="กลับไปแก้ไขต่อ"
+        tone="destructive"
+        onConfirm={back}
+        onCancel={() => setConfirmLeave(false)}
+      />
+      <button
+        className="portal-button mb-5"
+        onClick={() => (dirty ? setConfirmLeave(true) : back())}
+      >
         <ArrowLeft className="w-4 h-4" />
         กลับไปยังคิว
       </button>
@@ -732,7 +892,7 @@ function Editor({
         <section className="portal-panel flex-1 min-w-0">
           <div className="portal-panel-head">
             <div>
-              <p className="text-xs text-gray-400">{draft.slug}</p>
+              <p className="text-xs text-gray-500">{draft.slug}</p>
               <h1 className="text-lg font-semibold mt-1">
                 {draft.websiteName}
               </h1>
@@ -753,14 +913,14 @@ function Editor({
                     data-active={language === item}
                     onClick={() => setLanguage(item)}
                   >
-                    <Languages className="w-3.5 h-3.5" />
-                    {item === "th" ? "Thai" : "English"}
+                    <Languages className="w-4 h-4" />
+                    {item === "th" ? "ภาษาไทย" : "English"}
                   </button>
                 ))}
             </div>
             <Suspense
               fallback={
-                <div className="legal-editor-loading">Loading editor...</div>
+                <div className="legal-editor-loading">กำลังโหลดตัวแก้ไข...</div>
               }
             >
               <LegalPolicyEditor
@@ -771,40 +931,122 @@ function Editor({
             </Suspense>
           </div>
         </section>
-        <aside className="w-full xl:w-80 space-y-4">
+        <aside className="w-full xl:w-96 space-y-4 xl:sticky xl:top-20 xl:self-start xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto">
           <section className="portal-panel p-5">
-            <h2 className="text-sm font-semibold mb-4">Submission details</h2>
+            <h2 className="text-base font-semibold">ผลการพิจารณา</h2>
+            <p className="mt-1 mb-3 text-xs leading-5 text-gray-600">
+              บันทึกการแก้ไขเป็นฉบับร่าง หรือเลือกผลการพิจารณาของนโยบายทั้งฉบับ
+            </p>
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              {[
+                {
+                  id: "approved" as const,
+                  label: "อนุมัติ",
+                  Icon: ShieldCheck,
+                },
+                {
+                  id: "rejected" as const,
+                  label: "ไม่อนุมัติ",
+                  Icon: XCircle,
+                },
+              ].map(({ id, label, Icon }) => (
+                <button
+                  key={id}
+                  className="portal-filter justify-center px-1"
+                  data-active={decision === id}
+                  data-tone={id === "rejected" ? "danger" : undefined}
+                  aria-pressed={decision === id}
+                  onClick={() =>
+                    setDecision((current) => (current === id ? null : id))
+                  }
+                >
+                  <Icon className="w-4 h-4" />
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p
+              className="mb-4 text-xs leading-5 text-gray-600"
+              aria-live="polite"
+            >
+              {decision === "approved"
+                ? "นโยบายจะถูกอนุมัติ และคำขอแก้ไขที่รอดำเนินการจะถูกปิดอัตโนมัติ"
+                : decision === "rejected"
+                  ? "ต้องกรอกความเห็นก่อนบันทึก"
+                  : "ยังไม่ได้เลือกผลการพิจารณา ระบบจะบันทึกเฉพาะการแก้ไขเป็นฉบับร่าง"}
+            </p>
+            <label
+              htmlFor="legal-review-comment"
+              className="text-sm font-semibold text-gray-700"
+            >
+              ความเห็นของฝ่ายกฎหมาย{" "}
+              {decision === "rejected" && (
+                <span className="text-red-600">*</span>
+              )}
+            </label>
+            <textarea
+              id="legal-review-comment"
+              className="w-full min-h-24 mt-2 border border-gray-300 rounded-[var(--radius-control)] p-3 text-sm"
+              value={draft.reviewComment}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  reviewComment: event.target.value,
+                }))
+              }
+              placeholder="เหตุผล ข้อสังเกตทางกฎหมาย หรือคำแนะนำถึงผู้ประกอบการ"
+            />
+            {error && (
+              <p role="alert" className="mt-3 text-sm text-red-700">
+                {error}
+              </p>
+            )}
+            <button
+              className="portal-button primary w-full mt-4"
+              disabled={saving}
+              onClick={() => void submit()}
+            >
+              {saving
+                ? "กำลังบันทึก..."
+                : decision === "approved"
+                  ? "อนุมัตินโยบาย"
+                  : decision === "rejected"
+                    ? "ไม่อนุมัตินโยบาย"
+                    : "บันทึกฉบับร่าง"}
+            </button>
+          </section>
+          <section className="portal-panel p-5">
+            <h2 className="text-base font-semibold mb-2">รายละเอียดคำขอ</h2>
             {[
-              ["Merchant", draft.ownerName],
-              ["Contact", draft.ownerEmail],
-              ["Domain", draft.domain],
-              ["Created", formatDate(draft.createdAt)],
+              ["ผู้ประกอบการ", draft.ownerName],
+              ["อีเมลติดต่อ", draft.ownerEmail],
+              ["โดเมน", draft.domain],
+              ["วันที่ส่ง", formatDate(draft.createdAt)],
             ].map((pair) => (
               <div
                 className="py-2.5 border-b border-gray-100 last:border-0"
                 key={pair[0]}
               >
-                <p className="text-[10px] text-gray-400 uppercase">{pair[0]}</p>
-                <p className="text-xs mt-1 break-words">{pair[1]}</p>
+                <p className="text-xs text-gray-500">{pair[0]}</p>
+                <p className="text-sm mt-0.5 break-words">{pair[1]}</p>
               </div>
             ))}
           </section>
           {changeRequests.length > 0 && (
             <section className="portal-panel p-5">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold">
-                  Merchant change requests
+                <h2 className="text-base font-semibold">
+                  คำขอแก้ไขจากผู้ประกอบการ
                 </h2>
-                <span className="text-[11px] text-gray-400">
+                <span className="text-xs text-gray-500">
                   {changeRequests.length}
                 </span>
               </div>
-              <p className="mt-1 mb-4 text-[11px] leading-4 text-gray-500">
-                Pending requests are resolved automatically when you approve the
-                policy.
+              <p className="mt-1 mb-4 text-xs leading-5 text-gray-600">
+                คำขอที่รอดำเนินการจะถูกปิดอัตโนมัติเมื่อคุณอนุมัตินโยบาย
               </p>
               {requestError && (
-                <p className="mb-3 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                <p role="alert" className="mb-3 rounded-[var(--radius-control)] border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                   {requestError}
                 </p>
               )}
@@ -816,25 +1058,41 @@ function Editor({
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <p className="text-[10px] uppercase text-gray-400">
-                          Section
-                        </p>
-                        <p className="mt-1 text-xs font-semibold">
+                        <p className="text-xs text-gray-500">หัวข้อ</p>
+                        <p className="mt-0.5 text-sm font-semibold">
                           {request.sectionTitle}
                         </p>
                       </div>
                       <StatusBadge status={request.status} />
                     </div>
-                    <p className="mt-3 text-xs leading-5 text-gray-700 whitespace-pre-wrap">
+                    <p className="mt-3 text-sm leading-6 text-gray-700 whitespace-pre-wrap">
                       {request.requestedChange}
                     </p>
-                    <p className="mt-2 text-[11px] text-gray-400">
+                    {request.selectedText && (
+                      <blockquote className="mt-2 border-l border-gray-300 pl-3 text-xs leading-5 text-gray-600 line-clamp-3">
+                        {request.selectedText}
+                      </blockquote>
+                    )}
+                    {request.reason && (
+                      <p className="mt-2 text-xs text-gray-600">
+                        เหตุผล: {request.reason}
+                      </p>
+                    )}
+                    <p
+                      className="mt-2 text-xs font-semibold"
+                      style={{
+                        color: isHighPriority(request.priority) ? "#b42318" : "#4b5563",
+                      }}
+                    >
+                      ความสำคัญ: {priorityLabel[request.priority]}
+                    </p>
+                    <p className="mt-2 text-xs text-gray-500">
                       {request.requesterName} · {formatDate(request.createdAt)}
                     </p>
                     {request.status === "pending_review" ? (
                       <div className="mt-3">
                         <textarea
-                          className="w-full min-h-20 border border-gray-300 rounded p-2.5 text-xs"
+                          className="w-full min-h-20 border border-gray-300 rounded-[var(--radius-control)] p-2.5 text-sm"
                           value={requestComments[request.id] || ""}
                           onChange={(event) =>
                             setRequestComments((current) => ({
@@ -842,19 +1100,19 @@ function Editor({
                               [request.id]: event.target.value,
                             }))
                           }
-                          placeholder="Required reason for declining this request"
+                          placeholder="ระบุเหตุผลที่ไม่ดำเนินการตามคำขอนี้ (จำเป็น)"
                         />
                         <button
                           className="portal-button danger justify-center w-full mt-2"
                           disabled={requestSavingId === request.id}
                           onClick={() => void declineChangeRequest(request.id)}
                         >
-                          Decline request
+                          ไม่ดำเนินการตามคำขอ
                         </button>
                       </div>
                     ) : (
                       <p className="mt-3 border-l-2 border-gray-200 pl-3 text-xs text-gray-500">
-                        {request.legalComment || "No legal comment."}
+                        {request.legalComment || "ไม่มีความเห็นจากฝ่ายกฎหมาย"}
                       </p>
                     )}
                   </article>
@@ -862,70 +1120,6 @@ function Editor({
               </div>
             </section>
           )}
-          <section className="portal-panel p-5">
-            <h2 className="text-sm font-semibold">Policy decision</h2>
-            <p className="mt-1 mb-3 text-[11px] leading-4 text-gray-500">
-              Save your edits as a draft, or decide the status of the whole
-              policy.
-            </p>
-            <div className="grid grid-cols-2 gap-2 mb-4">
-              {[
-                {
-                  id: "approved" as const,
-                  label: "Approve policy",
-                  Icon: ShieldCheck,
-                },
-                {
-                  id: "rejected" as const,
-                  label: "Reject policy",
-                  Icon: XCircle,
-                },
-              ].map(({ id, label, Icon }) => (
-                <button
-                  key={id}
-                  className="portal-filter justify-center px-1"
-                  data-active={decision === id}
-                  onClick={() =>
-                    setDecision((current) => (current === id ? null : id))
-                  }
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  {label}
-                </button>
-              ))}
-            </div>
-            <label className="text-xs font-semibold text-gray-600">
-              Review comment{" "}
-              {decision === "rejected" && (
-                <span className="text-red-600">*</span>
-              )}
-            </label>
-            <textarea
-              className="w-full min-h-24 mt-2 border border-gray-300 rounded p-3 text-sm"
-              value={draft.reviewComment}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  reviewComment: event.target.value,
-                }))
-              }
-              placeholder="Reason, legal notes, or merchant instructions"
-            />
-            {error && <p className="mt-3 text-xs text-red-700">{error}</p>}
-            <button
-              className="portal-button primary w-full mt-4"
-              disabled={saving}
-              onClick={() => void submit()}
-            >
-              {saving
-                ? "Saving..."
-                : decision === "approved"
-                  ? "Approve policy"
-                  : decision === "rejected"
-                    ? "Reject policy"
-                    : "Save draft"}
-            </button>
-          </section>
         </aside>
       </div>
     </>
@@ -942,6 +1136,7 @@ export default function Legal() {
   const [dashboard, setDashboard] = useState<LegalDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [notice, setNotice] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedReturnView, setSelectedReturnView] =
     useState<LegalView>("submissions");
@@ -979,6 +1174,11 @@ export default function Legal() {
       active = false;
     };
   }, []);
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(""), 5000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
   const select = async (row: Submission) => {
     setLoadError("");
     const response = await api.legal.getSubmission(row.slug);
@@ -1053,6 +1253,13 @@ export default function Legal() {
     }
     setSelectedId(null);
     setView(selectedReturnView);
+    setNotice(
+      decision === "approved"
+        ? "อนุมัตินโยบายแล้ว"
+        : decision === "rejected"
+          ? "บันทึกผลไม่อนุมัติแล้ว"
+          : "บันทึกฉบับร่างแล้ว",
+    );
     return null;
   };
   const updateChange = async (
@@ -1070,15 +1277,16 @@ export default function Legal() {
     setChanges((current) =>
       current.map((row) => (row.id === saved.id ? saved : row)),
     );
+    setNotice("บันทึกผลคำขอแก้ไขแล้ว");
     return null;
   };
   return (
-    <div className="portal-shell">
+    <div className="portal-shell portal-shell-legal">
       <ConfirmDialog
         open={confirmLogout}
-        title="Sign out of Legal Portal?"
-        description="You will need to sign in again to continue reviewing policies."
-        confirmLabel="Sign out"
+        title="ออกจากระบบฝ่ายกฎหมาย?"
+        description="คุณจะต้องเข้าสู่ระบบอีกครั้งเพื่อตรวจสอบนโยบายต่อ"
+        confirmLabel="ออกจากระบบ"
         onConfirm={confirmSignOut}
         onCancel={() => setConfirmLogout(false)}
       />
@@ -1088,6 +1296,7 @@ export default function Legal() {
         open={menuOpen}
         close={() => setMenuOpen(false)}
         logout={logout}
+        reviewer={dashboard?.reviewer}
       />
       <div className="portal-main">
         <header className="portal-topbar">
@@ -1095,28 +1304,45 @@ export default function Legal() {
             <button
               className="portal-button portal-mobile-menu px-2"
               onClick={() => setMenuOpen(true)}
-              aria-label="Open navigation"
+              aria-label="เปิดเมนูนำทาง"
             >
               <Menu className="w-4 h-4" />
             </button>
             <div>
-              <p className="text-sm font-semibold">Legal Review Portal</p>
-              <p className="text-[11px] text-gray-400">Assigned workload</p>
+              <p className="text-sm font-semibold">พื้นที่ตรวจสอบทางกฎหมาย</p>
             </div>
           </div>
           <span className="inline-flex items-center gap-2 text-xs text-gray-500">
             <ShieldCheck className="w-4 h-4 text-green-700" />
-            Legal reviewer
+            ผู้ตรวจสอบ
           </span>
         </header>
         <main className="portal-content portal-content-legal">
+          {notice && (
+            <div
+              role="status"
+              className="mb-4 flex items-center gap-2 rounded-[var(--radius-control)] border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              {notice}
+            </div>
+          )}
           {loadError && (
-            <div className="mb-4 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-              {loadError}
+            <div
+              role="alert"
+              className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-control)] border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+            >
+              <span>{loadError}</span>
+              <button
+                className="portal-button"
+                onClick={() => window.location.reload()}
+              >
+                ลองอีกครั้ง
+              </button>
             </div>
           )}
           {loading ? (
-            <div className="portal-empty">Loading legal workspace...</div>
+            <div className="portal-empty">กำลังโหลดข้อมูล...</div>
           ) : selected ? (
             <Editor
               initial={selected}
@@ -1133,6 +1359,7 @@ export default function Legal() {
               changes={changes}
               summary={dashboard?.summary}
               openQueue={() => setView("submissions")}
+              openChanges={() => setView("changes")}
               select={(row) => {
                 void select(row);
               }}
