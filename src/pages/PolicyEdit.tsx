@@ -202,7 +202,7 @@ export default function PolicyEdit() {
             rel="noreferrer"
             className="flex h-9 items-center gap-2 rounded border border-gray-200 px-3 text-xs font-semibold text-gray-700 hover:bg-gray-50"
           >
-            <ExternalLink className="h-3.5 w-3.5" />
+            <ExternalLink className="h-4 w-4" />
             หน้าสาธารณะ
           </a>
         )}
@@ -224,7 +224,7 @@ export default function PolicyEdit() {
                   onClick={() => setPreviewLanguage(language)}
                   className={`h-8 rounded border px-3 text-xs font-semibold ${previewLanguage === language ? "border-emerald-700 bg-emerald-50 text-emerald-700" : "border-gray-200 text-gray-600"}`}
                 >
-                  <Globe2 className="mr-1.5 inline h-3.5 w-3.5" />
+                  <Globe2 className="mr-1.5 inline h-4 w-4" />
                   {language === "th" ? "ภาษาไทย" : "English"}
                 </button>
               ))}
@@ -442,7 +442,7 @@ export default function PolicyEdit() {
             <div className="grid gap-2 border-b border-gray-100 p-3 sm:grid-cols-[minmax(0,1fr)_180px]">
               <label className="relative block">
                 <Search
-                  className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400"
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
                   aria-hidden="true"
                 />
                 <span className="sr-only">ค้นหากิจกรรม</span>

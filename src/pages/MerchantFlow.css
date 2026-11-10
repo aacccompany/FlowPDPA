@@ -76,3 +76,17 @@
   .merchant-flow .bg-white.rounded-2xl,
   .merchant-flow :is(section, form, aside > div).bg-white { -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
+
+/* No card inside a card: groups nested in a glass panel become flat sections divided by a hairline */
+.merchant-flow .bg-white.rounded-2xl .bg-white.rounded-xl {
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border: 0;
+  border-top: 1px solid var(--glass-edge);
+  border-radius: 0;
+  box-shadow: none;
+}
+.merchant-flow .bg-white.rounded-2xl .bg-white.rounded-xl:first-of-type { border-top: 0; }
+.merchant-flow .bg-white.rounded-2xl .bg-white.rounded-xl::before { display: none; }
+.merchant-flow .bg-white.rounded-2xl .bg-white.rounded-xl { padding-inline: 0; }

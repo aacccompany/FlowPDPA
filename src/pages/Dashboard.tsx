@@ -123,6 +123,22 @@ const merchantNavGroups = [
 
 const navItems = merchantNavGroups.flatMap((group) => group.items);
 
+const subscriptionStatusLabel: Record<string, string> = {
+  active: "ใช้งานอยู่",
+  trialing: "ช่วงทดลองใช้",
+  past_due: "ค้างชำระ",
+  unpaid: "ยังไม่ได้ชำระ",
+  canceled: "ยกเลิกแล้ว",
+  incomplete: "ยังไม่เสร็จสมบูรณ์",
+};
+
+const consentStatusLabel: Record<string, string> = {
+  active: "ใช้งานอยู่",
+  granted: "ให้ความยินยอม",
+  rejected: "ปฏิเสธ",
+  withdrawn: "ถอนความยินยอมแล้ว",
+};
+
 // ── Helpers ───────────────────────────────────────────────────
 const statusDisplay: Record<
   string,
@@ -138,6 +154,10 @@ const statusDisplay: Record<
   edited: { label: "ฝ่ายกฎหมายแก้ไขแล้ว", color: "#5b21b6", bg: "rgba(91,33,182,0.1)" },
   Draft: { label: "ฉบับร่าง", color: "#475467", bg: "rgba(71,84,103,0.1)" },
   Active: { label: "ใช้งานอยู่", color: "#066a4f", bg: "rgba(6,106,79,0.12)" },
+  paid: { label: "ชำระแล้ว", color: "#066a4f", bg: "rgba(6,106,79,0.12)" },
+  failed: { label: "ชำระไม่สำเร็จ", color: "#b42318", bg: "rgba(180,35,24,0.1)" },
+  pending: { label: "รอชำระ", color: "#8a4f05", bg: "rgba(138,79,5,0.1)" },
+  refunded: { label: "คืนเงินแล้ว", color: "#475467", bg: "rgba(71,84,103,0.1)" },
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -386,7 +406,7 @@ function PolicyDownloadsDialog({
           <button
             className="grid h-8 w-8 place-items-center rounded border border-gray-200 text-gray-500 hover:bg-gray-50"
             onClick={close}
-            aria-label="Close downloads"
+            aria-label="ปิดหน้าต่างดาวน์โหลด"
           >
             <X className="h-4 w-4" />
           </button>
@@ -614,7 +634,7 @@ function PoliciesList() {
                 }}
                 className="h-9 w-full border border-gray-300 bg-white pl-9 pr-3 text-sm"
                 placeholder="ค้นหาชื่อนโยบาย เว็บไซต์ หรือโดเมน"
-                aria-label="Search policies"
+                aria-label="ค้นหานโยบาย"
               />
             </div>
             <select
@@ -761,7 +781,7 @@ function PoliciesList() {
                           onClick={() => setDownloadPolicy(p)}
                           className="flex h-7 items-center gap-1.5 rounded border border-gray-200 px-2 text-xs font-medium text-gray-600 hover:border-emerald-600 hover:text-emerald-700"
                         >
-                          <Download className="h-3.5 w-3.5" /> Files
+                          <Download className="h-4 w-4" /> Files
                         </button>
                         {consentPolicyIds.has(p.id) ? (
                           <a
@@ -824,7 +844,7 @@ function PoliciesList() {
                   className="grid h-8 w-8 place-items-center rounded border border-gray-200 text-gray-500 disabled:opacity-40"
                   disabled={currentPage === 1}
                   onClick={() => setPage(currentPage - 1)}
-                  aria-label="Previous page"
+                  aria-label="หน้าก่อนหน้า"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
@@ -844,7 +864,7 @@ function PoliciesList() {
                   className="grid h-8 w-8 place-items-center rounded border border-gray-200 text-gray-500 disabled:opacity-40"
                   disabled={currentPage === pageCount}
                   onClick={() => setPage(currentPage + 1)}
-                  aria-label="Next page"
+                  aria-label="หน้าถัดไป"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>
@@ -1121,7 +1141,7 @@ function ConsentEvidenceDialog({
             </div>
             <div>
               <dt className="text-xs text-gray-400">สถานะปัจจุบัน</dt>
-              <dd className="mt-1 font-semibold text-gray-800">{log.status}</dd>
+              <dd className="mt-1 font-semibold text-gray-800">{consentStatusLabel[log.status] ?? log.status}</dd>
             </div>
           </dl>
           <div>
@@ -1371,11 +1391,11 @@ function ActivityLogsView() {
               onClick={() => void exportConsentLogs(format)}
               className="flex h-9 items-center gap-2 border border-emerald-700 bg-white px-4 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <Download className="h-3.5 w-3.5" />
+              <Download className="h-4 w-4" />
               {exportingConsent === format
                 ? "กำลังสร้าง..."
                 : consentUsage?.plan === "business"
-                  ? `Export Consent ${format.toUpperCase()}`
+                  ? `ส่งออกความยินยอม ${format.toUpperCase()}`
                   : `${format.toUpperCase()} · BUSINESS`}
             </button>
           ))}
@@ -1494,7 +1514,7 @@ function ActivityLogsView() {
             onClick={clearFilters}
             className="flex h-9 items-center gap-1.5 border border-gray-300 bg-white px-3 text-xs font-semibold text-gray-600 hover:bg-gray-50"
           >
-            <X className="h-3.5 w-3.5" />
+            <X className="h-4 w-4" />
             ล้างตัวกรอง
           </button>
         ) : null}
@@ -1876,10 +1896,7 @@ function MerchantBillingView() {
           <section className="mb-6">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">
-                  Plans
-                </p>
-                <h2 className="mt-1 text-lg font-bold text-gray-900">เลือกแพ็กเกจที่เหมาะกับจำนวน Consent Log</h2>
+                <h2 className="text-lg font-bold text-gray-900">เลือกแพ็กเกจที่เหมาะกับจำนวน Consent Log</h2>
               </div>
               <p className="text-xs text-gray-500">สร้างเอกสาร PDPA ได้ฟรีทุกแพ็กเกจ</p>
             </div>
@@ -1991,7 +2008,6 @@ function MerchantBillingView() {
           <section className="mb-6 rounded-xl border border-gray-200 bg-white p-6">
             <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Consent Log Add-on</p>
                 <h2 className="mt-1 text-lg font-bold text-gray-900">เพิ่มความจุ Consent Log ได้ทั้ง FREE และ BUSINESS</h2>
                 <p className="mt-1 text-xs text-gray-500">โควตา Add-on จะบวกจากแพ็กเกจปัจจุบันตลอดรอบรายเดือน สิทธิ์ Export ยังเป็นของ BUSINESS</p>
               </div>
@@ -2108,7 +2124,7 @@ function MerchantBillingView() {
             </div>
             <div className="grid divide-y divide-gray-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
               {[
-                ["สถานะ", current?.status ?? "ไม่มีรายการ"],
+                ["สถานะ", current ? (subscriptionStatusLabel[current.status] ?? current.status) : "ไม่มีรายการ"],
                 ["เริ่มรอบปัจจุบัน", formatDate(current?.currentPeriodStart)],
                 ["การต่ออายุ", current ? (current.cancelAtPeriodEnd ? "สิ้นสุดเมื่อครบรอบ" : "ต่ออายุอัตโนมัติ") : "ไม่มีการต่ออายุ"],
               ].map(([label, value]) => (

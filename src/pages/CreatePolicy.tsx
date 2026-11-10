@@ -16,6 +16,7 @@ import {
   Languages,
   Upload,
   FileText,
+  Info,
 } from "lucide-react";
 import { PolicyTypeIcon } from "@/components/policy/PolicyTypeIcon";
 import {
@@ -2113,18 +2114,52 @@ export default function CreatePolicy() {
     return true;
   };
 
+  // The first thing still missing on this step, in plain Thai (shown when "ถัดไป" is disabled).
+  const blockedReason = (): string => {
+    if (step === 1) return "ติ๊กยอมรับเงื่อนไขการใช้งานเพื่อไปต่อ";
+    if (step === 2) {
+      if (!data.websiteName) return "กรอกชื่อเว็บไซต์";
+      if (!isValidWebsiteUrl(data.websiteUrl)) return "กรอก URL เว็บไซต์ให้ถูกต้อง";
+      if (!isValidEmail(data.contactEmail)) return "กรอกอีเมลติดต่อให้ถูกต้อง";
+      if (data.contactPhone && !isValidThaiPhone(data.contactPhone))
+        return "เบอร์โทรศัพท์ไม่ถูกต้อง";
+      if (data.ownerType === "person") {
+        if (!data.ownerFullName) return "กรอกชื่อ-นามสกุล";
+        return "กรอกเลขบัตรประชาชน 13 หลัก";
+      }
+      if (
+        !(
+          data.companyName &&
+          data.companyRegNumber &&
+          data.businessObjective &&
+          data.registeredCapital
+        )
+      )
+        return "กรอกข้อมูลนิติบุคคลให้ครบ";
+      return "ยืนยันเอกสารบริษัทให้ผ่านก่อนไปต่อ";
+    }
+    if (step === 3) return "เลือกข้อมูลที่เก็บรวบรวมอย่างน้อย 1 รายการ";
+    if (step === 4) return "เลือกวัตถุประสงค์อย่างน้อย 1 รายการ";
+    if (step === 5) {
+      if (!data.language) return "เลือกภาษาของนโยบาย";
+      if (!isValidEmail(data.dpoEmail)) return "กรอกอีเมลเจ้าหน้าที่คุ้มครองข้อมูล (DPO) ให้ถูกต้อง";
+      return "เลือกระยะเวลาการเก็บรักษาข้อมูล";
+    }
+    return "";
+  };
+
   const startGeneration = async (sourceData: FormData = data) => {
     setGenerating(true);
     setGenerationError("");
     if (!sourceData.policyType || !sourceData.agreedToTerms) {
       setGenerating(false);
-      setGenerationError("Please select a policy type and accept the terms.");
+      setGenerationError("กรุณาเลือกประเภทนโยบายและยอมรับเงื่อนไขการใช้งาน");
       return;
     }
     if (!isValidEmail(sourceData.dpoEmail) || !sourceData.retentionPeriod) {
       setGenerating(false);
       setGenerationError(
-        "Please enter a valid DPO email and select a data retention period.",
+        "กรุณากรอกอีเมล DPO ที่ถูกต้องและเลือกระยะเวลาการเก็บรักษาข้อมูล",
       );
       return;
     }
@@ -2309,6 +2344,15 @@ export default function CreatePolicy() {
               {step === 5 && <Step5 data={data} setData={setData} />}
               {step === 6 && <Step6 data={data} />}
               {/* Navigation */}
+              {step < steps.length && !canProceed() && (
+                <p
+                  role="status"
+                  className="mt-6 flex items-center gap-2 text-sm text-gray-600"
+                >
+                  <Info className="w-4 h-4" />
+                  {blockedReason()}
+                </p>
+              )}
               <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-100">
                 <button
                   type="button"

@@ -132,7 +132,7 @@ export default function DocumentTemplates() {
                 onClick={() => setSelected(template)}
                 className="inline-flex items-center gap-1.5 border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
               >
-                <Eye className="h-3.5 w-3.5" />
+                <Eye className="h-4 w-4" />
                 ดูตัวอย่าง
               </button>
               <button
@@ -141,9 +141,9 @@ export default function DocumentTemplates() {
                 className="inline-flex items-center gap-1.5 border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
               >
                 {copied === template.id ? (
-                  <Check className="h-3.5 w-3.5 text-emerald-600" />
+                  <Check className="h-4 w-4 text-emerald-600" />
                 ) : (
-                  <ClipboardCopy className="h-3.5 w-3.5" />
+                  <ClipboardCopy className="h-4 w-4" />
                 )}
                 {copied === template.id ? "คัดลอกแล้ว" : "คัดลอก"}
               </button>
@@ -152,7 +152,7 @@ export default function DocumentTemplates() {
                 onClick={() => downloadTemplate(template)}
                 className="inline-flex items-center gap-1.5 bg-emerald-700 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-800"
               >
-                <Download className="h-3.5 w-3.5" />
+                <Download className="h-4 w-4" />
                 ดาวน์โหลด
               </button>
             </div>

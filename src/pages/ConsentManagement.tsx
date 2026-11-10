@@ -388,7 +388,7 @@ export default function ConsentManagement() {
                   <span
                     className={`inline-flex items-center gap-1 text-xs font-semibold ${form.status === "active" ? "text-emerald-700" : "text-gray-400"}`}
                   >
-                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <CheckCircle2 className="h-4 w-4" />
                     {form.status === "active" ? "ใช้งานอยู่" : "ปิดใช้งาน"}
                   </span>
                   <button
@@ -452,7 +452,7 @@ export default function ConsentManagement() {
             onClick={() => void exportRecords(format)}
             className="flex h-9 items-center justify-center gap-2 border border-emerald-700 px-4 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <Download className="h-3.5 w-3.5" />
+            <Download className="h-4 w-4" />
             {exporting === format
               ? "กำลังสร้าง..."
               : usage.plan === "business"
