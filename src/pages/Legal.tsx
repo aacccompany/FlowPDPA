@@ -18,7 +18,6 @@ import {
   Search,
   ShieldCheck,
   UserRound,
-  XCircle,
 } from "lucide-react";
 import { session } from "@/utils/storage";
 import { api } from "@/services/api";
@@ -39,8 +38,19 @@ const LegalPolicyEditor = lazy(() =>
 );
 
 type LegalView = "dashboard" | "submissions" | "changes";
-type PolicyStatus = "pending_review" | "approved" | "edited" | "rejected";
-type ChangeStatus = "pending_review" | "resolved" | "rejected";
+type LegalWorkType = "admin_return" | "review";
+type PolicyStatus =
+  | "pending_review"
+  | "pending_admin_review"
+  | "changes_requested_by_admin"
+  | "approved"
+  | "edited"
+  | "rejected";
+type ChangeStatus =
+  | "pending_review"
+  | "pending_admin_review"
+  | "resolved"
+  | "rejected";
 
 interface Submission {
   id: string;
@@ -64,6 +74,8 @@ interface ChangeRequest {
   websiteName: string;
   sectionTitle: string;
   requestedChange: string;
+  reason?: string | null;
+  merchantComment?: string | null;
   requesterName: string;
   status: ChangeStatus;
   createdAt: string;
@@ -96,6 +108,8 @@ const changeFromApi = (request: PolicyChangeRequest): ChangeRequest => ({
   websiteName: request.websiteName || request.policySlug,
   sectionTitle: request.sectionTitle || "-",
   requestedChange: request.requestedChange,
+  reason: request.reason,
+  merchantComment: request.merchantComment,
   requesterName: request.requesterName || request.requesterEmail,
   status: request.status,
   createdAt: request.createdAt,
@@ -108,10 +122,23 @@ const statusMeta: Record<
   { label: string; color: string; bg: string }
 > = {
   pending_review: { label: "รอตรวจสอบ", color: "#a86207", bg: "#fff6e5" },
+  pending_admin_review: { label: "รอ Admin ตรวจซ้ำ", color: "#2457a6", bg: "#eaf0fa" },
+  changes_requested_by_admin: { label: "Admin ส่งกลับแก้ไข", color: "#b42318", bg: "#fdf0ef" },
   approved: { label: "อนุมัติแล้ว", color: "#087a5b", bg: "#e8f4ef" },
   edited: { label: "แก้ไขแล้ว", color: "#2457a6", bg: "#eaf0fa" },
   rejected: { label: "ไม่อนุมัติ", color: "#b42318", bg: "#fdf0ef" },
   resolved: { label: "ดำเนินการแล้ว", color: "#087a5b", bg: "#e8f4ef" },
+};
+
+const workTypeMeta: Record<LegalWorkType, { label: string; className: string }> = {
+  admin_return: {
+    label: "Admin ส่งกลับให้แก้ไข",
+    className: "bg-red-50 text-red-700",
+  },
+  review: {
+    label: "ตรวจสอบเอกสาร",
+    className: "bg-amber-50 text-amber-700",
+  },
 };
 
 const formatDate = (value: string) =>
@@ -206,7 +233,7 @@ function Pagination({
 }
 
 function Deadline({ row }: { row: Submission }) {
-  if (row.status !== "pending_review")
+  if (!(["pending_review", "changes_requested_by_admin"] as string[]).includes(row.status))
     return (
       <span className="text-xs text-gray-400">
         {formatDate(row.approvalDeadline)}
@@ -239,20 +266,34 @@ function Deadline({ row }: { row: Submission }) {
 function Sidebar({
   view,
   changeView,
+  pendingReviewCount,
+  pendingChangeCount,
   open,
   close,
   logout,
 }: {
   view: LegalView;
   changeView: (view: LegalView) => void;
+  pendingReviewCount: number;
+  pendingChangeCount: number;
   open: boolean;
   close: () => void;
   logout: () => void;
 }) {
   const items = [
     { id: "dashboard" as const, label: "ภาพรวม", Icon: BarChart3 },
-    { id: "submissions" as const, label: "คิวตรวจสอบ", Icon: Inbox },
-    { id: "changes" as const, label: "คำขอแก้ไข", Icon: MessageSquareText },
+    {
+      id: "submissions" as const,
+      label: "คิวตรวจสอบนโยบาย",
+      Icon: Inbox,
+      count: pendingReviewCount,
+    },
+    {
+      id: "changes" as const,
+      label: "คำขอแก้ไขจากลูกค้า",
+      Icon: MessageSquareText,
+      count: pendingChangeCount,
+    },
   ];
   return (
     <>
@@ -286,7 +327,7 @@ function Sidebar({
         </div>
         <nav className="portal-nav">
           <p className="portal-nav-label">พื้นที่ทำงาน</p>
-          {items.map(({ id, label, Icon }) => (
+          {items.map(({ id, label, Icon, ...item }) => (
             <button
               key={id}
               className="portal-nav-item"
@@ -297,7 +338,12 @@ function Sidebar({
               }}
             >
               <Icon />
-              {label}
+              <span className="flex-1 text-left">{label}</span>
+              {"count" in item && (item.count ?? 0) > 0 ? (
+                <span className="min-w-5 rounded-full bg-emerald-400 px-1.5 py-0.5 text-center text-[10px] font-black text-slate-950">
+                  {(item.count ?? 0) > 99 ? "99+" : item.count}
+                </span>
+              ) : null}
             </button>
           ))}
         </nav>
@@ -334,9 +380,11 @@ function Sidebar({
 function SubmissionTable({
   rows,
   select,
+  workTypeFor,
 }: {
   rows: Submission[];
   select: (row: Submission) => void;
+  workTypeFor?: (row: Submission) => LegalWorkType;
 }) {
   if (!rows.length)
     return (
@@ -350,6 +398,7 @@ function SubmissionTable({
       <thead>
         <tr>
           <th>เว็บไซต์ / นโยบาย</th>
+          {workTypeFor ? <th>ประเภทงาน</th> : null}
           <th>ผู้ประกอบการ</th>
           <th>ภาษา</th>
           <th>กำหนดส่ง</th>
@@ -366,6 +415,18 @@ function SubmissionTable({
                 {row.domain} · Privacy + Cookies Policy
               </p>
             </td>
+            {workTypeFor ? (
+              <td>
+                {(() => {
+                  const meta = workTypeMeta[workTypeFor(row)];
+                  return (
+                    <span className={`inline-flex rounded px-2 py-1 text-[11px] font-semibold ${meta.className}`}>
+                      {meta.label}
+                    </span>
+                  );
+                })()}
+              </td>
+            ) : null}
             <td>
               <p>{row.ownerName}</p>
               <p className="text-xs text-gray-400">{row.ownerEmail}</p>
@@ -407,10 +468,12 @@ function Dashboard({
   openQueue: () => void;
   select: (row: Submission) => void;
 }) {
-  const pending = submissions.filter((row) => row.status === "pending_review");
+  const pending = submissions.filter((row) =>
+    ["pending_review", "changes_requested_by_admin"].includes(row.status),
+  );
   const stats = [
     {
-      label: "รายการรอตรวจสอบ",
+      label: "นโยบายรอตรวจสอบ",
       value: summary?.pendingPolicies ?? pending.length,
       Icon: CalendarClock,
       color: "#a86207",
@@ -434,7 +497,7 @@ function Dashboard({
       color: "#087a5b",
     },
     {
-      label: "คำขอแก้ไข",
+      label: "คำขอแก้ไขจากลูกค้า",
       value:
         summary?.pendingChangeRequests ??
         changes.filter((row) => row.status === "pending_review").length,
@@ -447,7 +510,7 @@ function Dashboard({
       <PageTitle
         eyebrow="การดำเนินงานฝ่ายกฎหมาย"
         title="ภาพรวมการตรวจสอบ"
-        description="นโยบายที่ได้รับมอบหมายและคำขอแก้ไขจากลูกค้า"
+        description="แยกคิวตรวจสอบนโยบายออกจากคำขอแก้ไขที่ Merchant ส่งภายหลัง"
       />
       <section className="portal-kpis">
         {stats.map(({ label, value, Icon, color }) => (
@@ -498,21 +561,42 @@ function PageTitle({
 
 function Queue({
   submissions,
+  changes,
   select,
 }: {
   submissions: Submission[];
+  changes: ChangeRequest[];
   select: (row: Submission) => void;
 }) {
-  const [filter, setFilter] = useState<"all" | PolicyStatus>("pending_review");
+  const [filter, setFilter] = useState<"all" | LegalWorkType>("all");
   const [query, setQuery] = useState("");
-  const rows = submissions.filter(
+  const merchantChangeSlugs = useMemo(
+    () =>
+      new Set(
+        changes
+          .filter((request) => request.status === "pending_review")
+          .map((request) => request.policySlug),
+      ),
+    [changes],
+  );
+  const workTypeFor = (row: Submission): LegalWorkType => {
+    if (row.status === "changes_requested_by_admin") return "admin_return";
+    return "review";
+  };
+  const actionableSubmissions = submissions.filter(
     (row) =>
-      (filter === "all" || row.status === filter) &&
+      ["pending_review", "changes_requested_by_admin"].includes(row.status) &&
+      (row.status === "changes_requested_by_admin" ||
+        !merchantChangeSlugs.has(row.slug)),
+  );
+  const rows = actionableSubmissions.filter(
+    (row) =>
+      (filter === "all" || workTypeFor(row) === filter) &&
       (row.websiteName + row.domain + row.ownerName)
         .toLowerCase()
         .includes(query.toLowerCase()),
   );
-  const pagination = usePagination(rows);
+  const pagination = usePagination(rows, 100);
   return (
     <>
       <PageTitle
@@ -521,16 +605,14 @@ function Queue({
         description="ตรวจสอบฉบับร่างจาก AI แก้ไขเนื้อหา และบันทึกผลการพิจารณาทางกฎหมาย"
       />
       <div className="flex flex-wrap gap-2 mb-4">
-        {(
-          ["pending_review", "approved", "edited", "rejected", "all"] as const
-        ).map((item) => (
+        {(["admin_return", "review", "all"] as const).map((item) => (
           <button
             key={item}
             className="portal-filter"
             data-active={filter === item}
             onClick={() => setFilter(item)}
           >
-            {item === "all" ? "ทั้งหมด" : statusMeta[item].label}
+            {item === "all" ? "ทั้งหมด" : workTypeMeta[item].label}
           </button>
         ))}
         <div className="relative ml-auto w-full sm:w-auto">
@@ -545,7 +627,11 @@ function Queue({
       </div>
       <section className="portal-panel">
         <div className="portal-table-wrap">
-          <SubmissionTable rows={pagination.pageRows} select={select} />
+          <SubmissionTable
+            rows={pagination.pageRows}
+            select={select}
+            workTypeFor={workTypeFor}
+          />
         </div>
         <Pagination {...pagination} total={rows.length} />
       </section>
@@ -578,7 +664,7 @@ function Changes({
     <>
       <PageTitle
         eyebrow="คำขอจากผู้ประกอบการ"
-        title="คำขอแก้ไข"
+        title="คำขอแก้ไขจากลูกค้า"
         description="คำขอที่ผู้ประกอบการยืนยันและส่งให้ฝ่ายกฎหมายดำเนินการ"
       />
       <div className="flex gap-2 mb-4">
@@ -660,8 +746,8 @@ function Editor({
   initial,
   back,
   save,
+  approveChanges,
   changeRequests,
-  updateChange,
 }: {
   initial: Submission;
   back: () => void;
@@ -669,27 +755,21 @@ function Editor({
     row: Submission,
     decision: PolicyReviewStatus | null,
   ) => Promise<string | null>;
-  changeRequests: ChangeRequest[];
-  updateChange: (
-    id: string,
-    status: "resolved" | "rejected",
-    comment: string,
+  approveChanges: (
+    row: Submission,
+    requests: ChangeRequest[],
   ) => Promise<string | null>;
+  changeRequests: ChangeRequest[];
 }) {
   const [draft, setDraft] = useState(initial);
   const [language, setLanguage] = useState<"th" | "en">(
     initial.language === "en" ? "en" : "th",
   );
-  const [decision, setDecision] = useState<"approved" | "rejected" | null>(
-    null,
-  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [requestComments, setRequestComments] = useState<
-    Record<string, string>
-  >({});
-  const [requestSavingId, setRequestSavingId] = useState<string | null>(null);
-  const [requestError, setRequestError] = useState("");
+  const pendingChanges = changeRequests.filter(
+    (request) => request.status === "pending_review",
+  );
   const content = language === "th" ? draft.contentTh : draft.contentEn;
   const setContent = (value: string) =>
     setDraft((current) =>
@@ -698,29 +778,13 @@ function Editor({
         : { ...current, contentEn: value },
     );
   const submit = async () => {
-    if (decision === "rejected" && !draft.reviewComment.trim()) {
-      setError("A review comment is required when rejecting a policy.");
-      return;
-    }
     setSaving(true);
     setError("");
-    const message = await save(draft, decision);
+    const message = pendingChanges.length
+      ? await approveChanges(draft, pendingChanges)
+      : await save({ ...draft, reviewComment: "" }, "approved");
     setSaving(false);
     if (message) setError(message);
-  };
-  const declineChangeRequest = async (id: string) => {
-    const comment = requestComments[id]?.trim() || "";
-    if (!comment) {
-      setRequestError(
-        "A legal comment is required to resolve or reject a request.",
-      );
-      return;
-    }
-    setRequestSavingId(id);
-    setRequestError("");
-    const message = await updateChange(id, "rejected", comment);
-    setRequestSavingId(null);
-    if (message) setRequestError(message);
   };
   return (
     <>
@@ -737,7 +801,9 @@ function Editor({
                 {draft.websiteName}
               </h1>
             </div>
-            <StatusBadge status={draft.status} />
+            <StatusBadge
+              status={pendingChanges.length ? "pending_review" : draft.status}
+            />
           </div>
           <div className="p-5">
             <div className="flex gap-2 mb-4">
@@ -789,141 +855,88 @@ function Editor({
               </div>
             ))}
           </section>
+          {draft.status === "changes_requested_by_admin" && draft.reviewComment && (
+            <section className="portal-panel p-5 border-l-4 border-red-500">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-red-600">
+                ความคิดเห็นจาก Admin
+              </p>
+              <p className="mt-2 text-xs leading-5 text-gray-700 whitespace-pre-wrap">
+                {draft.reviewComment}
+              </p>
+            </section>
+          )}
           {changeRequests.length > 0 && (
             <section className="portal-panel p-5">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold">
-                  Merchant change requests
-                </h2>
+                <h2 className="text-sm font-semibold">คำขอแก้ไขจากลูกค้า</h2>
                 <span className="text-[11px] text-gray-400">
                   {changeRequests.length}
                 </span>
               </div>
               <p className="mt-1 mb-4 text-[11px] leading-4 text-gray-500">
-                Pending requests are resolved automatically when you approve the
-                policy.
+                ตรวจสอบรายละเอียดและแก้ไขเอกสารตามคำขอ
               </p>
-              {requestError && (
-                <p className="mb-3 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                  {requestError}
-                </p>
-              )}
               <div className="space-y-4">
                 {changeRequests.map((request) => (
                   <article
                     key={request.id}
                     className="border-t border-gray-200 pt-4 first:border-0 first:pt-0"
                   >
-                    <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-[10px] uppercase text-gray-400">
+                        หัวข้อ
+                      </p>
+                      <p className="mt-1 text-xs font-semibold">
+                        {request.sectionTitle}
+                      </p>
+                    </div>
+                    <div className="mt-3 space-y-3 text-xs leading-5 text-gray-700">
                       <div>
-                        <p className="text-[10px] uppercase text-gray-400">
-                          Section
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                          รายละเอียดที่ต้องการแก้ไข
                         </p>
-                        <p className="mt-1 text-xs font-semibold">
-                          {request.sectionTitle}
+                        <p className="mt-1 whitespace-pre-wrap">
+                          {request.requestedChange}
                         </p>
                       </div>
-                      <StatusBadge status={request.status} />
+                      {request.reason && (
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                            เหตุผลจาก Merchant
+                          </p>
+                          <p className="mt-1 whitespace-pre-wrap">{request.reason}</p>
+                        </div>
+                      )}
+                      {request.merchantComment && (
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                            หมายเหตุจาก Merchant
+                          </p>
+                          <p className="mt-1 whitespace-pre-wrap">
+                            {request.merchantComment}
+                          </p>
+                        </div>
+                      )}
                     </div>
-                    <p className="mt-3 text-xs leading-5 text-gray-700 whitespace-pre-wrap">
-                      {request.requestedChange}
-                    </p>
                     <p className="mt-2 text-[11px] text-gray-400">
                       {request.requesterName} · {formatDate(request.createdAt)}
                     </p>
-                    {request.status === "pending_review" ? (
-                      <div className="mt-3">
-                        <textarea
-                          className="w-full min-h-20 border border-gray-300 rounded p-2.5 text-xs"
-                          value={requestComments[request.id] || ""}
-                          onChange={(event) =>
-                            setRequestComments((current) => ({
-                              ...current,
-                              [request.id]: event.target.value,
-                            }))
-                          }
-                          placeholder="Required reason for declining this request"
-                        />
-                        <button
-                          className="portal-button danger justify-center w-full mt-2"
-                          disabled={requestSavingId === request.id}
-                          onClick={() => void declineChangeRequest(request.id)}
-                        >
-                          Decline request
-                        </button>
-                      </div>
-                    ) : (
-                      <p className="mt-3 border-l-2 border-gray-200 pl-3 text-xs text-gray-500">
-                        {request.legalComment || "No legal comment."}
-                      </p>
-                    )}
                   </article>
                 ))}
               </div>
             </section>
           )}
           <section className="portal-panel p-5">
-            <h2 className="text-sm font-semibold">Policy decision</h2>
-            <p className="mt-1 mb-3 text-[11px] leading-4 text-gray-500">
-              Save your edits as a draft, or decide the status of the whole
-              policy.
-            </p>
-            <div className="grid grid-cols-2 gap-2 mb-4">
-              {[
-                {
-                  id: "approved" as const,
-                  label: "Approve policy",
-                  Icon: ShieldCheck,
-                },
-                {
-                  id: "rejected" as const,
-                  label: "Reject policy",
-                  Icon: XCircle,
-                },
-              ].map(({ id, label, Icon }) => (
-                <button
-                  key={id}
-                  className="portal-filter justify-center px-1"
-                  data-active={decision === id}
-                  onClick={() =>
-                    setDecision((current) => (current === id ? null : id))
-                  }
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  {label}
-                </button>
-              ))}
-            </div>
-            <label className="text-xs font-semibold text-gray-600">
-              Review comment{" "}
-              {decision === "rejected" && (
-                <span className="text-red-600">*</span>
-              )}
-            </label>
-            <textarea
-              className="w-full min-h-24 mt-2 border border-gray-300 rounded p-3 text-sm"
-              value={draft.reviewComment}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  reviewComment: event.target.value,
-                }))
-              }
-              placeholder="Reason, legal notes, or merchant instructions"
-            />
+            <h2 className="text-sm font-semibold">อนุมัติเอกสาร</h2>
             {error && <p className="mt-3 text-xs text-red-700">{error}</p>}
             <button
-              className="portal-button primary w-full mt-4"
+              type="button"
+              className="portal-button primary w-full justify-center mt-4"
               disabled={saving}
               onClick={() => void submit()}
             >
-              {saving
-                ? "Saving..."
-                : decision === "approved"
-                  ? "Approve policy"
-                  : decision === "rejected"
-                    ? "Reject policy"
-                    : "Save draft"}
+              <ShieldCheck className="w-4 h-4" />
+              {saving ? "กำลังอนุมัติ..." : "อนุมัติ"}
             </button>
           </section>
         </aside>
@@ -1041,7 +1054,7 @@ export default function Legal() {
         : {}),
     });
     if (!response.success || !response.data)
-      return response.error?.message || "Unable to save the submission.";
+      return response.error?.message || "ไม่สามารถบันทึกผลการตรวจสอบได้";
     const saved = submissionFromApi(response.data);
     setSubmissions((current) =>
       current.map((item) => (item.id === saved.id ? saved : item)),
@@ -1055,21 +1068,59 @@ export default function Legal() {
     setView(selectedReturnView);
     return null;
   };
-  const updateChange = async (
-    id: string,
-    status: "resolved" | "rejected",
-    legalComment: string,
+  const approveChanges = async (
+    row: Submission,
+    requests: ChangeRequest[],
   ) => {
-    const response = await api.legal.reviewChangeRequest(id, {
-      status,
-      legalComment,
+    const content =
+      row.language === "both"
+        ? {
+            language: "both" as const,
+            contentTh: row.contentTh,
+            contentEn: row.contentEn,
+          }
+        : {
+            language: row.language,
+            text: row.language === "th" ? row.contentTh : row.contentEn,
+          };
+    const contentResponse = await api.legal.updateSubmission(row.slug, {
+      content,
     });
-    if (!response.success || !response.data)
-      return response.error?.message || "Unable to update the change request.";
-    const saved = changeFromApi(response.data);
-    setChanges((current) =>
-      current.map((row) => (row.id === saved.id ? saved : row)),
+    if (!contentResponse.success)
+      return contentResponse.error?.message || "ไม่สามารถบันทึกเอกสารได้";
+
+    const reviewedRequests: ChangeRequest[] = [];
+    for (const request of requests) {
+      const response = await api.legal.reviewChangeRequest(request.id, {
+        status: "resolved",
+        legalComment: "",
+      });
+      if (!response.success || !response.data)
+        return response.error?.message || "ไม่สามารถอนุมัติคำขอแก้ไขได้";
+      reviewedRequests.push(changeFromApi(response.data));
+    }
+    const reviewedById = new Map(
+      reviewedRequests.map((request) => [request.id, request]),
     );
+    setChanges((current) =>
+      current.map((request) => reviewedById.get(request.id) || request),
+    );
+    setDashboard((current) =>
+      current
+        ? {
+            ...current,
+            summary: {
+              ...current.summary,
+              pendingChangeRequests: Math.max(
+                0,
+                current.summary.pendingChangeRequests - requests.length,
+              ),
+            },
+          }
+        : current,
+    );
+    setSelectedId(null);
+    setView(selectedReturnView);
     return null;
   };
   return (
@@ -1085,6 +1136,8 @@ export default function Legal() {
       <Sidebar
         view={view}
         changeView={changeView}
+        pendingReviewCount={dashboard?.summary.pendingPolicies ?? 0}
+        pendingChangeCount={dashboard?.summary.pendingChangeRequests ?? 0}
         open={menuOpen}
         close={() => setMenuOpen(false)}
         logout={logout}
@@ -1122,10 +1175,10 @@ export default function Legal() {
               initial={selected}
               back={() => setSelectedId(null)}
               save={save}
+              approveChanges={approveChanges}
               changeRequests={changes.filter(
                 (row) => row.policySlug === selected.slug,
               )}
-              updateChange={updateChange}
             />
           ) : view === "dashboard" ? (
             <Dashboard
@@ -1140,6 +1193,7 @@ export default function Legal() {
           ) : view === "submissions" ? (
             <Queue
               submissions={submissions}
+              changes={changes}
               select={(row) => {
                 void select(row);
               }}

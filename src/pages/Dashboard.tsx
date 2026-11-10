@@ -133,6 +133,16 @@ const statusDisplay: Record<
     color: "#d97706",
     bg: "rgba(217,119,6,0.1)",
   },
+  pending_admin_review: {
+    label: "รอ Admin ตรวจซ้ำ",
+    color: "#2563eb",
+    bg: "rgba(37,99,235,0.1)",
+  },
+  changes_requested_by_admin: {
+    label: "Admin ส่งกลับ Legal",
+    color: "#dc2626",
+    bg: "rgba(220,38,38,0.1)",
+  },
   approved: { label: "Reviewed", color: "#059669", bg: "rgba(5,150,105,0.12)" },
   rejected: { label: "Rejected", color: "#dc2626", bg: "rgba(220,38,38,0.1)" },
   edited: { label: "Edited", color: "#7c3aed", bg: "rgba(124,58,237,0.1)" },
@@ -947,6 +957,11 @@ const writeMerchantActivitySnapshot = (
 
 const merchantActivityLabel: Record<MerchantActivityType, string> = {
   document_acknowledged: "รับทราบเอกสารแล้ว",
+  document_acknowledgement_dismissed: "ปิดข้อความโดยไม่รับทราบ",
+  merchant_submitted_to_legal: "ส่งเอกสารให้ Legal",
+  legal_submitted_to_admin: "Legal ส่งให้ Admin ตรวจซ้ำ",
+  admin_changes_requested: "Admin ส่งกลับ Legal",
+  admin_approved: "Admin อนุมัติเอกสาร",
   customer_consent: "ลูกค้าให้ความยินยอม",
   merchant_change_requested: "คำขอแก้ไขจากผู้ประกอบการ",
   legal_document_updated: "ฝ่ายกฎหมายแก้ไขเอกสาร",
@@ -957,6 +972,11 @@ const merchantActivityLabel: Record<MerchantActivityType, string> = {
 
 const activityDescriptionThai: Record<MerchantActivityType, string> = {
   document_acknowledged: "ลูกค้ากดยืนยันว่าได้อ่านและรับทราบเอกสารสาธารณะแล้ว",
+  document_acknowledgement_dismissed: "ลูกค้าปิดข้อความหรือเลือกอ่านต่อโดยไม่กดรับทราบ",
+  merchant_submitted_to_legal: "ลูกค้าส่งเอกสารให้ฝ่ายกฎหมายตรวจสอบ",
+  legal_submitted_to_admin: "ฝ่ายกฎหมายแก้ไขเอกสารและส่งให้ Admin ตรวจซ้ำ",
+  admin_changes_requested: "Admin ส่งเอกสารกลับให้ฝ่ายกฎหมายแก้ไขพร้อมเหตุผล",
+  admin_approved: "Admin อนุมัติฉบับสุดท้ายและส่งเอกสารให้ลูกค้าแล้ว",
   customer_consent: "ลูกค้าได้บันทึกการให้ความยินยอมในระบบเดิม",
   merchant_change_requested: "ผู้ประกอบการส่งคำขอให้ฝ่ายกฎหมายแก้ไขเอกสาร",
   legal_document_updated: "ฝ่ายกฎหมายแก้ไขเอกสารตามคำขอเรียบร้อยแล้ว",
@@ -965,6 +985,30 @@ const activityDescriptionThai: Record<MerchantActivityType, string> = {
   consent_rejected: "เจ้าของข้อมูลส่งตัวเลือกโดยไม่ให้ความยินยอม",
   consent_withdrawn: "ความยินยอมถูกถอนและบันทึกไว้ในประวัติแล้ว",
 };
+
+const dismissalDescription: Record<string, string> = {
+  close_button: "ลูกค้ากดปิดข้อความโดยไม่กดรับทราบเอกสาร",
+  continue_without_acknowledgement:
+    "ลูกค้าเลือกอ่านต่อโดยไม่กดรับทราบเอกสาร",
+};
+
+function getMerchantActivityLabel(type: MerchantActivityType): string {
+  return merchantActivityLabel[type] || type || "กิจกรรม";
+}
+
+function getMerchantActivityDescription(log: MerchantActivityRow): string {
+  if (log.type === "document_acknowledgement_dismissed") {
+    const reason = String(
+      log.policyEvidence?.metadata?.dismissalReason || "",
+    );
+    return (
+      dismissalDescription[reason] ||
+      activityDescriptionThai.document_acknowledgement_dismissed
+    );
+  }
+
+  return activityDescriptionThai[log.type] || log.description || "-";
+}
 
 function PolicyEvidenceDialog({
   log,
@@ -1093,7 +1137,7 @@ function ConsentEvidenceDialog({
             <div>
               <dt className="text-xs text-gray-400">ประเภทเหตุการณ์</dt>
               <dd className="mt-1 font-semibold text-emerald-700">
-                {merchantActivityLabel[log.type]}
+                {getMerchantActivityLabel(log.type)}
               </dd>
             </div>
             <div>
@@ -1450,6 +1494,7 @@ function ActivityLogsView() {
         >
           <option value="all">กิจกรรมทุกประเภท</option>
           <option value="document_acknowledged">การรับทราบเอกสาร</option>
+          <option value="document_acknowledgement_dismissed">ปิดโดยไม่รับทราบ</option>
           <option value="customer_consent">การให้ความยินยอม (เดิม)</option>
           <option value="consent_granted">ให้ความยินยอม</option>
           <option value="consent_rejected">ปฏิเสธความยินยอม</option>
@@ -1545,7 +1590,7 @@ function ActivityLogsView() {
                   {pageLogs.map((log) => (
                     <tr key={log.id}>
                       <td className="whitespace-nowrap px-4 py-3 font-semibold text-emerald-700">
-                        {merchantActivityLabel[log.type]}
+                        {getMerchantActivityLabel(log.type)}
                       </td>
                       <td className="px-4 py-3">
                         <Link
@@ -1567,7 +1612,7 @@ function ActivityLogsView() {
                               : log.relatedType)}
                       </td>
                       <td className="min-w-64 px-4 py-3 text-gray-600">
-                        {activityDescriptionThai[log.type]}
+                        {getMerchantActivityDescription(log)}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-gray-400">
                         {new Date(log.createdAt).toLocaleString("th-TH")}

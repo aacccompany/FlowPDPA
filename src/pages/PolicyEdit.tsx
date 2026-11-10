@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -7,15 +7,11 @@ import {
   ExternalLink,
   FileEdit,
   Globe2,
-  Search,
   Send,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/services/api";
 import type {
-  ChangeRequestPriority,
-  PolicyActivityLog,
-  PolicyActivityType,
   PolicyChangeRequest,
   PolicyLanguage,
   SavedPolicy,
@@ -30,23 +26,11 @@ const requestStatus: Record<string, { label: string; className: string }> = {
   rejected: { label: "Rejected", className: "bg-red-50 text-red-700" },
 };
 
-const activityLabel: Record<PolicyActivityLog["type"], string> = {
-  document_acknowledged: "Customer acknowledged document",
-  customer_consent: "Customer consented",
-  merchant_change_requested: "Sent change request to Legal",
-  legal_document_updated: "Legal updated document",
-};
-
 export default function PolicyEdit() {
   const { policyId = "" } = useParams();
   const { auth } = useAuth();
   const [policy, setPolicy] = useState<SavedPolicy | null>(null);
   const [requests, setRequests] = useState<PolicyChangeRequest[]>([]);
-  const [activityLogs, setActivityLogs] = useState<PolicyActivityLog[]>([]);
-  const [activityType, setActivityType] = useState<"all" | PolicyActivityType>(
-    "all",
-  );
-  const [activitySearch, setActivitySearch] = useState("");
   const [previewLanguage, setPreviewLanguage] = useState<"th" | "en">("th");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -57,31 +41,14 @@ export default function PolicyEdit() {
     sectionTitle: "",
     requestedChange: "",
     reason: "",
-    priority: "normal" as ChangeRequestPriority,
   });
-
-  const filteredActivityLogs = useMemo(() => {
-    const query = activitySearch.trim().toLocaleLowerCase();
-    return activityLogs.filter((log) => {
-      if (activityType !== "all" && log.type !== activityType) return false;
-      if (!query) return true;
-      return [
-        log.id,
-        log.relatedField,
-        log.relatedType,
-        log.description,
-        activityLabel[log.type],
-      ].some((value) => value?.toLocaleLowerCase().includes(query));
-    });
-  }, [activityLogs, activitySearch, activityType]);
 
   useEffect(() => {
     let active = true;
     void Promise.all([
       api.policies.get(policyId),
       api.policies.listChangeRequests(policyId),
-      api.policies.listActivityLogs(policyId),
-    ]).then(([policyResponse, requestsResponse, activityResponse]) => {
+    ]).then(([policyResponse, requestsResponse]) => {
       if (!active) return;
       let loadError = "";
       if (policyResponse.success && policyResponse.data) {
@@ -98,9 +65,6 @@ export default function PolicyEdit() {
       if (requestsResponse.success && requestsResponse.data)
         setRequests(requestsResponse.data);
       else if (!loadError) loadError = requestsResponse.error?.message || "";
-      if (activityResponse.success && activityResponse.data)
-        setActivityLogs(activityResponse.data);
-      else if (!loadError) loadError = activityResponse.error?.message || "";
       setError(loadError);
       setLoading(false);
     });
@@ -123,7 +87,7 @@ export default function PolicyEdit() {
       requestedChange: form.requestedChange.trim(),
       reason: form.reason.trim() || undefined,
       merchantComment: form.reason.trim() || undefined,
-      priority: form.priority,
+      priority: "normal",
     });
     setSaving(false);
     if (!response.success || !response.data) {
@@ -131,15 +95,11 @@ export default function PolicyEdit() {
       return;
     }
     setRequests((current) => [response.data!, ...current]);
-    const activityResponse = await api.policies.listActivityLogs(policyId);
-    if (activityResponse.success && activityResponse.data)
-      setActivityLogs(activityResponse.data);
     setForm((current) => ({
       ...current,
       sectionTitle: "",
       requestedChange: "",
       reason: "",
-      priority: "normal",
     }));
     setSuccess("Change request sent to Legal.");
   };
@@ -328,24 +288,6 @@ export default function PolicyEdit() {
                   placeholder="เหตุผลทางธุรกิจหรือคำขอจากลูกค้าที่ตรวจสอบแล้ว"
                 />
               </label>
-              <label className="block text-xs font-semibold text-gray-600">
-                ระดับความสำคัญ
-                <select
-                  value={form.priority}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      priority: event.target.value as ChangeRequestPriority,
-                    }))
-                  }
-                  className="mt-1.5 h-10 w-full border border-gray-300 bg-white px-3 text-sm"
-                >
-                  <option value="low">ต่ำ</option>
-                  <option value="normal">ปกติ</option>
-                  <option value="high">สูง</option>
-                  <option value="urgent">เร่งด่วน</option>
-                </select>
-              </label>
             </div>
             {error && (
               <p className="mt-3 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
@@ -415,105 +357,6 @@ export default function PolicyEdit() {
             )}
           </section>
 
-          <section className="rounded border border-gray-200 bg-white">
-            <div className="border-b border-gray-200 px-4 py-3">
-              <h2 className="text-sm font-semibold">กิจกรรมเอกสาร</h2>
-              <p className="mt-1 text-xs text-gray-500">
-                ประวัติความยินยอมและขั้นตอนเอกสารที่ไม่สามารถแก้ไขย้อนหลังได้
-              </p>
-            </div>
-            <div className="grid gap-2 border-b border-gray-100 p-3 sm:grid-cols-[minmax(0,1fr)_180px]">
-              <label className="relative block">
-                <Search
-                  className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400"
-                  aria-hidden="true"
-                />
-                <span className="sr-only">Search activity logs</span>
-                <input
-                  value={activitySearch}
-                  onChange={(event) => setActivitySearch(event.target.value)}
-                  className="h-9 w-full rounded border border-gray-200 pl-9 pr-3 text-xs"
-                  placeholder="Search ID, field, description"
-                />
-              </label>
-              <label>
-                <span className="sr-only">Filter activity type</span>
-                <select
-                  value={activityType}
-                  onChange={(event) =>
-                    setActivityType(
-                      event.target.value as "all" | PolicyActivityType,
-                    )
-                  }
-                  className="h-9 w-full rounded border border-gray-200 bg-white px-3 text-xs text-gray-700"
-                >
-                  <option value="all">All activity types</option>
-                  <option value="document_acknowledged">
-                    Document acknowledgement
-                  </option>
-                  <option value="customer_consent">Customer consent</option>
-                  <option value="merchant_change_requested">
-                    Merchant change request
-                  </option>
-                  <option value="legal_document_updated">
-                    Legal document update
-                  </option>
-                </select>
-              </label>
-              <p className="text-[11px] text-gray-400 sm:col-span-2">
-                Showing {filteredActivityLogs.length} of {activityLogs.length}{" "}
-                events
-              </p>
-            </div>
-            {activityLogs.length === 0 ? (
-              <div className="px-4 py-8 text-center text-xs text-gray-400">
-                No activity recorded yet.
-              </div>
-            ) : filteredActivityLogs.length === 0 ? (
-              <div className="px-4 py-8 text-center text-xs text-gray-400">
-                No activity matches these filters.
-              </div>
-            ) : (
-              <div className="max-h-96 overflow-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="sticky top-0 bg-gray-50 text-gray-500">
-                    <tr>
-                      <th className="px-3 py-2 font-semibold">ID</th>
-                      <th className="px-3 py-2 font-semibold">Related field</th>
-                      <th className="px-3 py-2 font-semibold">Description</th>
-                      <th className="px-3 py-2 font-semibold">Created</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {filteredActivityLogs.map((log) => (
-                      <tr key={log.id}>
-                        <td
-                          className="max-w-24 truncate px-3 py-3 font-mono text-[10px] text-gray-400"
-                          title={log.id}
-                        >
-                          {log.id}
-                        </td>
-                        <td className="px-3 py-3 text-gray-600">
-                          {log.relatedField || log.relatedType}
-                        </td>
-                        <td className="px-3 py-3">
-                          <p className="font-semibold text-gray-700">
-                            {activityLabel[log.type]}
-                          </p>
-                          <p className="mt-1 text-gray-500">
-                            {log.description}
-                          </p>
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-3 text-gray-400">
-                          {new Date(log.createdAt).toLocaleString("th-TH")}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
         </aside>
       </main>
     </div>

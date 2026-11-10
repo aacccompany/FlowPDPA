@@ -535,17 +535,40 @@ function Step1({
   );
 }
 
-// ── Company Consent Modal ─────────────────────────────────────
-function CompanyConsentModal({
+// ── Controller declaration modal ──────────────────────────────
+function ControllerDeclarationModal({
+  mode,
   onAccept,
   onDecline,
 }: {
+  mode: "person" | "company";
   onAccept: () => Promise<string | null>;
   onDecline: () => void;
 }) {
   const [checked, setChecked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const isPerson = mode === "person";
+  const Icon = isPerson ? UserRound : Building2;
+  const title = isPerson
+    ? "ยืนยันการสร้างนโยบายในนามบุคคลธรรมดา"
+    : "ยืนยันการสร้างนโยบายในนามนิติบุคคล";
+  const sectionTitle = isPerson
+    ? "ข้อกำหนดการใช้งานสำหรับบุคคลธรรมดา"
+    : "ข้อกำหนดการใช้งานสำหรับนิติบุคคล";
+  const declarations = isPerson
+    ? [
+        "ข้าพเจ้าเป็นเจ้าของข้อมูลหรือมีสิทธิดำเนินการจัดทำนโยบายความเป็นส่วนตัวในนามของตนเอง",
+        "ข้อมูลส่วนบุคคลที่กรอกเป็นข้อมูลที่ถูกต้อง และข้าพเจ้ามีสิทธิใช้ข้อมูลดังกล่าวเพื่อจัดทำนโยบาย",
+        "นโยบายที่สร้างขึ้นจะนำไปใช้งานกับเว็บไซต์ แอปพลิเคชัน ธุรกิจ หรือบริการที่อยู่ในความรับผิดชอบของข้าพเจ้า",
+        "ข้าพเจ้ายินยอมให้ FlowPDPA จัดเก็บข้อมูลที่กรอกเพื่อจัดทำและส่งมอบนโยบาย PDPA",
+      ]
+    : [
+        "ข้าพเจ้ามีอำนาจหน้าที่ในการดำเนินการด้านนโยบายความเป็นส่วนตัวในนามของบริษัท / องค์กรนี้",
+        "ข้อมูลบริษัทที่กรอกถูกต้องตามความเป็นจริงและตรงกับเอกสารจดทะเบียนนิติบุคคล",
+        "นโยบายที่สร้างขึ้นจะถูกนำไปใช้งานจริงกับเว็บไซต์หรือแอปพลิเคชันของบริษัท",
+        "บริษัทยินยอมให้ FlowPDPA จัดเก็บข้อมูลที่กรอกเพื่อจัดทำและส่งมอบนโยบาย PDPA",
+      ];
 
   const handleAccept = async () => {
     if (!checked || submitting) return;
@@ -578,14 +601,14 @@ function CompanyConsentModal({
               className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
               style={{ backgroundColor: "rgba(5,150,105,0.1)" }}
             >
-              <Building2
+              <Icon
                 className="w-5 h-5"
                 style={{ color: "var(--green)" }}
               />
             </div>
             <div>
               <h2 className="font-black text-gray-900 text-base">
-                ยืนยันการสร้างนโยบายในนามนิติบุคคล
+                {title}
               </h2>
               <p className="text-xs text-gray-400 mt-0.5">
                 กรุณาอ่านและยืนยันก่อนดำเนินการต่อ
@@ -605,15 +628,10 @@ function CompanyConsentModal({
                 className="w-4 h-4 shrink-0"
                 style={{ color: "var(--green)" }}
               />
-              ข้อกำหนดการใช้งานสำหรับนิติบุคคล
+              {sectionTitle}
             </p>
             <ul className="space-y-2 text-xs text-gray-600 list-none pl-1">
-              {[
-                "ข้าพเจ้ามีอำนาจหน้าที่ในการดำเนินการด้านนโยบายความเป็นส่วนตัวในนามของบริษัท / องค์กรนี้",
-                "ข้อมูลบริษัทที่กรอกถูกต้องตามความเป็นจริงและตรงกับเอกสารจดทะเบียนนิติบุคคล",
-                "นโยบายที่สร้างขึ้นจะถูกนำไปใช้งานจริงกับเว็บไซต์หรือแอปพลิเคชันของบริษัท",
-                "บริษัทยินยอมให้ FlowPDPA จัดเก็บข้อมูลที่กรอกเพื่อจัดทำและส่งมอบนโยบาย PDPA",
-              ].map((item, i) => (
+              {declarations.map((item, i) => (
                 <li key={i} className="flex items-start gap-2">
                   <span
                     className="w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold text-white"
@@ -647,8 +665,9 @@ function CompanyConsentModal({
               )}
             </span>
             <span className="text-sm text-gray-700 leading-relaxed">
-              ข้าพเจ้าได้อ่านและยอมรับข้อกำหนดข้างต้นทุกข้อ
-              และมีอำนาจในการดำเนินการในนามองค์กร
+              {isPerson
+                ? "ข้าพเจ้าได้อ่านและยอมรับข้อกำหนดข้างต้นทุกข้อ และยืนยันว่าข้อมูลที่ให้เป็นข้อมูลของข้าพเจ้าหรือข้าพเจ้ามีสิทธิใช้ข้อมูลดังกล่าว"
+                : "ข้าพเจ้าได้อ่านและยอมรับข้อกำหนดข้างต้นทุกข้อ และมีอำนาจในการดำเนินการในนามองค์กร"}
             </span>
           </label>
         </div>
@@ -713,10 +732,17 @@ function Step2({
   const [searchType, setSearchType] = useState<RDSearchType>("taxId");
   const [searchQuery, setSearchQuery] = useState("");
   const lookupInFlightRef = useRef(false);
-  const [showConsent, setShowConsent] = useState(false);
+  const [declarationMode, setDeclarationMode] = useState<"person" | "company" | null>(null);
+  const hasShownInitialDeclarationRef = useRef(false);
   const [documentUploading, setDocumentUploading] = useState(false);
   const [documentError, setDocumentError] = useState("");
   const [documentFailureReason, setDocumentFailureReason] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (hasShownInitialDeclarationRef.current) return;
+    hasShownInitialDeclarationRef.current = true;
+    setDeclarationMode(data.ownerType);
+  }, [data.ownerType]);
 
   const documentStatusMessage = () => {
     if (data.companyDocumentStatus === "PASSED") return "ตรวจสอบแล้ว ชื่อบริษัทหรือเลขทะเบียนตรงกับเอกสาร";
@@ -923,27 +949,29 @@ function Step2({
         {/* Type toggle */}
         <div>
           <SectionHeading>ประเภทผู้ควบคุมข้อมูล</SectionHeading>
-          {showConsent && (
-            <CompanyConsentModal
+          {declarationMode && (
+            <ControllerDeclarationModal
+              mode={declarationMode}
               onAccept={async () => {
                 if (!data.policyType) {
                   return "ไม่พบประเภท Policy กรุณากลับไปเลือกประเภทอีกครั้ง";
                 }
-                const response = await api.policies.acceptCompanyAuthority(
-                  data.policyType,
-                );
+                const response = declarationMode === "company"
+                  ? await api.policies.acceptCompanyAuthority(data.policyType)
+                  : await api.policies.acceptPersonalDeclaration(data.policyType);
                 if (!response.success) {
                   return (
                     response.error?.message ||
                     "ไม่สามารถบันทึกคำยืนยันได้ กรุณาลองใหม่อีกครั้ง"
                   );
                 }
-                setShowConsent(false);
-                setData({ ownerType: "company" });
+                const acceptedOwnerType = declarationMode;
+                setDeclarationMode(null);
+                setData({ ownerType: acceptedOwnerType });
                 resetRd();
                 return null;
               }}
-              onDecline={() => setShowConsent(false)}
+              onDecline={() => setDeclarationMode(null)}
             />
           )}
 
@@ -968,12 +996,7 @@ function Step2({
                 key={key}
                 type="button"
                 onClick={() => {
-                  if (key === "company" && data.ownerType !== "company") {
-                    setShowConsent(true);
-                  } else if (key === "person") {
-                    setData({ ownerType: "person" });
-                    resetRd();
-                  }
+                  setDeclarationMode(key);
                 }}
                 className="flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all"
                 style={{
@@ -1439,7 +1462,7 @@ function Step4({
   return (
     <div>
       <h2 className="text-xl font-black text-gray-900 mb-1">
-        วัตถุประสงค์และบุคคลที่สาม
+        วัตถุประสงค์และเครื่องมือบุคคลที่สาม
       </h2>
       <p className="text-sm text-gray-400 mb-6">
         ระบุว่าข้อมูลถูกนำไปใช้ทำอะไร และมีบริการใดที่ได้รับข้อมูล

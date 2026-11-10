@@ -19,6 +19,8 @@ import type {
   AdminPayment,
   AdminPolicy,
   AdminPolicyDetail,
+  AdminPolicyHistoryEvent,
+  AdminPolicyReviewItem,
   AdminSubscription,
 } from "./adminTypes";
 import type { AdminCompanyDocument } from "./companyDocuments";
@@ -110,6 +112,11 @@ export const adminApi = {
     ),
   getPolicy: (id: string) =>
     apiRequest<{ policy: AdminPolicyDetail }>(API_ENDPOINTS.admin.policy(id)),
+  getPolicyHistory: (id: string) =>
+    apiRequest<{
+      policy: { id: string; slug: string; name: string };
+      events: AdminPolicyHistoryEvent[];
+    }>(API_ENDPOINTS.admin.policyHistory(id)),
   assignLegal: (policyId: string, legalUserId: string, note?: string) =>
     apiRequest<{
       policyId: string;
@@ -211,6 +218,19 @@ export const adminApi = {
   ) =>
     apiRequest<{ reviews: AdminLegalReview[]; pagination: AdminPagination }>(
       `${API_ENDPOINTS.admin.legalReviews}${query(params)}`,
+    ),
+  listAdminReviewQueue: () =>
+    apiRequest<{ items: AdminPolicyReviewItem[] }>(
+      API_ENDPOINTS.admin.adminReviewQueue,
+    ),
+  decideAdminPolicyReview: (
+    policyId: string,
+    status: "approved" | "changes_requested",
+    comment = "",
+  ) =>
+    apiRequest<AdminPolicyReviewItem>(
+      API_ENDPOINTS.admin.adminPolicyReview(policyId),
+      { method: "POST", body: { status, comment } },
     ),
   listCompanyDocuments: (params: {
     query?: string; merchantId?: string; validationStatus?: string;

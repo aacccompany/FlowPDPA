@@ -11,12 +11,12 @@ import type {
 } from './policyTypes'
 
 export const legalApi = {
-  dashboard: () => apiRequest<LegalDashboard>(API_ENDPOINTS.legal.dashboard),
+  dashboard: () => apiRequest<LegalDashboard>(API_ENDPOINTS.legal.dashboard, { cache: false }),
   listSubmissions: (status?: Exclude<PolicyStatus, 'archived'>) => {
     const query = status ? `?status=${encodeURIComponent(status)}` : ''
-    return apiRequest<SavedPolicy[]>(`${API_ENDPOINTS.legal.submissions}${query}`)
+    return apiRequest<SavedPolicy[]>(`${API_ENDPOINTS.legal.submissions}${query}`, { cache: false })
   },
-  getSubmission: (slug: string) => apiRequest<SavedPolicy>(API_ENDPOINTS.legal.submission(slug)),
+  getSubmission: (slug: string) => apiRequest<SavedPolicy>(API_ENDPOINTS.legal.submission(slug), { cache: false }),
   updateSubmission: (slug: string, data: LegalSubmissionPatch) =>
     apiRequest<SavedPolicy>(API_ENDPOINTS.legal.submission(slug), { method: 'PATCH', body: data }),
   listChangeRequests: (filters?: { status?: ChangeRequestStatus; policySlug?: string }) => {
@@ -24,7 +24,7 @@ export const legalApi = {
     if (filters?.status) query.set('status', filters.status)
     if (filters?.policySlug) query.set('policySlug', filters.policySlug)
     const suffix = query.size ? `?${query.toString()}` : ''
-    return apiRequest<PolicyChangeRequest[]>(`${API_ENDPOINTS.legal.changeRequests}${suffix}`)
+    return apiRequest<PolicyChangeRequest[]>(`${API_ENDPOINTS.legal.changeRequests}${suffix}`, { cache: false })
   },
   getChangeRequest: (requestId: string) =>
     apiRequest<PolicyChangeRequest>(API_ENDPOINTS.legal.changeRequest(requestId)),

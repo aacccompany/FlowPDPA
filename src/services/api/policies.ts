@@ -23,6 +23,11 @@ export const policiesApi = {
       API_ENDPOINTS.policies.companyAuthorityAcceptance,
       { method: 'POST', body: { policyType } },
     ),
+  acceptPersonalDeclaration: (policyType: PolicyQuestionnaire['policyType']) =>
+    apiRequest<{ acceptedAt: string; declarationVersion: string }>(
+      API_ENDPOINTS.policies.personalDeclarationAcceptance,
+      { method: 'POST', body: { policyType } },
+    ),
   create: (data: PolicyQuestionnaire) => apiRequest<SavedPolicy>(API_ENDPOINTS.policies.root, { method: 'POST', body: data, timeout: 120000 }),
   regenerate: (id: string, data: PolicyQuestionnaire) =>
     apiRequest<SavedPolicy>(API_ENDPOINTS.policies.byId(id), { method: 'PUT', body: data, timeout: 120000 }),
@@ -45,6 +50,16 @@ export const policiesApi = {
     apiRequest<{ id: string; acknowledgedAt: string }>(API_ENDPOINTS.policies.publicAcknowledgement(slug), {
       method: 'POST', body: { acknowledgementVersion: 'v1' }, authenticated: false,
     }),
+  recordPublicAcknowledgementDismissal: (
+    slug: string,
+    reason: 'close_button' | 'continue_without_acknowledgement',
+  ) => apiRequest<{ id: string; dismissedAt: string }>(
+    API_ENDPOINTS.policies.publicAcknowledgementDismissal(slug), {
+      method: 'POST',
+      body: { acknowledgementVersion: 'v1', reason },
+      authenticated: false,
+    },
+  ),
   // Compatibility aliases for current callers.
   update: (id: string, data: PolicyQuestionnaire) => policiesApi.regenerate(id, data),
   delete: (id: string) => policiesApi.archive(id),

@@ -2,9 +2,19 @@ export type PolicyType =
   "privacy" | "hr" | "cctv" | "recruitment" | "vendor" | "dpa";
 export type PolicyLanguage = "th" | "en" | "both";
 export type PolicyStatus =
-  "pending_review" | "approved" | "rejected" | "edited" | "archived";
+  | "pending_review"
+  | "pending_admin_review"
+  | "changes_requested_by_admin"
+  | "approved"
+  | "rejected"
+  | "edited"
+  | "archived";
 export type PolicyReviewStatus = "approved" | "rejected" | "edited";
-export type ChangeRequestStatus = "pending_review" | "resolved" | "rejected";
+export type ChangeRequestStatus =
+  | "pending_review"
+  | "pending_admin_review"
+  | "resolved"
+  | "rejected";
 export type ChangeRequestPriority = "low" | "normal" | "high" | "urgent";
 
 export interface PolicyQuestionnaire {
@@ -184,6 +194,11 @@ export interface ArchivePolicyResult {
 
 export type PolicyActivityType =
   | "document_acknowledged"
+  | "document_acknowledgement_dismissed"
+  | "merchant_submitted_to_legal"
+  | "legal_submitted_to_admin"
+  | "admin_changes_requested"
+  | "admin_approved"
   | "customer_consent"
   | "merchant_change_requested"
   | "legal_document_updated";

@@ -52,6 +52,7 @@ export const API_ENDPOINTS = {
     root: '/policies',
     termsAcceptance: '/policies/terms-acceptance',
     companyAuthorityAcceptance: '/policies/company-authority-acceptance',
+    personalDeclarationAcceptance: '/policies/personal-declaration-acceptance',
     byId: (policyId: string) => `/policies/${encodeURIComponent(policyId)}`,
     changeRequests: (policyId: string) => `/policies/${encodeURIComponent(policyId)}/change-requests`,
     changeRequest: (policyId: string, requestId: string) => `/policies/${encodeURIComponent(policyId)}/change-requests/${encodeURIComponent(requestId)}`,
@@ -59,6 +60,7 @@ export const API_ENDPOINTS = {
     publicBySlugAndLanguage: (slug: string, language: 'th' | 'en') => `/policies/public/${encodeURIComponent(slug)}/${language}`,
     publicConsent: (slug: string) => `/policies/public/${encodeURIComponent(slug)}/consent`,
     publicAcknowledgement: (slug: string) => `/policies/public/${encodeURIComponent(slug)}/acknowledgement`,
+    publicAcknowledgementDismissal: (slug: string) => `/policies/public/${encodeURIComponent(slug)}/acknowledgement-dismissal`,
     activityLogs: (policyId: string) => `/policies/${encodeURIComponent(policyId)}/activity-logs`,
   },
   legal: {
@@ -79,6 +81,8 @@ export const API_ENDPOINTS = {
       `/admin/payments/${encodeURIComponent(paymentId)}`,
     policies: '/admin/policies',
     policy: (policyId: string) => `/admin/policies/${encodeURIComponent(policyId)}`,
+    policyHistory: (policyId: string) =>
+      `/admin/policies/${encodeURIComponent(policyId)}/history`,
     assignLegal: (policyId: string) => `/admin/policies/${encodeURIComponent(policyId)}/assign-legal`,
     logs: '/admin/monitoring/logs',
     activityLogs: '/admin/monitoring/activity-logs',
@@ -89,6 +93,9 @@ export const API_ENDPOINTS = {
     legalUserStatus: (legalUserId: string) => `/admin/legal-users/${encodeURIComponent(legalUserId)}/status`,
     legalWorkload: '/admin/legal-workload',
     legalReviews: '/admin/legal-reviews',
+    adminReviewQueue: '/admin/admin-review-queue',
+    adminPolicyReview: (policyId: string) =>
+      `/admin/policies/${encodeURIComponent(policyId)}/admin-review`,
     templates: '/admin/templates',
     template: (templateId: string) => `/admin/templates/${encodeURIComponent(templateId)}`,
     companyDocuments: '/admin/company-documents',
