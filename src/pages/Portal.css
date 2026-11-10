@@ -621,3 +621,6 @@
 .portal-shell-legal .portal-filter { font-size: 13px; }
 .portal-shell-legal .portal-badge { font-size: 12px; }
 .portal-shell-legal .portal-empty { color: #374151; }
+
+/* "Go to this text" from a change request: a highlight that does not touch the selection */
+::highlight(legal-jump) { background-color: #fde68a; color: #172033; }

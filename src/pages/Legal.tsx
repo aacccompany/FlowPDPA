@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
@@ -72,6 +72,7 @@ interface ChangeRequest {
   sectionTitle: string;
   requestedChange: string;
   requesterName: string;
+  language: PolicyChangeRequest["language"];
   priority: PolicyChangeRequest["priority"];
   reason: string | null;
   selectedText: string | null;
@@ -108,6 +109,7 @@ const changeFromApi = (request: PolicyChangeRequest): ChangeRequest => ({
   websiteName: request.websiteName || request.policySlug,
   sectionTitle: request.sectionTitle || "ไม่ระบุหัวข้อ",
   requestedChange: request.requestedChange,
+  language: request.language,
   priority: request.priority,
   reason: request.reason ?? null,
   selectedText: request.selectedText ?? null,
@@ -799,16 +801,19 @@ function Changes({
 
 function Editor({
   initial,
+  hasNext,
   back,
   save,
   changeRequests,
   updateChange,
 }: {
   initial: Submission;
+  hasNext: boolean;
   back: () => void;
   save: (
     row: Submission,
     decision: PolicyReviewStatus | null,
+    goNext?: boolean,
   ) => Promise<string | null>;
   changeRequests: ChangeRequest[];
   updateChange: (
@@ -831,11 +836,16 @@ function Editor({
   >({});
   const [requestSavingId, setRequestSavingId] = useState<string | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [confirmApprove, setConfirmApprove] = useState<{
+    goNext: boolean;
+  } | null>(null);
+  const [jumpNote, setJumpNote] = useState("");
   const [requestError, setRequestError] = useState("");
+  const [baseline, setBaseline] = useState(initial);
   const dirty =
-    draft.contentTh !== initial.contentTh ||
-    draft.contentEn !== initial.contentEn ||
-    draft.reviewComment !== initial.reviewComment ||
+    draft.contentTh !== baseline.contentTh ||
+    draft.contentEn !== baseline.contentEn ||
+    draft.reviewComment !== baseline.reviewComment ||
     decision !== null;
   const content = language === "th" ? draft.contentTh : draft.contentEn;
   const setContent = (value: string) =>
@@ -844,16 +854,75 @@ function Editor({
         ? { ...current, contentTh: value }
         : { ...current, contentEn: value },
     );
-  const submit = async () => {
+  const submit = async (goNext = false, confirmed = false) => {
     if (decision === "rejected" && !draft.reviewComment.trim()) {
       setError("กรุณากรอกความเห็นก่อนไม่อนุมัตินโยบาย");
       return;
     }
+    if (decision === "approved" && !confirmed) {
+      setConfirmApprove({ goNext });
+      return;
+    }
     setSaving(true);
     setError("");
-    const message = await save(draft, decision);
+    const message = await save(draft, decision, goNext);
     setSaving(false);
     if (message) setError(message);
+    else if (decision === null) setBaseline(draft);
+  };
+  // Ctrl/Cmd+S saves, like any document editor. The handler is registered once and
+  // always calls the latest submit through a ref that is refreshed after each render.
+  const submitRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    submitRef.current = () => {
+      if (!saving) void submit();
+    };
+  });
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        submitRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  // Select the text a merchant asked to change, so the reviewer lands on it.
+  const jumpToText = (request: ChangeRequest) => {
+    const wanted = request.language === "en" ? "en" : request.language === "th" ? "th" : language;
+    const run = () => {
+      const snippet = (request.selectedText ?? "").replace(/\s+/g, " ").trim().slice(0, 24);
+      const root = document.querySelector(".legal-editor-document");
+      if (!snippet || !root) return setJumpNote("ไม่พบข้อความนี้ในเอกสาร");
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const text = (node.textContent ?? "").replace(/\s+/g, " ");
+        const index = text.indexOf(snippet);
+        if (index === -1) continue;
+        const range = document.createRange();
+        range.setStart(node, Math.min(index, node.textContent?.length ?? 0));
+        range.setEnd(node, Math.min(index + snippet.length, node.textContent?.length ?? 0));
+        const highlights = (CSS as unknown as { highlights?: Map<string, unknown> }).highlights;
+        const HighlightCtor = (window as unknown as { Highlight?: new (r: Range) => unknown }).Highlight;
+        if (highlights && HighlightCtor) {
+          highlights.set("legal-jump", new HighlightCtor(range));
+          window.setTimeout(() => highlights.delete("legal-jump"), 8000);
+        } else {
+          const selection = window.getSelection();
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+        }
+        node.parentElement?.scrollIntoView({ block: "center", behavior: "smooth" });
+        return setJumpNote("");
+      }
+      setJumpNote("ไม่พบข้อความนี้ในเอกสารปัจจุบัน (อาจถูกแก้ไขไปแล้ว)");
+    };
+    const available = draft.language === "both" || draft.language === wanted;
+    if (available && wanted !== language) {
+      setLanguage(wanted);
+      window.setTimeout(run, 700);
+    } else run();
   };
   const declineChangeRequest = async (id: string) => {
     const comment = requestComments[id]?.trim() || "";
@@ -881,13 +950,40 @@ function Editor({
         onConfirm={back}
         onCancel={() => setConfirmLeave(false)}
       />
-      <button
-        className="portal-button mb-5"
-        onClick={() => (dirty ? setConfirmLeave(true) : back())}
-      >
-        <ArrowLeft className="w-4 h-4" />
-        กลับไปยังคิว
-      </button>
+      <ConfirmDialog
+        open={confirmApprove !== null}
+        title="อนุมัตินโยบายนี้?"
+        description="นโยบายจะถูกอนุมัติ และคำขอแก้ไขที่รอดำเนินการจะถูกปิดอัตโนมัติ"
+        confirmLabel="อนุมัติ"
+        cancelLabel="ยังไม่อนุมัติ"
+        onConfirm={() => {
+          const goNext = confirmApprove?.goNext ?? false;
+          setConfirmApprove(null);
+          void submit(goNext, true);
+        }}
+        onCancel={() => setConfirmApprove(null)}
+      />
+      <div className="mb-5 flex flex-wrap items-center gap-3">
+        <button
+          className="portal-button"
+          onClick={() => (dirty ? setConfirmLeave(true) : back())}
+        >
+          <ArrowLeft className="w-4 h-4" />
+          กลับไปยังคิว
+        </button>
+        <div className="xl:hidden">
+          <button
+            className="portal-button"
+            onClick={() =>
+              document
+                .getElementById("legal-decision")
+                ?.scrollIntoView({ behavior: "smooth", block: "start" })
+            }
+          >
+            ไปที่ผลการพิจารณา
+          </button>
+        </div>
+      </div>
       <div className="flex flex-col xl:flex-row gap-5">
         <section className="portal-panel flex-1 min-w-0">
           <div className="portal-panel-head">
@@ -896,6 +992,17 @@ function Editor({
               <h1 className="text-lg font-semibold mt-1">
                 {draft.websiteName}
               </h1>
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                <span className="inline-flex items-center gap-2">
+                  <span className="text-gray-600">กำหนดส่ง</span>
+                  <Deadline row={draft} />
+                </span>
+                {draft.assignmentNote && (
+                  <span className="text-gray-700">
+                    หมายเหตุ: {draft.assignmentNote}
+                  </span>
+                )}
+              </div>
             </div>
             <StatusBadge status={draft.status} />
           </div>
@@ -932,7 +1039,7 @@ function Editor({
           </div>
         </section>
         <aside className="w-full xl:w-96 space-y-4 xl:sticky xl:top-20 xl:self-start xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto">
-          <section className="portal-panel p-5">
+          <section id="legal-decision" className="portal-panel p-5">
             <h2 className="text-base font-semibold">ผลการพิจารณา</h2>
             <p className="mt-1 mb-3 text-xs leading-5 text-gray-600">
               บันทึกการแก้ไขเป็นฉบับร่าง หรือเลือกผลการพิจารณาของนโยบายทั้งฉบับ
@@ -1014,6 +1121,20 @@ function Editor({
                     ? "ไม่อนุมัตินโยบาย"
                     : "บันทึกฉบับร่าง"}
             </button>
+            {decision && hasNext && (
+              <button
+                className="portal-button w-full mt-2"
+                disabled={saving}
+                onClick={() => void submit(true)}
+              >
+                {decision === "approved"
+                  ? "อนุมัติและไปฉบับถัดไป"
+                  : "ไม่อนุมัติและไปฉบับถัดไป"}
+              </button>
+            )}
+            <p className="mt-3 text-xs text-gray-600">
+              ลัด: กด Ctrl + S เพื่อบันทึก
+            </p>
           </section>
           <section className="portal-panel p-5">
             <h2 className="text-base font-semibold mb-2">รายละเอียดคำขอ</h2>
@@ -1050,6 +1171,11 @@ function Editor({
                   {requestError}
                 </p>
               )}
+              {jumpNote && (
+                <p role="status" className="mb-3 text-xs text-gray-700">
+                  {jumpNote}
+                </p>
+              )}
               <div className="space-y-4">
                 {changeRequests.map((request) => (
                   <article
@@ -1069,9 +1195,18 @@ function Editor({
                       {request.requestedChange}
                     </p>
                     {request.selectedText && (
-                      <blockquote className="mt-2 border-l border-gray-300 pl-3 text-xs leading-5 text-gray-600 line-clamp-3">
-                        {request.selectedText}
-                      </blockquote>
+                      <>
+                        <blockquote className="mt-2 border-l border-gray-300 pl-3 text-xs leading-5 text-gray-600 line-clamp-3">
+                          {request.selectedText}
+                        </blockquote>
+                        <button
+                          className="portal-button mt-2"
+                          onClick={() => jumpToText(request)}
+                        >
+                          <Search className="w-4 h-4" />
+                          ไปที่ข้อความนี้ในเอกสาร
+                        </button>
+                      </>
                     )}
                     {request.reason && (
                       <p className="mt-2 text-xs text-gray-600">
@@ -1149,7 +1284,7 @@ export default function Legal() {
     void api.legal.dashboard().then((response) => {
       if (!active) return;
       if (response.success && response.data) setDashboard(response.data);
-      else setLoadError(response.error?.message || "Unable to load dashboard.");
+      else setLoadError(response.error?.message || "ไม่สามารถโหลดภาพรวมได้");
       setLoading(false);
     });
     void api.legal.listSubmissions().then((response) => {
@@ -1158,7 +1293,7 @@ export default function Legal() {
         setSubmissions(response.data.map(submissionFromApi));
       else {
         setSubmissions([]);
-        setLoadError((current) => current || response.error?.message || "Unable to load submissions.");
+        setLoadError((current) => current || response.error?.message || "ไม่สามารถโหลดคิวตรวจสอบได้");
       }
     });
     void api.legal.listChangeRequests().then((response) => {
@@ -1167,7 +1302,7 @@ export default function Legal() {
         setChanges(response.data.map(changeFromApi));
       else {
         setChanges([]);
-        setLoadError((current) => current || response.error?.message || "Unable to load change requests.");
+        setLoadError((current) => current || response.error?.message || "ไม่สามารถโหลดคำขอแก้ไขได้");
       }
     });
     return () => {
@@ -1183,7 +1318,7 @@ export default function Legal() {
     setLoadError("");
     const response = await api.legal.getSubmission(row.slug);
     if (!response.success || !response.data) {
-      setLoadError(response.error?.message || "Unable to load submission.");
+      setLoadError(response.error?.message || "ไม่สามารถโหลดนโยบายนี้ได้");
       return;
     }
     const detail = submissionFromApi(response.data);
@@ -1197,7 +1332,7 @@ export default function Legal() {
     setLoadError("");
     const response = await api.legal.getSubmission(slug);
     if (!response.success || !response.data)
-      return response.error?.message || "Unable to load the policy document.";
+      return response.error?.message || "ไม่สามารถโหลดเอกสารนโยบายได้";
     const detail = submissionFromApi(response.data);
     setSubmissions((current) =>
       current.some((item) => item.id === detail.id)
@@ -1217,7 +1352,11 @@ export default function Legal() {
     setView(next);
     setSelectedId(null);
   };
-  const save = async (row: Submission, decision: PolicyReviewStatus | null) => {
+  const save = async (
+    row: Submission,
+    decision: PolicyReviewStatus | null,
+    goNext = false,
+  ) => {
     const content =
       row.language === "both"
         ? {
@@ -1241,7 +1380,7 @@ export default function Legal() {
         : {}),
     });
     if (!response.success || !response.data)
-      return response.error?.message || "Unable to save the submission.";
+      return response.error?.message || "ไม่สามารถบันทึกได้ กรุณาลองอีกครั้ง";
     const saved = submissionFromApi(response.data);
     setSubmissions((current) =>
       current.map((item) => (item.id === saved.id ? saved : item)),
@@ -1251,8 +1390,17 @@ export default function Legal() {
       if (changesResponse.success && changesResponse.data)
         setChanges(changesResponse.data.map(changeFromApi));
     }
-    setSelectedId(null);
-    setView(selectedReturnView);
+    const nextRow = goNext
+      ? submissions
+          .filter((r) => r.status === "pending_review" && r.id !== saved.id)
+          .sort(byUrgency)[0]
+      : undefined;
+    // Saving a draft keeps the reviewer in the editor; a decision returns to the queue
+    // (or opens the next pending policy).
+    if (!nextRow && decision !== null) {
+      setSelectedId(null);
+      setView(selectedReturnView);
+    }
     setNotice(
       decision === "approved"
         ? "อนุมัตินโยบายแล้ว"
@@ -1260,6 +1408,7 @@ export default function Legal() {
           ? "บันทึกผลไม่อนุมัติแล้ว"
           : "บันทึกฉบับร่างแล้ว",
     );
+    if (nextRow) await select(nextRow);
     return null;
   };
   const updateChange = async (
@@ -1272,7 +1421,7 @@ export default function Legal() {
       legalComment,
     });
     if (!response.success || !response.data)
-      return response.error?.message || "Unable to update the change request.";
+      return response.error?.message || "ไม่สามารถบันทึกผลคำขอแก้ไขได้";
     const saved = changeFromApi(response.data);
     setChanges((current) =>
       current.map((row) => (row.id === saved.id ? saved : row)),
@@ -1345,7 +1494,11 @@ export default function Legal() {
             <div className="portal-empty">กำลังโหลดข้อมูล...</div>
           ) : selected ? (
             <Editor
+              key={selected.id}
               initial={selected}
+              hasNext={submissions.some(
+                (r) => r.status === "pending_review" && r.id !== selected.id,
+              )}
               back={() => setSelectedId(null)}
               save={save}
               changeRequests={changes.filter(
