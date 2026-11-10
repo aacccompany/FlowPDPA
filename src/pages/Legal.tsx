@@ -1481,7 +1481,11 @@ export default function Legal() {
               role="alert"
               className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-control)] border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
             >
-              <span>{loadError}</span>
+              <span>
+                {/[ก-๙]/.test(loadError)
+                  ? loadError
+                  : "เชื่อมต่อระบบไม่สำเร็จ กรุณาลองอีกครั้งในอีกสักครู่"}
+              </span>
               <button
                 className="portal-button"
                 onClick={() => window.location.reload()}

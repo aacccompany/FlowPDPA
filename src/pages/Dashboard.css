@@ -352,3 +352,13 @@
 .merchant-shell [class*="tracking-"] { letter-spacing: normal; }
 .merchant-shell .font-mono { font-family: inherit; font-variant-numeric: tabular-nums; }
 .merchant-shell [style*="IBM Plex Mono"] { font-family: inherit !important; font-variant-numeric: tabular-nums; }
+
+/* Getting-started checklist */
+.merchant-steps { list-style: none; margin: 0; padding: 4px 20px 20px; }
+.merchant-steps li { display: flex; gap: 12px; padding: 10px 0; }
+.merchant-step-mark {
+  flex: none; width: 24px; height: 24px; border-radius: 999px; display: grid; place-items: center;
+  border: 1px solid rgba(23, 35, 59, 0.18); background: rgba(255, 255, 255, 0.7);
+  color: #374151; font-size: 12px; font-weight: 600;
+}
+.merchant-steps li[data-done='true'] .merchant-step-mark { border: 0; background: transparent; color: #066a4f; }

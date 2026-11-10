@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowLeft,
+  Copy,
   CheckCircle2,
   Clock3,
   ExternalLink,
@@ -31,6 +32,140 @@ const requestStatus: Record<string, { label: string; className: string }> = {
   resolved: { label: "ดำเนินการแล้ว", className: "bg-emerald-50 text-emerald-700" },
   rejected: { label: "ไม่ดำเนินการ", className: "bg-red-50 text-red-700" },
 };
+
+// Where the policy is in the review, and the one thing to do next.
+function PolicyProgress({ policy }: { policy: SavedPolicy }) {
+  const [copied, setCopied] = useState<"link" | "embed" | "failed" | null>(null);
+  const formatDate = (value?: string | null) =>
+    value
+      ? new Intl.DateTimeFormat("th-TH", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        }).format(new Date(value))
+      : "";
+  const decided = policy.status !== "pending_review";
+  const decisionLabel =
+    policy.status === "approved"
+      ? "อนุมัติแล้ว"
+      : policy.status === "rejected"
+        ? "ไม่อนุมัติ"
+        : policy.status === "edited"
+          ? "ฝ่ายกฎหมายแก้ไขแล้ว"
+          : policy.status === "archived"
+            ? "เก็บถาวร"
+            : "รอผลการตรวจสอบ";
+  const decidedAt = decided
+    ? policy.approvedAt || policy.reviewedAt || policy.updatedAt
+    : null;
+  const steps = [
+    { label: "ส่งให้ตรวจสอบ", done: true, note: formatDate(policy.createdAt) },
+    { label: "ฝ่ายกฎหมายตรวจสอบ", done: decided, note: "" },
+    { label: decisionLabel, done: decided, note: formatDate(decidedAt) },
+  ];
+  // Only the public link the backend actually published; never a guessed URL.
+  const publicUrl = policy.shareUrl ?? null;
+  const copy = async (kind: "link" | "embed", text: string) => {
+    let ok = false;
+    try {
+      // Never hang silently: a refused/pending permission must fall through within 1.5s.
+      await Promise.race([
+        navigator.clipboard.writeText(text),
+        new Promise((_, reject) => window.setTimeout(reject, 1500)),
+      ]);
+      ok = true;
+    } catch {
+      // Clipboard API can be refused (page not focused, non-secure origin): try the old way.
+      try {
+        const field = document.createElement("textarea");
+        field.value = text;
+        field.style.position = "fixed";
+        field.style.opacity = "0";
+        document.body.appendChild(field);
+        field.select();
+        ok = document.execCommand("copy");
+        field.remove();
+      } catch {
+        // leave ok = false: the user is told below
+      }
+    }
+    setCopied(ok ? kind : "failed");
+    window.setTimeout(() => setCopied(null), 4000);
+  };
+  return (
+    <section className="rounded-xl border border-gray-200 bg-white p-4">
+      <h2 className="text-sm font-semibold">สถานะนโยบาย</h2>
+      <ol className="merchant-timeline mt-3">
+        {steps.map((step, index) => (
+          <li
+            key={step.label}
+            data-done={step.done}
+            data-current={!step.done && steps[index - 1]?.done}
+          >
+            <span className="merchant-timeline-mark" aria-hidden="true">
+              {step.done ? (
+                <CheckCircle2 className="h-4 w-4" />
+              ) : steps[index - 1]?.done ? (
+                <Clock3 className="h-4 w-4" />
+              ) : null}
+            </span>
+            <div>
+              <p className="text-sm font-semibold">{step.label}</p>
+              {step.note && <p className="text-xs text-gray-600">{step.note}</p>}
+            </div>
+          </li>
+        ))}
+      </ol>
+      <div className="mt-4 text-sm leading-6 text-gray-700">
+        {policy.status === "pending_review" && (
+          <p>รอฝ่ายกฎหมายตรวจสอบ โดยปกติภายใน 1–2 วันทำการ</p>
+        )}
+        {policy.status === "edited" && (
+          <p>ฝ่ายกฎหมายแก้ไขเนื้อหาให้แล้ว โปรดตรวจดูฉบับล่าสุดทางซ้าย</p>
+        )}
+        {policy.status === "rejected" && (
+          <p>ดูเหตุผลด้านล่าง แล้วส่งคำขอแก้ไขให้ฝ่ายกฎหมายได้ที่ฟอร์ม “ขอแก้ไขนโยบาย”</p>
+        )}
+        {policy.status === "approved" && !publicUrl && (
+          <p>นโยบายนี้ได้รับการอนุมัติแล้ว</p>
+        )}
+        {policy.status === "approved" && publicUrl && (
+          <div>
+            <p className="font-semibold text-gray-900">
+              นำนโยบายไปติดตั้งบนเว็บไซต์
+            </p>
+            <div className="mt-2 flex items-center gap-2 rounded-lg border border-gray-200 bg-white/70 px-3 py-2">
+              <code className="min-w-0 flex-1 select-all truncate text-xs">{publicUrl}</code>
+              <button
+                type="button"
+                className="merchant-button"
+                onClick={() => void copy("link", publicUrl)}
+              >
+                <Copy className="h-4 w-4" />
+                {copied === "link" ? "คัดลอกแล้ว" : "คัดลอกลิงก์"}
+              </button>
+            </div>
+            {copied === "failed" && (
+              <p role="alert" className="mt-2 text-xs text-red-700">
+                คัดลอกอัตโนมัติไม่สำเร็จ ลองคลิกที่ลิงก์เพื่อเลือกทั้งหมดแล้วกด Ctrl + C
+              </p>
+            )}
+            {policy.htmlEmbed && (
+              <button
+                type="button"
+                className="merchant-button mt-2"
+                onClick={() => void copy("embed", policy.htmlEmbed ?? "")}
+              >
+                <Copy className="h-4 w-4" />
+                {copied === "embed" ? "คัดลอกแล้ว" : "คัดลอกโค้ดฝัง"}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
 
 const activityLabel: Record<PolicyActivityLog["type"], string> = {
   document_acknowledged: "ลูกค้ารับทราบเอกสาร",
@@ -245,6 +380,7 @@ export default function PolicyEdit() {
         </section>
 
         <aside className="space-y-4">
+          <PolicyProgress policy={policy} />
           {policy.status === "rejected" && (
             <section
               role="status"

@@ -17,6 +17,7 @@ import {
   Upload,
   FileText,
   Info,
+  CircleHelp,
 } from "lucide-react";
 import { PolicyTypeIcon } from "@/components/policy/PolicyTypeIcon";
 import {
@@ -309,6 +310,25 @@ function CheckboxCard({
         </span>
       )}
     </label>
+  );
+}
+
+// A short plain-language explanation that stays out of the way until opened.
+function HelpNote({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <details className="merchant-help">
+      <summary>
+        <CircleHelp className="w-4 h-4" aria-hidden="true" />
+        {title}
+      </summary>
+      <div>{children}</div>
+    </details>
   );
 }
 
@@ -1386,9 +1406,14 @@ function Step3({
       <h2 className="text-xl font-black text-gray-900 mb-1">
         ข้อมูลส่วนบุคคลที่เก็บรวบรวม
       </h2>
-      <p className="text-sm text-gray-400 mb-6">
+      <p className="text-sm text-gray-400 mb-4">
         เลือกทุกประเภทข้อมูลที่ธุรกิจของคุณเก็บจากผู้ใช้งาน
       </p>
+      <HelpNote title="ข้อมูลอ่อนไหวคืออะไร">
+        ข้อมูลที่กฎหมายให้ความคุ้มครองเป็นพิเศษ เช่น สุขภาพ ศาสนา
+        หรือข้อมูลชีวภาพ (ลายนิ้วมือ ใบหน้า) โดยทั่วไปต้องได้รับความยินยอมโดยชัดแจ้งก่อนเก็บ
+        หากธุรกิจของคุณไม่เก็บข้อมูลเหล่านี้ ไม่ต้องเลือกรายการในกลุ่ม “ข้อมูลอ่อนไหว”
+      </HelpNote>
 
       <div className="space-y-5">
         <div>
@@ -1443,9 +1468,13 @@ function Step4({
       <h2 className="text-xl font-black text-gray-900 mb-1">
         วัตถุประสงค์และบุคคลที่สาม
       </h2>
-      <p className="text-sm text-gray-400 mb-6">
+      <p className="text-sm text-gray-400 mb-4">
         ระบุว่าข้อมูลถูกนำไปใช้ทำอะไร และมีบริการใดที่ได้รับข้อมูล
       </p>
+      <HelpNote title="บุคคลที่สามคืออะไร">
+        บริการภายนอกที่ได้รับข้อมูลจากเว็บไซต์ของคุณ เช่น เครื่องมือวิเคราะห์
+        ระบบชำระเงิน หรือบริการคลาวด์ หากไม่มีเลย ให้เลือก “ไม่มีบุคคลที่สาม”
+      </HelpNote>
 
       <div className="space-y-6">
         <div>
@@ -1571,6 +1600,17 @@ function Step5({
           </div>
         </div>
 
+        <HelpNote title="DPO และระยะเวลาเก็บข้อมูลคืออะไร">
+          <p>
+            <strong>DPO</strong> คือผู้ที่เจ้าของข้อมูลติดต่อเพื่อสอบถามหรือใช้สิทธิเกี่ยวกับข้อมูลของตน
+            ควรใช้อีเมลที่ตรวจสอบสม่ำเสมอ
+          </p>
+          <p className="mt-2">
+            <strong>ระยะเวลาเก็บ</strong> ควรเก็บเท่าที่จำเป็นตามวัตถุประสงค์
+            ข้อมูลที่เกี่ยวกับภาษีอาจต้องเก็บตามที่กฎหมายภาษีกำหนด (ตัวเลือก 7 ปี)
+            ฝ่ายกฎหมายจะตรวจสอบนโยบายก่อนเผยแพร่
+          </p>
+        </HelpNote>
         {/* DPO email */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>

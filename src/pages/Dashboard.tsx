@@ -8,6 +8,7 @@ import {
   LogOut,
   Menu,
   ArrowRight,
+  AlertTriangle,
   ChevronRight,
   Download,
   Copy,
@@ -78,15 +79,34 @@ function useMerchantPolicies() {
   const [loading, setLoading] = useState(
     () => !peekApiCache<SavedPolicy[]>(API_ENDPOINTS.policies.root)?.success,
   );
+  const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    let active = true;
     void api.policies.list().then((response) => {
-      setPolicies(response.success && response.data ? response.data : []);
+      if (!active) return;
+      if (response.success && response.data) {
+        setPolicies(response.data);
+        setError("");
+      } else {
+        // Keep what we already had: a failed load must not look like "no policies".
+        setError(response.error?.message || "โหลดรายการนโยบายไม่สำเร็จ");
+      }
       setLoading(false);
     });
+    return () => {
+      active = false;
+    };
+  }, [attempt]);
+
+  const reload = useCallback(() => {
+    setError("");
+    setLoading(true);
+    setAttempt((value) => value + 1);
   }, []);
 
-  return { policies, setPolicies, loading };
+  return { policies, setPolicies, loading, error, reload };
 }
 
 // ── Sidebar nav items ─────────────────────────────────────────
@@ -180,6 +200,35 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+function LoadError({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div role="alert" className="merchant-empty-state">
+      <AlertTriangle
+        className="w-6 h-6 mx-auto mb-3"
+        style={{ color: "#b42318" }}
+        aria-hidden="true"
+      />
+      <p className="text-sm font-semibold text-gray-800">
+        โหลดข้อมูลไม่สำเร็จ
+      </p>
+      <p className="text-xs mt-1 mb-4">
+        {/[ก-๙]/.test(message)
+          ? message
+          : "เชื่อมต่อระบบไม่สำเร็จ กรุณาลองอีกครั้งในอีกสักครู่"}
+      </p>
+      <button className="merchant-button primary" onClick={onRetry}>
+        ลองอีกครั้ง
+      </button>
+    </div>
+  );
+}
+
 // ── Sub-views ─────────────────────────────────────────────────
 function Overview({
   setView,
@@ -188,7 +237,9 @@ function Overview({
   setView: (v: string) => void;
   user: AuthUser;
 }) {
-  const { policies: userPolicies, loading } = useMerchantPolicies();
+  const { policies: userPolicies, loading, error, reload } =
+    useMerchantPolicies();
+  const loadFailed = Boolean(error) && userPolicies.length === 0;
   const countBy = (status: string) =>
     userPolicies.filter((p) => p.status === status).length;
   const needsAction = userPolicies.filter((p) => p.status === "rejected");
@@ -234,7 +285,7 @@ function Overview({
               className="text-3xl font-semibold tabular-nums"
               style={{ color: alert && value > 0 ? "#b42318" : undefined }}
             >
-              {loading ? "—" : value}
+              {loading || loadFailed ? "—" : value}
             </p>
             <p className="text-sm text-gray-600 mt-1">{label}</p>
           </div>
@@ -263,6 +314,8 @@ function Overview({
                 </div>
               ))}
             </div>
+          ) : loadFailed ? (
+            <LoadError message={error} onRetry={reload} />
           ) : recent.length === 0 ? (
             <div className="merchant-empty-state">
               <FileText className="w-6 h-6 mx-auto mb-3" />
@@ -302,6 +355,9 @@ function Overview({
           )}
         </section>
 
+        {!loadFailed && (
+        <div className="space-y-7">
+        {userPolicies.length > 0 && (
         <section className="merchant-panel self-start">
           <div className="merchant-panel-head">
             <div>
@@ -344,6 +400,60 @@ function Overview({
             </ul>
           )}
         </section>
+        )}
+        {!loading && countBy("approved") === 0 && (
+          <section className="merchant-panel self-start">
+            <div className="merchant-panel-head">
+              <div>
+                <h2 className="text-base font-semibold text-gray-900">
+                  เริ่มต้นใช้งาน
+                </h2>
+                <p className="text-xs text-gray-600 mt-1">
+                  จากสร้างนโยบายไปจนเผยแพร่บนเว็บไซต์
+                </p>
+              </div>
+            </div>
+            <ol className="merchant-steps">
+              <li data-done={userPolicies.length > 0}>
+                <span className="merchant-step-mark" aria-hidden="true">
+                  {userPolicies.length > 0 ? <CheckCircle className="w-5 h-5" /> : "1"}
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">
+                    สร้างนโยบายฉบับแรก
+                  </p>
+                </div>
+              </li>
+              <li data-done="false">
+                <span className="merchant-step-mark" aria-hidden="true">2</span>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">
+                    รอฝ่ายกฎหมายตรวจสอบและอนุมัติ
+                  </p>
+                  <p className="text-xs text-gray-600 mt-0.5">
+                    โดยปกติภายใน 1–2 วันทำการ
+                  </p>
+                </div>
+              </li>
+              <li data-done="false">
+                <span className="merchant-step-mark" aria-hidden="true">3</span>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">
+                    นำลิงก์นโยบายไปติดตั้งบนเว็บไซต์
+                  </p>
+                  <button
+                    onClick={() => setView("consents")}
+                    className="merchant-button mt-2"
+                  >
+                    ตั้งค่าความยินยอมล่วงหน้า <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </li>
+            </ol>
+          </section>
+        )}
+        </div>
+        )}
       </div>
     </div>
   );
@@ -471,7 +581,8 @@ function PolicyDownloadsDialog({
 }
 
 function PoliciesList() {
-  const { policies, setPolicies, loading } = useMerchantPolicies();
+  const { policies, setPolicies, loading, error, reload } =
+    useMerchantPolicies();
   const [consentPolicyIds, setConsentPolicyIds] = useState<Set<string>>(() => new Set());
   const [copied, setCopied] = useState<string | null>(null);
   const [downloadPolicy, setDownloadPolicy] = useState<SavedPolicy | null>(
@@ -602,7 +713,11 @@ function PoliciesList() {
 
       {loading ? (
         <div className="py-16 text-center text-sm text-gray-400">
-          Loading policies...
+          กำลังโหลดนโยบาย...
+        </div>
+      ) : error && policies.length === 0 ? (
+        <div className="merchant-empty bg-white border border-gray-100">
+          <LoadError message={error} onRetry={reload} />
         </div>
       ) : policies.length === 0 ? (
         <div className="merchant-empty bg-white border border-gray-100 p-10 text-center">

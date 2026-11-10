@@ -90,3 +90,40 @@
 .merchant-flow .bg-white.rounded-2xl .bg-white.rounded-xl:first-of-type { border-top: 0; }
 .merchant-flow .bg-white.rounded-2xl .bg-white.rounded-xl::before { display: none; }
 .merchant-flow .bg-white.rounded-2xl .bg-white.rounded-xl { padding-inline: 0; }
+
+/* Plain-language help that opens on demand (wizard) */
+.merchant-flow .merchant-help {
+  margin-bottom: 20px;
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+  color: #374151;
+}
+.merchant-flow .merchant-help summary {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; cursor: pointer; list-style: none;
+  font-weight: 600; color: #066a4f;
+}
+.merchant-flow .merchant-help summary::-webkit-details-marker { display: none; }
+.merchant-flow .merchant-help > div { padding: 0 14px 12px; line-height: 1.7; }
+
+/* Review timeline */
+.merchant-timeline { list-style: none; margin: 0; padding: 0; }
+.merchant-timeline li { display: flex; gap: 12px; padding-bottom: 14px; position: relative; }
+.merchant-timeline li:last-child { padding-bottom: 0; }
+.merchant-timeline li:not(:last-child)::after {
+  content: ''; position: absolute; left: 11px; top: 26px; bottom: 2px; width: 1px; background: var(--glass-edge);
+}
+.merchant-timeline-mark {
+  flex: none; width: 24px; height: 24px; border-radius: 999px; display: grid; place-items: center;
+  border: 1px solid rgba(23, 35, 59, 0.18); background: rgba(255, 255, 255, 0.7); color: #6b7280;
+}
+.merchant-timeline li[data-done='true'] .merchant-timeline-mark { border-color: #066a4f; background: #e8f4ef; color: #066a4f; }
+.merchant-timeline li[data-current='true'] .merchant-timeline-mark { border-color: #8a4f05; background: #fff6e5; color: #8a4f05; }
+.merchant-flow .merchant-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; padding: 0 13px;
+  border: 1px solid rgba(23, 35, 59, 0.14); border-radius: var(--radius-control); background: transparent;
+  color: #374151; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;
+}
+.merchant-flow .merchant-button:hover { background: rgba(255, 255, 255, 0.7); }
