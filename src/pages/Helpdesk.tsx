@@ -52,6 +52,8 @@ function StarPriority({ value, onChange }: { value: string; onChange: (v: string
           <button
             key={star}
             type="button"
+            aria-label={`ความสำคัญ ${star} ดาว`}
+            aria-pressed={current >= star}
             onMouseEnter={() => setHovered(star)}
             onMouseLeave={() => setHovered(null)}
             onClick={() => {
@@ -318,8 +320,9 @@ export default function Helpdesk() {
 
                     {/* Ticket Type */}
                     <div>
-                      <label className={labelCls}>ประเภท Ticket (Ticket Type)</label>
+                      <label htmlFor="ticket-type" className={labelCls}>ประเภท Ticket (Ticket Type)</label>
                       <select
+                        id="ticket-type"
                         value={ticketTypeId ?? ''}
                         onChange={e => setTicketTypeId(e.target.value === '' ? null : Number(e.target.value))}
                         className={inputCls}

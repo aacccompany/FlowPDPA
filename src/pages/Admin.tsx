@@ -53,6 +53,7 @@ import type {
   DocumentTemplateInput,
   AdminCompanyDocument,
 } from "@/services/api";
+import { ViewBoundary } from "@/components/ViewBoundary";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { marked } from "marked";
 import { normalizePolicyMarkdown } from "@/utils/policyMarkdown";
@@ -3562,8 +3563,13 @@ export default function Admin() {
     let active = true;
     void api.admin.overview().then((response) => {
       if (!active) return;
-      if (response.success && response.data) setOverview(response.data);
-      else setLoadError(response.error?.message || "Unable to load admin overview.");
+      if (response.success && response.data?.kpi) setOverview(response.data);
+      else
+        setLoadError(
+          response.success
+            ? "ข้อมูลภาพรวมจากระบบอยู่ในรูปแบบที่ไม่คาดคิด"
+            : response.error?.message || "ไม่สามารถโหลดภาพรวมได้",
+        );
       setLoading(false);
     });
     void Promise.all([
@@ -3590,23 +3596,23 @@ export default function Admin() {
       ]) => {
         if (!active) return;
         if (merchantsResponse.success && merchantsResponse.data)
-          setMerchants(merchantsResponse.data.merchants);
+          setMerchants(Array.isArray(merchantsResponse.data.merchants) ? merchantsResponse.data.merchants : []);
         if (policiesResponse.success && policiesResponse.data)
-          setPolicies(policiesResponse.data.policies);
+          setPolicies(Array.isArray(policiesResponse.data.policies) ? policiesResponse.data.policies : []);
         if (legalUsersResponse.success && legalUsersResponse.data)
-          setLegalUsers(legalUsersResponse.data.legalUsers);
+          setLegalUsers(Array.isArray(legalUsersResponse.data.legalUsers) ? legalUsersResponse.data.legalUsers : []);
         if (subscriptionsResponse.success && subscriptionsResponse.data)
-          setSubscriptions(subscriptionsResponse.data.subscriptions);
+          setSubscriptions(Array.isArray(subscriptionsResponse.data.subscriptions) ? subscriptionsResponse.data.subscriptions : []);
         if (paymentsResponse.success && paymentsResponse.data)
-          setPayments(paymentsResponse.data.payments);
+          setPayments(Array.isArray(paymentsResponse.data.payments) ? paymentsResponse.data.payments : []);
         if (logsResponse.success && logsResponse.data)
-          setLogs(logsResponse.data.logs);
+          setLogs(Array.isArray(logsResponse.data.logs) ? logsResponse.data.logs : []);
         if (analyticsResponse.success && analyticsResponse.data)
           setAnalytics(analyticsResponse.data);
         if (workloadResponse.success && workloadResponse.data)
-          setWorkload(workloadResponse.data.workload);
+          setWorkload(Array.isArray(workloadResponse.data.workload) ? workloadResponse.data.workload : []);
         if (reviewsResponse.success && reviewsResponse.data)
-          setReviews(reviewsResponse.data.reviews);
+          setReviews(Array.isArray(reviewsResponse.data.reviews) ? reviewsResponse.data.reviews : []);
         const failed = [
           merchantsResponse,
           policiesResponse,
@@ -3641,6 +3647,8 @@ export default function Admin() {
     content = (
       <Overview overview={overview} legalUsers={legalUsers} change={setView} />
     );
+  else if (view === "overview")
+    content = <div className="portal-empty">ยังไม่มีข้อมูลภาพรวม</div>;
   else if (view === "merchants")
     content = <MerchantView rows={merchants} setRows={setMerchants} />;
   else if (view === "policies")
@@ -3721,10 +3729,12 @@ export default function Admin() {
         <main className="portal-content portal-content-admin">
           {loadError && (
             <p className="mb-4 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-              {loadError}
+              {/[ก-๙]/.test(loadError)
+                ? loadError
+                : "เชื่อมต่อระบบไม่สำเร็จ หรือข้อมูลบางส่วนโหลดไม่ได้"}
             </p>
           )}
-          {content}
+          <ViewBoundary resetKey={view}>{content}</ViewBoundary>
         </main>
       </div>
     </div>

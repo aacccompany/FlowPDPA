@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { api, type DocumentTemplate } from "@/services/api";
+import { useEscapeKey } from "@/hooks/useEscapeKey";
 
 const disclaimer =
   "เอกสารนี้เป็นแบบฟอร์มเริ่มต้นสำหรับนำไปปรับใช้ตามบริบทขององค์กร ไม่ใช่คำปรึกษาทางกฎหมาย และไม่รับรองว่าการใช้แบบฟอร์มนี้จะทำให้องค์กรปฏิบัติตามกฎหมายได้อย่างถูกต้อง 100% โดยอัตโนมัติ ควรตรวจสอบฐานกฎหมาย กระบวนการจริง และปรึกษาผู้เชี่ยวชาญก่อนนำไปใช้";
@@ -54,6 +55,7 @@ function fullText(template: DocumentTemplate) {
 
 export default function DocumentTemplates() {
   const [selected, setSelected] = useState<DocumentTemplate | null>(null);
+  useEscapeKey(() => setSelected(null), selected !== null);
   const [copied, setCopied] = useState<string | null>(null);
   const [templates, setTemplates] = useState<DocumentTemplate[]>(
     builtinTemplates.map((template) => ({

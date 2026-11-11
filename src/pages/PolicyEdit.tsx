@@ -278,7 +278,7 @@ export default function PolicyEdit() {
       reason: "",
       priority: "normal",
     }));
-    setSuccess("Change request sent to Legal.");
+    setSuccess("ส่งคำขอแก้ไขให้ฝ่ายกฎหมายแล้ว ระหว่างนี้เอกสารที่เผยแพร่จะยังไม่เปลี่ยน");
   };
 
   if (loading)
@@ -343,7 +343,7 @@ export default function PolicyEdit() {
         )}
       </header>
 
-      <main className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:p-5">
+      <main className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:p-5">
         <section className="min-w-0 overflow-hidden rounded border border-gray-200 bg-white">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3">
             <div>

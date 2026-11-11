@@ -4,6 +4,7 @@ import { AlertCircle, Eye, EyeOff, Loader2, ShieldCheck } from 'lucide-react'
 import { api } from '@/services/api'
 import { normalizeRole, roleHome, storage, type UserRole } from '@/utils/storage'
 import { isValidEmail } from '@/utils/validation'
+import { friendlyError } from '@/utils/friendlyError'
 import './Register.css'
 import './Login.css'
 
@@ -57,7 +58,7 @@ export default function Login() {
     try {
       const response = await api.auth.login({ email: normalizedEmail, password })
       if (!response.success || !response.data) {
-        setError(response.error?.message || 'อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง')
+        setError(response.error?.status === 401 || response.error?.code === 'INVALID_CREDENTIALS' ? 'อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง' : friendlyError(response.error, 'เข้าสู่ระบบไม่สำเร็จ กรุณาตรวจสอบอีเมลและรหัสผ่านแล้วลองใหม่'))
         return
       }
 

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowRight,
   BarChart3,
   CalendarClock,
   CheckCircle2,
@@ -277,101 +278,103 @@ function Deadline({ row }: { row: Submission }) {
   );
 }
 
-function Sidebar({
+function TopNav({
   view,
   changeView,
   open,
-  close,
+  setOpen,
   logout,
   reviewer,
+  counts,
 }: {
   view: LegalView;
   changeView: (view: LegalView) => void;
   open: boolean;
-  close: () => void;
+  setOpen: (open: boolean) => void;
   logout: () => void;
   reviewer?: LegalDashboard["reviewer"];
+  counts: { queue: number; changes: number };
 }) {
   const items = [
-    { id: "dashboard" as const, label: "ภาพรวม", Icon: BarChart3 },
-    { id: "submissions" as const, label: "คิวตรวจสอบ", Icon: Inbox },
-    { id: "changes" as const, label: "คำขอแก้ไข", Icon: MessageSquareText },
+    { id: "dashboard" as const, label: "ภาพรวม", Icon: BarChart3, count: 0 },
+    { id: "submissions" as const, label: "คิวตรวจสอบ", Icon: Inbox, count: counts.queue },
+    { id: "changes" as const, label: "คำขอแก้ไข", Icon: MessageSquareText, count: counts.changes },
   ];
+  const go = (id: LegalView) => {
+    changeView(id);
+    setOpen(false);
+  };
   return (
-    <>
-      {open && (
-        <button
-          className="portal-overlay"
-          onClick={close}
-          aria-label="ปิดเมนูนำทาง"
-        />
-      )}
-      <aside className="portal-sidebar" data-open={open}>
-        <div className="portal-brand">
-          <img
-            src="/favicon.svg"
-            alt="FlowPDPA"
-            style={{
-              width: "32px",
-              height: "32px",
-              filter: "brightness(0) invert(1)",
-              flexShrink: 0,
-            }}
-          />
-          <div>
-            <p className="text-sm font-extrabold" style={{ color: "#ffffff" }}>
-              Flow<span style={{ color: "#4ade80" }}>PDPA</span>
-            </p>
-          </div>
+    <header className="legal-topnav">
+      <div className="legal-topnav-bar">
+        <div className="legal-brand">
+          <span className="legal-brand-mark" aria-hidden="true">
+            <img src="/favicon.svg" alt="" />
+          </span>
+          <span className="legal-brand-name">
+            Flow<span>PDPA</span>
+          </span>
+          <span className="legal-brand-tag">ฝ่ายกฎหมาย</span>
         </div>
-        <nav className="portal-nav">
-          {items.map(({ id, label, Icon }) => (
+        <nav className="legal-nav" aria-label="เมนูหลัก">
+          {items.map(({ id, label, Icon, count }) => (
             <button
               key={id}
-              className="portal-nav-item"
+              className="legal-nav-pill"
               data-active={view === id}
-              onClick={() => {
-                changeView(id);
-                close();
-              }}
+              aria-current={view === id ? "page" : undefined}
+              onClick={() => go(id)}
             >
-              <Icon />
+              <Icon className="w-4 h-4" />
               {label}
+              {count > 0 && <span className="legal-nav-count">{count}</span>}
             </button>
           ))}
         </nav>
-        <div className="portal-account">
-          <div className="flex items-center gap-3 mb-3">
-            <span
-              className="w-8 h-8 grid place-items-center rounded-[var(--radius-control)]"
-              style={{
-                backgroundColor: "rgba(8,122,91,0.25)",
-                color: "#4ade80",
-              }}
-            >
-              <UserRound className="w-4 h-4" />
-            </span>
-            <div className="min-w-0">
-              <p
-                className="text-sm font-semibold truncate"
-                style={{ color: "#e2e8f0" }}
-              >
-                {reviewer?.name || "ผู้ตรวจสอบฝ่ายกฎหมาย"}
-              </p>
-              {reviewer?.email && (
-                <p className="text-xs truncate" style={{ color: "#94a3b8" }}>
-                  {reviewer.email}
-                </p>
-              )}
-            </div>
-          </div>
-          <button className="portal-nav-item" onClick={logout}>
-            <LogOut />
-            ออกจากระบบ
+        <div className="legal-user">
+          <span className="legal-user-chip" title={reviewer?.email}>
+            <UserRound className="w-4 h-4" />
+            <span>{reviewer?.name || "ผู้ตรวจสอบ"}</span>
+          </span>
+          <button
+            className="legal-icon-button"
+            onClick={logout}
+            aria-label="ออกจากระบบ"
+            title="ออกจากระบบ"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+          <button
+            className="legal-icon-button legal-menu-toggle"
+            aria-expanded={open}
+            aria-label={open ? "ปิดเมนู" : "เปิดเมนู"}
+            onClick={() => setOpen(!open)}
+          >
+            <Menu className="w-5 h-5" />
           </button>
         </div>
-      </aside>
-    </>
+      </div>
+      {open && (
+        <nav className="legal-sheet" aria-label="เมนูหลัก">
+          {items.map(({ id, label, Icon, count }) => (
+            <button
+              key={id}
+              className="legal-nav-pill"
+              data-active={view === id}
+              onClick={() => go(id)}
+            >
+              <Icon className="w-4 h-4" />
+              {label}
+              {count > 0 && <span className="legal-nav-count">{count}</span>}
+            </button>
+          ))}
+          <button className="legal-nav-pill" onClick={logout}>
+            <LogOut className="w-4 h-4" />
+            ออกจากระบบ
+          </button>
+        </nav>
+      )}
+    </header>
   );
 }
 
@@ -514,6 +517,41 @@ function Dashboard({
         title="ภาพรวมการตรวจสอบ"
         description="นโยบายที่ได้รับมอบหมายและคำขอแก้ไขจากลูกค้า"
       />
+      <section className="legal-hero" aria-label="งานถัดไป">
+        {pending[0] ? (
+          <>
+            <div className="min-w-0">
+              <p className="text-sm text-gray-600">ฉบับถัดไปที่ต้องตรวจ</p>
+              <h2 className="mt-1 truncate text-2xl font-semibold">
+                {pending[0].websiteName}
+              </h2>
+              <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-700">
+                <span>{pending[0].typeName}</span>
+                <Deadline row={pending[0]} />
+                {pending[0].assignmentNote && (
+                  <span>หมายเหตุ: {pending[0].assignmentNote}</span>
+                )}
+              </p>
+            </div>
+            <button
+              className="portal-button primary legal-hero-cta"
+              onClick={() => select(pending[0])}
+            >
+              เริ่มตรวจ <ArrowRight className="w-4 h-4" />
+            </button>
+          </>
+        ) : (
+          <div className="flex items-center gap-4">
+            <CheckCircle2 className="w-8 h-8" style={{ color: "#066a4f" }} />
+            <div>
+              <h2 className="text-xl font-semibold">ไม่มีนโยบายรอตรวจ</h2>
+              <p className="mt-1 text-sm text-gray-600">
+                เมื่อมีงานใหม่ที่ได้รับมอบหมาย จะแสดงที่นี่
+              </p>
+            </div>
+          </div>
+        )}
+      </section>
       <section className="portal-kpis">
         {stats.map(({ label, value, color }) => (
           <div className="portal-kpi" key={label}>
@@ -704,7 +742,7 @@ function Changes({
         title="คำขอแก้ไข"
         description="คำขอที่ผู้ประกอบการยืนยันและส่งให้ฝ่ายกฎหมายดำเนินการ"
       />
-      <div className="flex gap-2 mb-4">
+      <div className="flex flex-wrap gap-2 mb-4">
         {(["pending_review", "resolved", "rejected", "all"] as const).map(
           (item) => (
             <button
@@ -1027,7 +1065,7 @@ function Editor({
             </div>
             <Suspense
               fallback={
-                <div className="legal-editor-loading">กำลังโหลดตัวแก้ไข...</div>
+                <div className="legal-editor-loading" role="status" aria-label="กำลังโหลดตัวแก้ไข"><div className="skeleton-stack w-full"><div className="skeleton h-12" /><div className="skeleton h-96" /></div></div>
               }
             >
               <LegalPolicyEditor
@@ -1038,7 +1076,7 @@ function Editor({
             </Suspense>
           </div>
         </section>
-        <aside className="w-full xl:w-96 space-y-4 xl:sticky xl:top-20 xl:self-start xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto">
+        <aside className="w-full xl:w-96 space-y-4 xl:sticky xl:top-24 xl:self-start xl:max-h-[calc(100vh-7rem)] xl:overflow-y-auto">
           <section id="legal-decision" className="portal-panel p-5">
             <h2 className="text-base font-semibold">ผลการพิจารณา</h2>
             <p className="mt-1 mb-3 text-xs leading-5 text-gray-600">
@@ -1439,33 +1477,19 @@ export default function Legal() {
         onConfirm={confirmSignOut}
         onCancel={() => setConfirmLogout(false)}
       />
-      <Sidebar
+      <TopNav
         view={view}
         changeView={changeView}
         open={menuOpen}
-        close={() => setMenuOpen(false)}
+        setOpen={setMenuOpen}
         logout={logout}
         reviewer={dashboard?.reviewer}
+        counts={{
+          queue: submissions.filter((r) => r.status === "pending_review").length,
+          changes: changes.filter((r) => r.status === "pending_review").length,
+        }}
       />
       <div className="portal-main">
-        <header className="portal-topbar">
-          <div className="flex items-center gap-3">
-            <button
-              className="portal-button portal-mobile-menu px-2"
-              onClick={() => setMenuOpen(true)}
-              aria-label="เปิดเมนูนำทาง"
-            >
-              <Menu className="w-4 h-4" />
-            </button>
-            <div>
-              <p className="text-sm font-semibold">พื้นที่ตรวจสอบทางกฎหมาย</p>
-            </div>
-          </div>
-          <span className="inline-flex items-center gap-2 text-xs text-gray-500">
-            <ShieldCheck className="w-4 h-4 text-green-700" />
-            ผู้ตรวจสอบ
-          </span>
-        </header>
         <main className="portal-content portal-content-legal">
           {notice && (
             <div
@@ -1494,8 +1518,14 @@ export default function Legal() {
               </button>
             </div>
           )}
+          <div key={loading ? "loading" : selected ? `edit-${selected.id}` : view} className="motion-view">
           {loading ? (
-            <div className="portal-empty">กำลังโหลดข้อมูล...</div>
+            <div className="skeleton-stack" role="status" aria-label="กำลังโหลดข้อมูล">
+              <div className="skeleton h-28" />
+              <div className="skeleton h-14" />
+              <div className="skeleton h-14" />
+              <div className="skeleton h-14" />
+            </div>
           ) : selected ? (
             <Editor
               key={selected.id}
@@ -1531,6 +1561,7 @@ export default function Legal() {
           ) : (
             <Changes rows={changes} editPolicy={selectBySlug} />
           )}
+          </div>
         </main>
       </div>
     </div>

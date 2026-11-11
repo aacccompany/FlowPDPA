@@ -1,3 +1,4 @@
+import { useEscapeKey } from "@/hooks/useEscapeKey";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -143,6 +144,16 @@ const merchantNavGroups = [
 
 const navItems = merchantNavGroups.flatMap((group) => group.items);
 
+// Primary navigation (settings lives behind the account chip, "create" is the always-visible button).
+const topNavItems = [
+  { key: "overview", label: "ภาพรวม", Icon: LayoutDashboard },
+  { key: "policies", label: "นโยบาย", Icon: FileText },
+  { key: "templates", label: "แบบฟอร์ม", Icon: FileType2 },
+  { key: "consents", label: "ความยินยอม", Icon: CheckCircle },
+  { key: "activity", label: "กิจกรรม", Icon: Activity },
+  { key: "billing", label: "แพ็กเกจ", Icon: CreditCard },
+];
+
 const subscriptionStatusLabel: Record<string, string> = {
   active: "ใช้งานอยู่",
   trialing: "ช่วงทดลองใช้",
@@ -249,6 +260,10 @@ function Overview({
         new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
     )
     .slice(0, 5);
+  // The hero shows the first item that needs action; the side column only lists the rest.
+  const hasSide =
+    !loadFailed &&
+    (needsAction.length > 1 || (!loading && countBy("approved") === 0));
   const stats = [
     { label: "นโยบายทั้งหมด", value: userPolicies.length, alert: false },
     { label: "รอตรวจสอบ", value: countBy("pending_review"), alert: false },
@@ -270,13 +285,88 @@ function Overview({
             ติดตามเอกสาร การตรวจสอบ และคำขอจากที่เดียว
           </p>
         </div>
-        <Link
-          to="/create/policy"
-          className="btn-green text-sm px-5 py-2.5 flex items-center gap-2 self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" /> สร้างนโยบาย
-        </Link>
       </div>
+
+      {!loading && !loadFailed && (
+        <section className="merchant-hero" aria-label="งานของคุณ">
+          {needsAction.length > 0 ? (
+            <>
+              <div className="min-w-0">
+                <p className="text-sm text-gray-600">ต้องดำเนินการ</p>
+                <h2 className="mt-1 text-2xl font-semibold" style={{ color: "#b42318" }}>
+                  มี {needsAction.length} นโยบายที่ต้องแก้ไข
+                </h2>
+                <p className="mt-2 text-sm text-gray-700 line-clamp-2">
+                  {needsAction[0].typeName} · {needsAction[0].domain}
+                  {needsAction[0].reviewComment
+                    ? " — เหตุผล: " + needsAction[0].reviewComment
+                    : ""}
+                </p>
+              </div>
+              <Link
+                to={`/dashboard/policies/${needsAction[0].id}`}
+                className="merchant-cta merchant-hero-cta"
+              >
+                แก้ไขนโยบาย <ArrowRight className="w-4 h-4" />
+              </Link>
+            </>
+          ) : countBy("pending_review") > 0 ? (
+            <>
+              <div className="min-w-0">
+                <p className="text-sm text-gray-600">สถานะล่าสุด</p>
+                <h2 className="mt-1 text-2xl font-semibold">
+                  ฝ่ายกฎหมายกำลังตรวจสอบ {countBy("pending_review")} นโยบาย
+                </h2>
+                <p className="mt-2 text-sm text-gray-700">
+                  โดยปกติภายใน 1–2 วันทำการ
+                </p>
+              </div>
+              <button
+                onClick={() => setView("policies")}
+                className="merchant-button merchant-hero-cta"
+              >
+                ดูสถานะ <ArrowRight className="w-4 h-4" />
+              </button>
+            </>
+          ) : userPolicies.length > 0 ? (
+            <>
+              <div className="min-w-0">
+                <p className="text-sm text-gray-600">สถานะล่าสุด</p>
+                <h2 className="mt-1 text-2xl font-semibold">
+                  นโยบายของคุณพร้อมใช้งาน
+                </h2>
+                <p className="mt-2 text-sm text-gray-700">
+                  นำลิงก์นโยบายไปติดตั้งบนเว็บไซต์ได้จากหน้านโยบาย
+                </p>
+              </div>
+              <button
+                onClick={() => setView("policies")}
+                className="merchant-button merchant-hero-cta"
+              >
+                ไปที่นโยบายของฉัน <ArrowRight className="w-4 h-4" />
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="min-w-0">
+                <p className="text-sm text-gray-600">เริ่มต้น</p>
+                <h2 className="mt-1 text-2xl font-semibold">
+                  สร้างนโยบายฉบับแรกของคุณ
+                </h2>
+                <p className="mt-2 text-sm text-gray-700">
+                  ใช้เวลาไม่กี่นาที ฝ่ายกฎหมายจะตรวจสอบก่อนเผยแพร่
+                </p>
+              </div>
+              <Link
+                to="/create/policy"
+                className="merchant-cta merchant-hero-cta"
+              >
+                <Plus className="w-4 h-4" /> สร้างนโยบาย
+              </Link>
+            </>
+          )}
+        </section>
+      )}
 
       <section className="merchant-kpis mb-7" aria-label="สรุปนโยบาย">
         {stats.map(({ label, value, alert }) => (
@@ -292,7 +382,7 @@ function Overview({
         ))}
       </section>
 
-      <div className="merchant-overview-grid">
+      <div className="merchant-overview-grid" data-single={!hasSide}>
         <section className="merchant-panel">
           <div className="merchant-panel-head">
             <h2 className="text-base font-semibold text-gray-900">
@@ -306,11 +396,11 @@ function Overview({
             </button>
           </div>
           {loading ? (
-            <div aria-label="กำลังโหลดนโยบาย">
+            <div role="status" aria-label="กำลังโหลดนโยบาย">
               {[0, 1, 2].map((item) => (
-                <div key={item} className="merchant-list-row animate-pulse">
-                  <div className="h-4 w-40 rounded bg-gray-200/70" />
-                  <div className="h-3 w-24 rounded bg-gray-200/70 mt-2" />
+                <div key={item} className="merchant-list-row">
+                  <div className="skeleton h-4 w-40" />
+                  <div className="skeleton mt-2 h-3 w-24" />
                 </div>
               ))}
             </div>
@@ -355,14 +445,14 @@ function Overview({
           )}
         </section>
 
-        {!loadFailed && (
+        {hasSide && (
         <div className="space-y-7">
-        {userPolicies.length > 0 && (
+        {needsAction.length > 1 && (
         <section className="merchant-panel self-start">
           <div className="merchant-panel-head">
             <div>
               <h2 className="text-base font-semibold text-gray-900">
-                ต้องดำเนินการ
+                ต้องดำเนินการอื่นๆ
               </h2>
               <p className="text-xs text-gray-600 mt-1">
                 นโยบายที่ฝ่ายกฎหมายส่งกลับให้แก้ไข
@@ -378,7 +468,7 @@ function Overview({
             </div>
           ) : (
             <ul>
-              {needsAction.map((p) => (
+              {needsAction.slice(1).map((p) => (
                 <li key={p.id} className="merchant-list-row merchant-list-stack">
                   <p className="text-sm font-semibold text-gray-900">
                     {p.typeName}
@@ -483,6 +573,7 @@ function PolicyDownloadsDialog({
   policy: SavedPolicy;
   close: () => void;
 }) {
+  useEscapeKey(close);
   const languages = [
     { key: "th", label: "Thai", downloads: policy.downloadsByLanguage?.th },
     { key: "en", label: "English", downloads: policy.downloadsByLanguage?.en },
@@ -696,13 +787,6 @@ function PoliciesList() {
             {policies.length} นโยบายในบัญชีของคุณ
           </p>
         </div>
-        <Link
-          to="/create/policy"
-          className="btn-green text-sm px-5 py-2.5 flex items-center gap-2"
-          style={{ borderRadius: "8px" }}
-        >
-          <Plus className="w-4 h-4" /> สร้างใหม่
-        </Link>
       </div>
 
       {deleteError && (
@@ -712,8 +796,8 @@ function PoliciesList() {
       )}
 
       {loading ? (
-        <div className="py-16 text-center text-sm text-gray-400">
-          กำลังโหลดนโยบาย...
+        <div className="skeleton-stack" role="status" aria-label="กำลังโหลดนโยบาย">
+          {[0, 1, 2, 3].map((item) => <div key={item} className="skeleton h-20" />)}
         </div>
       ) : error && policies.length === 0 ? (
         <div className="merchant-empty bg-white border border-gray-100">
@@ -969,7 +1053,7 @@ function PoliciesList() {
                       key={value}
                       onClick={() => setPage(value)}
                       className={`h-8 min-w-8 rounded border px-2 text-xs font-semibold ${currentPage === value ? "border-emerald-700 bg-emerald-700 text-white" : "border-gray-200 bg-white text-gray-600"}`}
-                      aria-label={`Page ${value}`}
+                      aria-label={`หน้า ${value}`}
                     >
                       {value}
                     </button>
@@ -1099,6 +1183,7 @@ function PolicyEvidenceDialog({
   log: PolicyActivityLog;
   close: () => void;
 }) {
+  useEscapeKey(close);
   const metadata = log.metadata || {};
   const items = [
     ["รหัสเหตุการณ์", log.id],
@@ -1182,6 +1267,7 @@ function ConsentEvidenceDialog({
   log: ConsentActivityLog;
   close: () => void;
 }) {
+  useEscapeKey(close);
   const evidence = log.evidence || {};
   const purposes = log.purposes as ConsentPurpose[];
   return (
@@ -1644,8 +1730,8 @@ function ActivityLogsView() {
       )}
       <section className="overflow-hidden border border-gray-100 bg-white">
         {loading ? (
-          <div className="py-16 text-center text-sm text-gray-400">
-            กำลังโหลดบันทึกกิจกรรม...
+          <div className="skeleton-stack" role="status" aria-label="กำลังโหลดบันทึกกิจกรรม">
+            {[0, 1, 2, 3, 4].map((item) => <div key={item} className="skeleton h-10" />)}
           </div>
         ) : visibleLogs.length === 0 ? (
           <div className="py-16 text-center text-sm text-gray-400">
@@ -1654,7 +1740,7 @@ function ActivityLogsView() {
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="merchant-card-table mct-activity w-full text-left text-xs">
                 <thead className="bg-gray-50 text-gray-500">
                   <tr>
                     <th className="px-4 py-3 font-semibold">ประเภท</th>
@@ -1998,11 +2084,8 @@ function MerchantBillingView() {
       ) : null}
 
       {loading ? (
-        <div className="grid min-h-64 place-items-center rounded-xl border border-gray-100 bg-white">
-          <div className="text-center">
-            <Loader className="mx-auto h-5 w-5 animate-spin text-emerald-700" />
-            <p className="mt-3 text-xs text-gray-400">กำลังโหลดสถานะแพ็กเกจ...</p>
-          </div>
+        <div className="grid gap-4 lg:grid-cols-3" role="status" aria-label="กำลังโหลดสถานะแพ็กเกจ">
+          {[0, 1, 2].map((item) => <div key={item} className="skeleton h-72" />)}
         </div>
       ) : error ? (
         <div className="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
@@ -2263,7 +2346,7 @@ function MerchantBillingView() {
             </header>
             {payments.length ? (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[680px] text-left text-sm">
+                <table className="merchant-card-table mct-billing w-full min-w-[680px] text-left text-sm">
                   <thead className="bg-slate-50 text-[11px] text-gray-500">
                     <tr><th className="px-5 py-3">เลขอ้างอิงใบแจ้งหนี้</th><th className="px-5 py-3">รายการ</th><th className="px-5 py-3">วันที่</th><th className="px-5 py-3">ยอดชำระ</th><th className="px-5 py-3">สถานะ</th></tr>
                   </thead>
@@ -2440,8 +2523,9 @@ function AccountSettings({ user }: { user: AuthUser }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader className="w-6 h-6 animate-spin text-gray-300" />
+      <div className="skeleton-stack" role="status" aria-label="กำลังโหลดข้อมูล">
+        <div className="skeleton h-12" />
+        <div className="skeleton h-64" />
       </div>
     );
   }
@@ -2885,190 +2969,125 @@ export default function Dashboard() {
         onCancel={() => setConfirmLogout(false)}
       />
 
-      {/* ── Sidebar ── */}
-      <>
-        {/* Mobile overlay */}
-        {sidebarOpen && (
-          <div
-            className="fixed inset-0 z-20 bg-black/50 lg:hidden"
-            onClick={() => setSidebarOpen(false)}
-          />
-        )}
-
-        <aside
-          className={`merchant-sidebar fixed top-0 left-0 h-full z-30 flex flex-col transition-transform duration-300
-            ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}
-        >
-          {/* Logo */}
-          <div className="merchant-brand flex items-center justify-between">
-            <Link
-              to="/"
-              className="flex items-center gap-3"
-              onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-            >
-              <img
-                src="/favicon.svg"
-                alt="FlowPDPA"
-                className="w-8 h-8"
-                style={{ filter: "brightness(0) invert(1)" }}
-              />
-              <span
-                className="font-extrabold text-base"
-                style={{ color: "#ffffff" }}
-              >
-                Flow<span style={{ color: "#4ade80" }}>PDPA</span>
-              </span>
-            </Link>
-            <button
-              className="lg:hidden p-1 rounded"
-              style={{ color: "#94a3b8" }}
-              onClick={() => setSidebarOpen(false)}
-              aria-label="ปิดเมนู"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Nav */}
-          <nav className="flex-1 overflow-y-auto px-3 py-1">
-            {merchantNavGroups.map((group) => (
-              <div key={group.label} className="mb-3 last:mb-0">
-                <div className="merchant-nav-label px-3">{group.label}</div>
-                <div className="space-y-1">
-                  {group.items.map(({ key, label, Icon }) => {
-                    const active = activeView === key;
-                    return (
-                      <button
-                        key={key}
-                        onClick={() => {
-                          if (key === "new") {
-                            navigate("/create/policy");
-                            return;
-                          }
-                          setActiveView(key);
-                          setSidebarOpen(false);
-                        }}
-                        className="merchant-nav-item w-full flex items-center gap-3 px-3 py-2.5 text-sm transition-colors text-left"
-                        data-active={active}
-                      >
-                        <Icon className="w-4 h-4 shrink-0" />
-                        {label}
-                        {key === "new" && (
-                          <Plus
-                            className="ml-auto w-4 h-4"
-                            style={{ color: "#4ade80" }}
-                            aria-hidden="true"
-                          />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </nav>
-
-          {/* User + Logout */}
-          <div className="merchant-user px-3 py-4">
-            <div className="flex items-center gap-3 px-3 py-2.5 mb-1">
-              <div className="merchant-avatar w-8 h-8 flex items-center justify-center text-xs font-medium shrink-0">
-                {initials}
-              </div>
-              <div className="overflow-hidden">
-                <div
-                  className="text-xs font-semibold truncate"
-                  style={{ color: "#e2e8f0" }}
-                >
-                  {user.name}
-                </div>
-                <div className="text-xs truncate" style={{ color: "#94a3b8" }}>
-                  {user.plan}
-                </div>
-              </div>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
-              style={{ color: "#94a3b8" }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(239,68,68,0.1)";
-                e.currentTarget.style.color = "#fca5a5";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "transparent";
-                e.currentTarget.style.color = "#94a3b8";
-              }}
-            >
-              <LogOut className="w-4 h-4 shrink-0" />
-              ออกจากระบบ
-            </button>
-          </div>
-        </aside>
-      </>
-
       {/* ── Main content ── */}
       <div className="flex-1 flex flex-col min-w-0">
         <div className="merchant-main flex flex-col min-h-screen">
-          {/* Top bar */}
-          <header className="merchant-topbar sticky top-0 z-10 flex items-center justify-between px-5 lg:px-8 py-3">
-            <div className="flex items-center gap-3">
-              {/* Mobile hamburger */}
-              <button
-                className="merchant-icon-button lg:hidden"
-                onClick={() => setSidebarOpen(true)}
-                aria-label="เปิดเมนู"
+          <header className="merchant-topnav">
+            <div className="merchant-topnav-bar">
+              <Link
+                to="/"
+                className="merchant-brand-link"
+                onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
               >
-                <Menu className="w-5 h-5" />
-              </button>
-              <div>
-                <h1
-                  className="text-base font-semibold"
-                  style={{ color: "#172033" }}
+                <span className="merchant-brand-mark2" aria-hidden="true">
+                  <img src="/favicon.svg" alt="" />
+                </span>
+                <span className="merchant-brand-name">
+                  Flow<span>PDPA</span>
+                </span>
+              </Link>
+              <nav className="merchant-nav2" aria-label="เมนูหลัก">
+                {topNavItems.map(({ key, label, Icon }) => (
+                  <button
+                    key={key}
+                    className="merchant-pill"
+                    data-active={activeView === key}
+                    aria-current={activeView === key ? "page" : undefined}
+                    onClick={() => setActiveView(key)}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {label}
+                  </button>
+                ))}
+              </nav>
+              <div className="merchant-actions">
+                <Link to="/create/policy" className="merchant-cta" aria-label="สร้างนโยบาย">
+                  <Plus className="w-4 h-4" />
+                  <span>สร้างนโยบาย</span>
+                </Link>
+                <button
+                  onClick={() => setActiveView("settings")}
+                  className="merchant-account"
+                  data-active={activeView === "settings"}
+                  title="ตั้งค่าบัญชี"
                 >
-                  {currentNav?.label ?? "Dashboard"}
-                </h1>
+                  <span className="merchant-avatar2">{initials}</span>
+                  <span className="merchant-account-text">
+                    <b>{user.name}</b>
+                    <i>{user.plan}</i>
+                  </span>
+                </button>
+                <button
+                  className="merchant-icon-button merchant-logout"
+                  onClick={handleLogout}
+                  aria-label="ออกจากระบบ"
+                  title="ออกจากระบบ"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+                <button
+                  className="merchant-icon-button merchant-menu-toggle"
+                  aria-expanded={sidebarOpen}
+                  aria-label={sidebarOpen ? "ปิดเมนู" : "เปิดเมนู"}
+                  onClick={() => setSidebarOpen(!sidebarOpen)}
+                >
+                  <Menu className="w-5 h-5" />
+                </button>
               </div>
             </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setActiveView("settings")}
-                className="flex items-center gap-2 pl-3 pr-4 py-1.5 rounded-lg transition-colors hover:bg-gray-100"
-              >
-                <div className="merchant-avatar w-7 h-7 flex items-center justify-center text-xs font-medium">
-                  {initials}
-                </div>
-                <span className="text-sm font-medium text-gray-700 hidden sm:block">
-                  {user.name}
-                </span>
-              </button>
-            </div>
+            {sidebarOpen && (
+              <nav className="merchant-sheet" aria-label="เมนูหลัก">
+                {[...topNavItems, { key: "settings", label: "ตั้งค่าบัญชี", Icon: Settings }].map(
+                  ({ key, label, Icon }) => (
+                    <button
+                      key={key}
+                      className="merchant-pill"
+                      data-active={activeView === key}
+                      onClick={() => {
+                        setActiveView(key);
+                        setSidebarOpen(false);
+                      }}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {label}
+                    </button>
+                  ),
+                )}
+                <button className="merchant-pill" onClick={handleLogout}>
+                  <LogOut className="w-4 h-4" />
+                  ออกจากระบบ
+                </button>
+              </nav>
+            )}
           </header>
 
           {/* Page content */}
-          <main className="merchant-content flex-1 px-4 py-5 lg:px-5 lg:py-6">
+          <main
+            className="merchant-content flex-1 px-4 py-5 lg:px-5 lg:py-6"
+            aria-label={currentNav?.label}
+          >
             {visitedViews.has("overview") && (
-              <section hidden={activeView !== "overview"}>
+              <section className="motion-view" hidden={activeView !== "overview"}>
                 <Overview setView={setActiveView} user={user} />
               </section>
             )}
             {visitedViews.has("policies") && (
-              <section hidden={activeView !== "policies"}><PoliciesList /></section>
+              <section className="motion-view" hidden={activeView !== "policies"}><PoliciesList /></section>
             )}
             {visitedViews.has("activity") && (
-              <section hidden={activeView !== "activity"}><ActivityLogsView /></section>
+              <section className="motion-view" hidden={activeView !== "activity"}><ActivityLogsView /></section>
             )}
             {visitedViews.has("consents") && (
-              <section hidden={activeView !== "consents"}><ConsentManagement /></section>
+              <section className="motion-view" hidden={activeView !== "consents"}><ConsentManagement /></section>
             )}
             {visitedViews.has("templates") && (
-              <section hidden={activeView !== "templates"}><DocumentTemplates /></section>
+              <section className="motion-view" hidden={activeView !== "templates"}><DocumentTemplates /></section>
             )}
             {visitedViews.has("billing") && (
-              <section hidden={activeView !== "billing"}><MerchantBillingView /></section>
+              <section className="motion-view" hidden={activeView !== "billing"}><MerchantBillingView /></section>
             )}
             {visitedViews.has("settings") && (
-              <section hidden={activeView !== "settings"}><AccountSettings user={user} /></section>
+              <section className="motion-view" hidden={activeView !== "settings"}><AccountSettings user={user} /></section>
             )}
           </main>
         </div>

@@ -33,6 +33,7 @@ import { fileSha256 } from "@/services/api";
 import type { CompanyDocumentValidationStatus, PolicyQuestionnaire, UserProfile } from "@/services/api";
 
 import "./MerchantFlow.css";
+import { useEscapeKey } from "@/hooks/useEscapeKey";
 // ── Thai RD Company Lookup ────────────────────────────────────
 // Replace with real Thai RD VAT API calls via your backend proxy
 // (https://rdws.rd.go.th/serviceRD3/vatregistrationRI.asmx)
@@ -568,6 +569,7 @@ function CompanyConsentModal({
   const [checked, setChecked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  useEscapeKey(onDecline, !submitting);
 
   const handleAccept = async () => {
     if (!checked || submitting) return;

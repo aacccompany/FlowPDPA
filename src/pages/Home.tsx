@@ -3,7 +3,7 @@ import UpdateBanner from "@/components/sections/UpdateBanner";
 import PDPAInfo from "@/components/sections/PDPAInfo";
 import Stats from "@/components/sections/Stats";
 import ClientLogos from "@/components/sections/ClientLogos";
-import CheckWebsite from "@/components/sections/CheckWebsite";
+// CheckWebsite (Free PDPA Audit) is hidden until the backend has an endpoint to receive requests.
 import WhyChoose from "@/components/sections/WhyChoose";
 import Services from "@/components/sections/Services";
 import OneTimeValue from "@/components/sections/OneTimeValue";
@@ -22,7 +22,6 @@ export default function Home() {
       <PDPAInfo />
       <Stats />
       <ClientLogos />
-      <CheckWebsite />
       <WhyChoose />
       <Services />
       <OneTimeValue />

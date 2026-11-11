@@ -1,3 +1,4 @@
+import { friendlyError } from "@/utils/friendlyError";
 import { useCallback, useState, useEffect, useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
@@ -224,7 +225,7 @@ export default function Register() {
     try {
       const response = await api.auth.register.verify({ email, otp: otpValue });
       if (!response.success || !response.data) {
-        setError(response.error?.message || "รหัสยืนยันไม่ถูกต้อง");
+        setError(friendlyError(response.error, "รหัสยืนยันไม่ถูกต้องหรือหมดอายุแล้ว"));
         return;
       }
 
@@ -243,7 +244,7 @@ export default function Register() {
       };
       const token = data.token ?? data.access_token;
       if (!token) {
-        setError("Verification response did not include an access token");
+        setError("ยืนยันอีเมลสำเร็จ แต่เข้าสู่ระบบอัตโนมัติไม่ได้ กรุณาเข้าสู่ระบบด้วยอีเมลและรหัสผ่านของคุณ");
         return;
       }
 
@@ -312,7 +313,7 @@ export default function Register() {
           );
           return;
         }
-        setError(response.error?.message || "ไม่สามารถส่งรหัสยืนยันใหม่ได้");
+        setError(friendlyError(response.error, "ไม่สามารถส่งรหัสยืนยันใหม่ได้"));
         return;
       }
       setExpiryCountdown(300);

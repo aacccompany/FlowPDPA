@@ -10,6 +10,9 @@ import {
   X,
 } from "lucide-react";
 import { api } from "@/services/api";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { friendlyError } from "@/utils/friendlyError";
+import { useEscapeKey } from "@/hooks/useEscapeKey";
 import type {
   ConsentField,
   ConsentForm,
@@ -56,6 +59,10 @@ export default function ConsentManagement() {
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [error, setError] = useState("");
+  const [withdrawTarget, setWithdrawTarget] = useState<ConsentRecord | null>(null);
+  const [withdrawing, setWithdrawing] = useState(false);
+  useEscapeKey(() => setEditingRecord(null), editingRecord !== null);
+  useEscapeKey(() => setCreating(false), creating);
   const [exporting, setExporting] = useState<"csv" | "pdf" | null>(null);
   const [draft, setDraft] = useState({
     policyId: "",
@@ -200,7 +207,7 @@ export default function ConsentManagement() {
         current.map((item) => (item.id === form.id ? response.data! : item)),
       );
     else
-      setError(response.error?.message || "ไม่สามารถเปลี่ยนสถานะแบบฟอร์มได้");
+      setError(friendlyError(response.error, "ไม่สามารถเปลี่ยนสถานะแบบฟอร์มได้"));
   };
   const startBlank = () => {
     setSelectedTemplateId("");
@@ -230,12 +237,15 @@ export default function ConsentManagement() {
   };
 
   const withdraw = async (record: ConsentRecord) => {
+    setWithdrawing(true);
     const response = await api.consents.withdraw(record.id);
+    setWithdrawing(false);
+    setWithdrawTarget(null);
     if (response.success && response.data)
       setRecords((current) =>
         current.map((item) => (item.id === record.id ? response.data! : item)),
       );
-    else setError(response.error?.message || "ไม่สามารถถอนความยินยอมได้");
+    else setError(friendlyError(response.error, "ไม่สามารถถอนความยินยอมได้"));
   };
 
   const openRecordEditor = (record: ConsentRecord) => {
@@ -255,7 +265,7 @@ export default function ConsentManagement() {
     const response = await api.consents.updateRecord(editingRecord.id, recordDraft);
     setRecordSaving(false);
     if (!response.success || !response.data) {
-      setError(response.error?.message || "ไม่สามารถแก้ไขข้อมูลลูกค้าได้");
+      setError(friendlyError(response.error, "ไม่สามารถแก้ไขข้อมูลลูกค้าได้"));
       return;
     }
     setRecords((current) => current.map((item) =>
@@ -271,7 +281,7 @@ export default function ConsentManagement() {
     const response = await api.consents.exportRecords(format, { status, search });
     setExporting(null);
     if (!response.success || !response.data) {
-      setError(response.error?.message || "ไม่สามารถส่งออก Consent Log ได้");
+      setError(friendlyError(response.error, "ไม่สามารถส่งออก Consent Log ได้"));
       return;
     }
     const url = URL.createObjectURL(response.data.blob);
@@ -286,6 +296,16 @@ export default function ConsentManagement() {
 
   return (
     <div>
+      <ConfirmDialog
+        open={withdrawTarget !== null}
+        tone="destructive"
+        title="ถอนความยินยอมของลูกค้ารายนี้?"
+        description={`ระบบจะบันทึกว่า ${withdrawTarget?.subjectName || withdrawTarget?.subjectEmail || "เจ้าของข้อมูล"} ถอนความยินยอมแล้ว การดำเนินการนี้เป็นหลักฐานทางกฎหมายและย้อนกลับไม่ได้`}
+        confirmLabel="ถอนความยินยอม"
+        loading={withdrawing}
+        onConfirm={() => withdrawTarget && void withdraw(withdrawTarget)}
+        onCancel={() => setWithdrawTarget(null)}
+      />
       <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-xl font-black text-gray-900">จัดการความยินยอม</h1>
@@ -463,7 +483,7 @@ export default function ConsentManagement() {
       </div>
       <section className="overflow-hidden border border-gray-100 bg-white">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="merchant-card-table mct-consent w-full text-left text-xs">
             <thead className="bg-gray-50 text-gray-500">
               <tr>
                 <th className="px-4 py-3">เจ้าของข้อมูล</th>
@@ -515,7 +535,7 @@ export default function ConsentManagement() {
                       {["active", "granted"].includes(record.status) ? (
                         <button
                           type="button"
-                          onClick={() => void withdraw(record)}
+                          onClick={() => setWithdrawTarget(record)}
                           className="text-xs font-semibold text-red-700"
                         >
                           ถอนความยินยอม
