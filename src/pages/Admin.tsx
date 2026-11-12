@@ -47,6 +47,8 @@ import type {
   AdminPaymentDetail,
   AdminPolicy,
   AdminPolicyDetail,
+  AdminPolicyHistoryEvent,
+  AdminPolicyReviewItem,
   AdminPolicyStatus,
   AdminSubscription,
   DocumentTemplate,
@@ -67,6 +69,7 @@ type AdminView =
   | "policies"
   | "templates"
   | "assignments"
+  | "admin_reviews"
   | "legal"
   | "logs"
   | "audit"
@@ -106,6 +109,8 @@ const badgeMeta: Record<string, { color: string; bg: string }> = {
   approved: { color: "#087a5b", bg: "#e8f4ef" },
   pending: { color: "#a86207", bg: "#fff6e5" },
   pending_review: { color: "#a86207", bg: "#fff6e5" },
+  pending_admin_review: { color: "#2457a6", bg: "#eaf0fa" },
+  changes_requested_by_admin: { color: "#b42318", bg: "#fdf0ef" },
   past_due: { color: "#a86207", bg: "#fff6e5" },
   suspended: { color: "#b42318", bg: "#fdf0ef" },
   failed: { color: "#b42318", bg: "#fdf0ef" },
@@ -148,6 +153,9 @@ function Badge({ value }: { value: string }) {
     approved: "อนุมัติแล้ว",
     pending: "รอดำเนินการ",
     pending_review: "รอตรวจสอบ",
+    pending_admin_review: "รอ Admin ตรวจซ้ำ",
+    changes_requested_by_admin: "Admin ส่งกลับแก้ไข",
+    submitted_to_admin: "ส่งให้ Admin ตรวจแล้ว",
     past_due: "เกินกำหนด",
     suspended: "ระงับการใช้งาน",
     failed: "ไม่สำเร็จ",
@@ -289,12 +297,14 @@ function PageTitle({
 function Sidebar({
   view,
   change,
+  adminReviewCount,
   open,
   close,
   logout,
 }: {
   view: AdminView;
   change: (view: AdminView) => void;
+  adminReviewCount: number;
   open: boolean;
   close: () => void;
   logout: () => void;
@@ -308,6 +318,17 @@ function Sidebar({
       ],
     },
     {
+      label: "งานที่ต้องดำเนินการ",
+      items: [
+        {
+          id: "admin_reviews" as const,
+          text: "ตรวจซ้ำก่อนส่งลูกค้า",
+          Icon: UserCog,
+          count: adminReviewCount,
+        },
+      ],
+    },
+    {
       label: "เนื้อหาและการกำกับดูแล",
       items: [
         { id: "policies" as const, text: "นโยบาย", Icon: FileText },
@@ -316,11 +337,6 @@ function Sidebar({
           id: "templates" as const,
           text: "เทมเพลตเอกสาร",
           Icon: Languages,
-        },
-        {
-          id: "assignments" as const,
-          text: "มอบหมายการตรวจสอบ",
-          Icon: FileText,
         },
         { id: "legal" as const, text: "จัดการฝ่ายกฎหมาย", Icon: Scale },
       ],
@@ -384,7 +400,7 @@ function Sidebar({
           {groups.map((group) => (
             <div key={group.label}>
               <p className="portal-nav-label">{group.label}</p>
-              {group.items.map(({ id, text, Icon }) => (
+              {group.items.map(({ id, text, Icon, ...item }) => (
                 <button
                   key={id}
                   className="portal-nav-item"
@@ -395,7 +411,12 @@ function Sidebar({
                   }}
                 >
                   <Icon />
-                  {text}
+                  <span className="flex-1 text-left">{text}</span>
+                  {"count" in item && item.count > 0 ? (
+                    <span className="min-w-5 rounded-full bg-emerald-400 px-1.5 py-0.5 text-center text-[10px] font-black text-slate-950">
+                      {item.count > 99 ? "99+" : item.count}
+                    </span>
+                  ) : null}
                 </button>
               ))}
             </div>
@@ -717,9 +738,11 @@ function MerchantFormModal({
 function MerchantView({
   rows,
   setRows,
+  viewPolicies,
 }: {
   rows: Merchant[];
   setRows: React.Dispatch<React.SetStateAction<Merchant[]>>;
+  viewPolicies: (merchant: Merchant) => void;
 }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | MerchantStatus>(
@@ -914,7 +937,17 @@ function MerchantView({
                     </div>
                   </td>
                   <td>{row.companyName || "-"}</td>
-                  <td>{row.policyCount}</td>
+                  <td>
+                    <button
+                      type="button"
+                      className="font-semibold text-emerald-700 underline-offset-2 hover:underline disabled:cursor-default disabled:text-gray-400 disabled:no-underline"
+                      disabled={row.policyCount === 0}
+                      onClick={() => viewPolicies(row)}
+                      title={row.policyCount === 0 ? "ผู้ประกอบการรายนี้ยังไม่มีเอกสาร" : `ดูเอกสารของ ${row.name}`}
+                    >
+                      {row.policyCount}
+                    </button>
+                  </td>
                   <td>{row.activeSubscriptions}</td>
                   <td>{formatDate(row.createdAt)}</td>
                   <td>{formatDate(row.lastLoginAt)}</td>
@@ -923,6 +956,15 @@ function MerchantView({
                   </td>
                   <td>
                     <div className="flex flex-wrap gap-2">
+                      <button
+                        className="portal-button"
+                        disabled={row.policyCount === 0}
+                        onClick={() => viewPolicies(row)}
+                        title={row.policyCount === 0 ? "ผู้ประกอบการรายนี้ยังไม่มีเอกสาร" : undefined}
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        ดูเอกสาร
+                      </button>
                       <button
                         className="portal-button"
                         onClick={() => startEdit(row)}
@@ -996,14 +1038,110 @@ function MerchantView({
   );
 }
 
+const policyHistoryLabels: Record<string, string> = {
+  merchant_submitted_to_legal: "ลูกค้าส่งเอกสารให้ฝ่ายกฎหมาย",
+  merchant_change_requested: "ลูกค้าส่งคำขอแก้ไข",
+  legal_submitted_to_admin: "ฝ่ายกฎหมายตรวจและส่งให้ Admin",
+  admin_changes_requested: "Admin ส่งกลับให้ฝ่ายกฎหมายแก้ไข",
+  admin_approved: "Admin อนุมัติเอกสาร",
+  legal_document_updated: "ฝ่ายกฎหมายแก้ไขเอกสาร",
+};
+
+function actorLabel(actor: AdminPolicyHistoryEvent["actor"]) {
+  if (!actor) return "ระบบ";
+  return actor.name || actor.email || actor.role || "ระบบ";
+}
+
+function PolicyHistoryModal({
+  policyName,
+  events,
+  loading,
+  close,
+}: {
+  policyName: string;
+  events: AdminPolicyHistoryEvent[];
+  loading: boolean;
+  close: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-3 sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label="ประวัติเอกสาร"
+    >
+      <section className="portal-panel flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden">
+        <header className="portal-panel-head shrink-0">
+          <div>
+            <p className="text-sm font-semibold">ประวัติเอกสาร</p>
+            <p className="mt-1 text-xs text-gray-400">{policyName}</p>
+          </div>
+          <button type="button" className="portal-button px-2" onClick={close} aria-label="ปิดประวัติเอกสาร">
+            <X className="h-4 w-4" />
+          </button>
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+          {loading ? (
+            <div className="portal-empty">กำลังโหลดประวัติ...</div>
+          ) : events.length === 0 ? (
+            <div className="portal-empty">ยังไม่มีประวัติสำหรับเอกสารนี้</div>
+          ) : (
+            <ol className="space-y-0">
+              {events.map((event, index) => (
+                <li key={event.id} className="relative grid grid-cols-[20px_1fr] gap-3 pb-6 last:pb-0">
+                  {index < events.length - 1 ? (
+                    <span className="absolute left-[9px] top-5 h-full w-px bg-gray-200" />
+                  ) : null}
+                  <span className="relative mt-1.5 h-5 w-5 rounded-full border-4 border-emerald-100 bg-emerald-600" />
+                  <article className="rounded border border-gray-200 bg-white p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <p className="text-sm font-semibold text-gray-900">
+                        {policyHistoryLabels[event.type] || event.description}
+                      </p>
+                      <time className="text-[11px] text-gray-400">{formatDate(event.createdAt)}</time>
+                    </div>
+                    <p className="mt-2 text-xs text-gray-600">
+                      ดำเนินการโดย <span className="font-semibold">{actorLabel(event.actor)}</span>
+                    </p>
+                    {(event.from?.role || event.to?.role) ? (
+                      <p className="mt-1 text-xs text-gray-500">
+                        {event.from?.role || "-"} → {event.to?.role || "-"}
+                      </p>
+                    ) : null}
+                    {event.relatedField ? (
+                      <p className="mt-1 text-xs text-gray-500">หัวข้อ: {event.relatedField}</p>
+                    ) : null}
+                    {event.description && policyHistoryLabels[event.type] ? (
+                      <p className="mt-2 whitespace-pre-wrap text-xs text-gray-600">{event.description}</p>
+                    ) : null}
+                    {event.comment ? (
+                      <p className="mt-2 rounded bg-gray-50 px-3 py-2 text-xs text-gray-600">{event.comment}</p>
+                    ) : null}
+                  </article>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function PolicyView({
   rows,
   legalUsers,
   setRows,
+  merchantFilter,
+  setMerchantFilter,
+  clearMerchantFilter,
 }: {
   rows: Policy[];
   legalUsers: LegalUser[];
   setRows: React.Dispatch<React.SetStateAction<Policy[]>>;
+  merchantFilter: { id: string; name: string } | null;
+  setMerchantFilter: (merchant: { id: string; name: string } | null) => void;
+  clearMerchantFilter: () => void;
 }) {
   const [filter, setFilter] = useState<"all" | PolicyStatus>("all");
   const [query, setQuery] = useState("");
@@ -1013,13 +1151,36 @@ function PolicyView({
     useState<AdminPolicyDetail | null>(null);
   const [contentOpen, setContentOpen] = useState(false);
   const [contentLoading, setContentLoading] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyPolicyName, setHistoryPolicyName] = useState("");
+  const [historyEvents, setHistoryEvents] = useState<AdminPolicyHistoryEvent[]>([]);
+  const merchantOptions = useMemo(() => {
+    const merchants = new Map<
+      string,
+      { id: string; name: string; email: string }
+    >();
+    rows.forEach((row) => {
+      if (row.merchantId) {
+        merchants.set(row.merchantId, {
+          id: row.merchantId,
+          name: row.merchantName || row.merchantEmail || row.merchantId,
+          email: row.merchantEmail || "",
+        });
+      }
+    });
+    return Array.from(merchants.values()).sort((a, b) =>
+      a.name.localeCompare(b.name, "th"),
+    );
+  }, [rows]);
   const visible = rows.filter((row) => {
     const matchesQuery =
-      `${row.websiteName} ${row.slug} ${row.merchantName || ""}`
+      `${row.websiteName} ${row.slug} ${row.merchantName || ""} ${row.merchantEmail || ""}`
         .toLowerCase()
-        .includes(query.toLowerCase());
+        .includes(query.trim().toLowerCase());
     return (
       matchesQuery &&
+      (!merchantFilter || row.merchantId === merchantFilter.id) &&
       (filter === "all" || row.status === filter) &&
       (typeFilter === "all" || row.type === typeFilter)
     );
@@ -1052,13 +1213,60 @@ function PolicyView({
     }
     setSelectedPolicy(response.data.policy);
   };
+  const openHistory = async (row: Policy) => {
+    setHistoryPolicyName(row.websiteName);
+    setHistoryEvents([]);
+    setHistoryOpen(true);
+    setHistoryLoading(true);
+    setError("");
+    const response = await api.admin.getPolicyHistory(row.id);
+    setHistoryLoading(false);
+    if (!response.success || !response.data) {
+      setError(response.error?.message || "ไม่สามารถโหลดประวัติเอกสารได้");
+      return;
+    }
+    setHistoryEvents(response.data.events);
+  };
   return (
     <>
       <PageTitle
         eyebrow="การดำเนินงานด้านนโยบาย"
-        title="นโยบายทั้งหมด"
+        title={merchantFilter ? `เอกสารของ ${merchantFilter.name}` : "นโยบายทั้งหมด"}
         description="ตรวจสอบสถานะกระบวนการและปรับการมอบหมายฝ่ายกฎหมายได้"
       />
+      {merchantFilter ? (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
+          <span>กำลังแสดงเฉพาะเอกสารของ <strong>{merchantFilter.name}</strong></span>
+          <button type="button" className="portal-button bg-white" onClick={clearMerchantFilter}>
+            แสดงทั้งหมด
+          </button>
+        </div>
+      ) : null}
+      <div className="mb-3 grid gap-2 md:grid-cols-[minmax(280px,1fr)_minmax(210px,280px)_minmax(160px,220px)]">
+        <SearchBox
+          value={query}
+          setValue={setQuery}
+          placeholder="ค้นหาชื่อเว็บไซต์, slug หรือผู้ประกอบการ"
+        />
+        <MerchantFilterPicker
+          options={merchantOptions}
+          selected={merchantFilter}
+          onChange={setMerchantFilter}
+        />
+        <select
+          className="portal-filter h-9 w-full"
+          value={typeFilter}
+          onChange={(event) => setTypeFilter(event.target.value)}
+          aria-label="กรองตามประเภทเอกสาร"
+        >
+          <option value="all">ประเภทเอกสารทั้งหมด</option>
+          {Array.from(new Set(rows.map((row) => row.type))).map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="flex flex-wrap items-center gap-2 mb-4">
         {(
           [
@@ -1079,25 +1287,6 @@ function PolicyView({
             {value.replaceAll("_", " ")}
           </button>
         ))}
-        <div className="sm:ml-auto">
-          <SearchBox
-            value={query}
-            setValue={setQuery}
-            placeholder="ค้นหานโยบาย"
-          />
-        </div>
-        <select
-          className="portal-filter h-9"
-          value={typeFilter}
-          onChange={(event) => setTypeFilter(event.target.value)}
-        >
-          <option value="all">ทุกประเภท</option>
-          {Array.from(new Set(rows.map((row) => row.type))).map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </select>
       </div>
       {error && (
         <p className="mb-4 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
@@ -1115,7 +1304,7 @@ function PolicyView({
                 <th>สถานะ</th>
                 <th>ผู้ตรวจสอบฝ่ายกฎหมาย</th>
                 <th>แก้ไขล่าสุด</th>
-                <th>เนื้อหา</th>
+                <th>จัดการ</th>
               </tr>
             </thead>
             <tbody>
@@ -1152,14 +1341,24 @@ function PolicyView({
                   </td>
                   <td>{formatDate(row.updatedAt)}</td>
                   <td>
-                    <button
-                      type="button"
-                      className="portal-button"
-                      onClick={() => void openContent(row.id)}
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      View
-                    </button>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="portal-button"
+                        onClick={() => void openContent(row.id)}
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        ดูเอกสาร
+                      </button>
+                      <button
+                        type="button"
+                        className="portal-button"
+                        onClick={() => void openHistory(row)}
+                      >
+                        <Activity className="w-3.5 h-3.5" />
+                        ประวัติ
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -1176,6 +1375,14 @@ function PolicyView({
             setContentOpen(false);
             setSelectedPolicy(null);
           }}
+        />
+      )}
+      {historyOpen && (
+        <PolicyHistoryModal
+          policyName={historyPolicyName}
+          events={historyEvents}
+          loading={historyLoading}
+          close={() => setHistoryOpen(false)}
         />
       )}
     </>
@@ -1684,6 +1891,173 @@ function LegalAssignments({
   );
 }
 
+function AdminReviewQueue() {
+  const [items, setItems] = useState<AdminPolicyReviewItem[]>([]);
+  const [comments, setComments] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [selectedPolicy, setSelectedPolicy] =
+    useState<AdminPolicyDetail | null>(null);
+  const [contentOpen, setContentOpen] = useState(false);
+  const [contentLoading, setContentLoading] = useState(false);
+
+  const loadQueue = async () => {
+    setLoading(true);
+    const response = await api.admin.listAdminReviewQueue();
+    setLoading(false);
+    if (!response.success || !response.data) {
+      setError(response.error?.message || "ไม่สามารถโหลดคิวตรวจซ้ำได้");
+      return;
+    }
+    setItems(response.data.items);
+    setError("");
+  };
+
+  useEffect(() => {
+    void loadQueue();
+  }, []);
+
+  const openContent = async (policyId: string) => {
+    setSelectedPolicy(null);
+    setContentOpen(true);
+    setContentLoading(true);
+    const response = await api.admin.getPolicy(policyId);
+    setContentLoading(false);
+    if (response.success && response.data) {
+      setSelectedPolicy(response.data.policy);
+    } else {
+      setError(response.error?.message || "ไม่สามารถเปิดเอกสารได้");
+    }
+  };
+
+  const decide = async (
+    item: AdminPolicyReviewItem,
+    status: "approved" | "changes_requested",
+  ) => {
+    const comment = comments[item.id]?.trim() || "";
+    if (status === "changes_requested" && !comment) {
+      setError("กรุณาระบุสิ่งที่ Legal ต้องแก้ไขก่อนส่งกลับ");
+      return;
+    }
+    setSavingId(item.id);
+    setError("");
+    const response = await api.admin.decideAdminPolicyReview(
+      item.id,
+      status,
+      comment,
+    );
+    setSavingId(null);
+    if (!response.success) {
+      setError(response.error?.message || "ไม่สามารถบันทึกผลตรวจได้");
+      return;
+    }
+    setItems((current) => current.filter((row) => row.id !== item.id));
+  };
+
+  return (
+    <>
+      <PageTitle
+        eyebrow="ADMIN QUALITY GATE"
+        title="ตรวจซ้ำก่อนส่งเอกสารให้ลูกค้า"
+        description="ตรวจฉบับที่ Legal แก้ไข อนุมัติเพื่อส่งลูกค้า หรือตีกลับพร้อมเหตุผล"
+      />
+      <div className="mb-5 grid grid-cols-[1fr_auto_1fr_auto_1fr] items-center gap-2 rounded border border-emerald-200 bg-white p-4 text-center text-xs">
+        <span className="font-semibold text-gray-500">ลูกค้า</span>
+        <ChevronRight className="h-4 w-4 text-gray-300" />
+        <span className="font-semibold text-emerald-700">Legal ตรวจแล้ว</span>
+        <ChevronRight className="h-4 w-4 text-gray-300" />
+        <span className="rounded bg-blue-50 px-3 py-2 font-bold text-blue-700">Admin ตรวจซ้ำ</span>
+      </div>
+      {error ? (
+        <p className="mb-4 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {error}
+        </p>
+      ) : null}
+      <section className="portal-panel">
+        {loading ? (
+          <div className="portal-empty">กำลังโหลดคิวตรวจซ้ำ...</div>
+        ) : items.length === 0 ? (
+          <div className="portal-empty">ไม่มีเอกสารรอ Admin ตรวจซ้ำ</div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {items.map((item) => (
+              <article key={item.id} className="grid gap-4 p-5 lg:grid-cols-[1fr_1.2fr_auto] lg:items-center">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="font-bold text-gray-900">{item.websiteName}</h2>
+                    <Badge value={item.status} />
+                  </div>
+                  <p className="mt-1 text-xs text-gray-400">
+                    {item.slug} · Version {item.version}
+                  </p>
+                  <p className="mt-2 text-xs text-gray-600">
+                    Legal: {item.reviewedBy || "-"} · {formatDate(item.reviewedAt)}
+                  </p>
+                </div>
+                <div>
+                  <p className="mb-1 text-xs font-semibold text-gray-600">ความคิดเห็น Admin</p>
+                  <textarea
+                    className="min-h-20 w-full rounded border border-gray-300 p-2.5 text-sm"
+                    value={comments[item.id] || ""}
+                    onChange={(event) =>
+                      setComments((current) => ({
+                        ...current,
+                        [item.id]: event.target.value,
+                      }))
+                    }
+                    placeholder="ระบุเหตุผลเมื่อต้องการส่งกลับ Legal"
+                  />
+                  {item.reviewComment ? (
+                    <p className="mt-2 border-l-2 border-emerald-300 pl-2 text-xs text-gray-500">
+                      หมายเหตุจาก Legal: {item.reviewComment}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap gap-2 lg:w-48 lg:flex-col">
+                  <button
+                    type="button"
+                    className="portal-button justify-center"
+                    onClick={() => void openContent(item.id)}
+                  >
+                    <Eye className="h-3.5 w-3.5" /> ดูเอกสาร
+                  </button>
+                  <button
+                    type="button"
+                    className="portal-button primary justify-center"
+                    disabled={savingId === item.id}
+                    onClick={() => void decide(item, "approved")}
+                  >
+                    อนุมัติและส่งลูกค้า
+                  </button>
+                  <button
+                    type="button"
+                    className="portal-button danger justify-center"
+                    disabled={savingId === item.id}
+                    onClick={() => void decide(item, "changes_requested")}
+                  >
+                    ส่งกลับ Legal
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+      {contentOpen ? (
+        <PolicyContentModal
+          policy={selectedPolicy}
+          loading={contentLoading}
+          close={() => {
+            setContentOpen(false);
+            setSelectedPolicy(null);
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
+
 function LegalManagement({
   users,
   setUsers,
@@ -1890,7 +2264,7 @@ function LegalManagement({
           ) : tab === "workload" ? (
             <option value="overdue">เฉพาะรายการเกินกำหนด</option>
           ) : (
-            (["approved", "rejected", "edited"] as const).map((value) => (
+            (["submitted_to_admin", "approved", "rejected", "edited"] as const).map((value) => (
               <option key={value} value={value}>
                 {value}
               </option>
@@ -2477,6 +2851,11 @@ function CompanyDocumentsView() {
 
 const merchantActivityLabels: Record<string, string> = {
   document_acknowledged: "รับทราบเอกสารแล้ว",
+  document_acknowledgement_dismissed: "ปิดข้อความโดยไม่รับทราบ",
+  merchant_submitted_to_legal: "ลูกค้าส่งให้ Legal",
+  legal_submitted_to_admin: "Legal ส่งให้ Admin",
+  admin_changes_requested: "Admin ส่งกลับ Legal",
+  admin_approved: "Admin อนุมัติและส่งลูกค้า",
   customer_consent: "ลูกค้าให้ความยินยอม",
   merchant_change_requested: "คำขอแก้ไขจากผู้ประกอบการ",
   legal_document_updated: "ฝ่ายกฎหมายแก้ไขเอกสาร",
@@ -3520,6 +3899,142 @@ function MetricBar({
   );
 }
 
+type MerchantFilterOption = {
+  id: string;
+  name: string;
+  email: string;
+};
+
+function MerchantFilterPicker({
+  options,
+  selected,
+  onChange,
+}: {
+  options: MerchantFilterOption[];
+  selected: { id: string; name: string } | null;
+  onChange: (merchant: { id: string; name: string } | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState(selected?.name || "");
+  const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase("th"));
+
+  useEffect(() => {
+    setQuery(selected?.name || "");
+  }, [selected?.id, selected?.name]);
+
+  const matches = useMemo(() => {
+    const filtered = deferredQuery
+      ? options.filter((option) =>
+          `${option.name} ${option.email}`
+            .toLocaleLowerCase("th")
+            .includes(deferredQuery),
+        )
+      : options;
+    return filtered.slice(0, 20);
+  }, [deferredQuery, options]);
+
+  const choose = (option: MerchantFilterOption) => {
+    onChange({ id: option.id, name: option.name });
+    setQuery(option.name);
+    setOpen(false);
+  };
+
+  const clear = () => {
+    onChange(null);
+    setQuery("");
+    setOpen(false);
+  };
+
+  return (
+    <div
+      className="relative min-w-0"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+      }}
+    >
+      <Search className="pointer-events-none absolute left-3 top-2.5 z-10 h-4 w-4 text-gray-400" />
+      <input
+        className="portal-search w-full pr-9"
+        value={query}
+        onFocus={() => setOpen(true)}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setOpen(true);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") setOpen(false);
+          if (event.key === "Enter" && open && matches[0]) {
+            event.preventDefault();
+            choose(matches[0]);
+          }
+        }}
+        placeholder="ค้นหาผู้ประกอบการหรืออีเมล"
+        role="combobox"
+        aria-label="กรองตามผู้ประกอบการ"
+        aria-expanded={open}
+        aria-controls="policy-merchant-filter-results"
+        autoComplete="off"
+      />
+      {query ? (
+        <button
+          type="button"
+          className="absolute right-2 top-1.5 z-10 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+          onClick={clear}
+          aria-label="ล้างตัวกรองผู้ประกอบการ"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      ) : null}
+      {open ? (
+        <div
+          id="policy-merchant-filter-results"
+          role="listbox"
+          className="absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-md border border-gray-200 bg-white py-1 shadow-lg"
+        >
+          <button
+            type="button"
+            role="option"
+            aria-selected={!selected}
+            className="block w-full px-3 py-2 text-left text-sm hover:bg-emerald-50"
+            onClick={clear}
+          >
+            ผู้ประกอบการทั้งหมด
+          </button>
+          {matches.map((option) => (
+            <button
+              type="button"
+              role="option"
+              aria-selected={selected?.id === option.id}
+              key={option.id}
+              className="block w-full border-t border-gray-100 px-3 py-2 text-left hover:bg-emerald-50"
+              onClick={() => choose(option)}
+            >
+              <span className="block truncate text-sm font-medium text-gray-900">
+                {option.name}
+              </span>
+              {option.email ? (
+                <span className="block truncate text-xs text-gray-500">
+                  {option.email}
+                </span>
+              ) : null}
+            </button>
+          ))}
+          {matches.length === 0 ? (
+            <p className="px-3 py-3 text-sm text-gray-500">
+              ไม่พบผู้ประกอบการที่ตรงกับคำค้นหา
+            </p>
+          ) : null}
+          {matches.length === 20 ? (
+            <p className="border-t border-gray-100 px-3 py-2 text-xs text-gray-500">
+              แสดง 20 รายการแรก พิมพ์เพิ่มเพื่อค้นหาให้แคบลง
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function SearchBox({
   value,
   setValue,
@@ -3545,6 +4060,10 @@ function SearchBox({
 export default function Admin() {
   const navigate = useNavigate();
   const [view, setView] = useState<AdminView>("overview");
+  const [policyMerchantFilter, setPolicyMerchantFilter] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [merchants, setMerchants] = useState<Merchant[]>([]);
@@ -3650,13 +4169,25 @@ export default function Admin() {
   else if (view === "overview")
     content = <div className="portal-empty">ยังไม่มีข้อมูลภาพรวม</div>;
   else if (view === "merchants")
-    content = <MerchantView rows={merchants} setRows={setMerchants} />;
+    content = (
+      <MerchantView
+        rows={merchants}
+        setRows={setMerchants}
+        viewPolicies={(merchant) => {
+          setPolicyMerchantFilter({ id: merchant.id, name: merchant.name });
+          setView("policies");
+        }}
+      />
+    );
   else if (view === "policies")
     content = (
       <PolicyView
         rows={policies}
         legalUsers={legalUsers}
         setRows={setPolicies}
+        merchantFilter={policyMerchantFilter}
+        setMerchantFilter={setPolicyMerchantFilter}
+        clearMerchantFilter={() => setPolicyMerchantFilter(null)}
       />
     );
   else if (view === "templates") content = <TemplateManagement />;
@@ -3671,6 +4202,7 @@ export default function Admin() {
     );
   else if (view === "assignments")
     content = <LegalAssignments users={legalUsers} policies={policies} />;
+  else if (view === "admin_reviews") content = <AdminReviewQueue />;
   else if (view === "legal")
     content = (
       <LegalManagement
@@ -3702,6 +4234,7 @@ export default function Admin() {
       <Sidebar
         view={view}
         change={setView}
+        adminReviewCount={overview?.kpi.pendingAdminReviews ?? 0}
         open={menuOpen}
         close={() => setMenuOpen(false)}
         logout={logout}

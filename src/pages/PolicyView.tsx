@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { AlertCircle, CheckCircle2, Loader2, ShieldCheck } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, ShieldCheck, X } from "lucide-react";
 import { api } from "@/services/api";
 import type { PublicConsentForm } from "@/services/api";
 
@@ -13,7 +13,9 @@ export default function PolicyView() {
   const [documentHtml, setDocumentHtml] = useState("");
   const [loading, setLoading] = useState(true);
   const [savingAcknowledgement, setSavingAcknowledgement] = useState(false);
+  const [savingDismissal, setSavingDismissal] = useState(false);
   const [showAcknowledgement, setShowAcknowledgement] = useState(true);
+  const [showConsentPrompt, setShowConsentPrompt] = useState(false);
   const [error, setError] = useState("");
   const [consentForm, setConsentForm] = useState<PublicConsentForm | null>(
     null,
@@ -80,6 +82,29 @@ export default function PolicyView() {
       );
       return;
     }
+    setShowConsentPrompt(true);
+    setShowAcknowledgement(false);
+  };
+
+  const dismissAcknowledgement = async (
+    reason: "close_button" | "continue_without_acknowledgement",
+  ) => {
+    if (!slug || savingAcknowledgement || savingDismissal) return;
+    setSavingDismissal(true);
+    setError("");
+    const response = await api.policies.recordPublicAcknowledgementDismissal(
+      slug,
+      reason,
+    );
+    setSavingDismissal(false);
+    if (!response.success) {
+      setError(
+        response.error?.message ||
+          "ไม่สามารถบันทึกการปิดข้อความได้ กรุณาลองใหม่อีกครั้ง",
+      );
+      return;
+    }
+    setShowConsentPrompt(reason === "continue_without_acknowledgement");
     setShowAcknowledgement(false);
   };
 
@@ -152,6 +177,20 @@ export default function PolicyView() {
           aria-labelledby="acknowledgement-title"
           className="fixed inset-x-4 bottom-4 z-50 mx-auto max-w-3xl rounded-lg border border-gray-200 bg-white p-4 shadow-2xl sm:p-5"
         >
+          <button
+            type="button"
+            aria-label="ปิดโดยไม่รับทราบ"
+            title="ปิดโดยไม่รับทราบ"
+            disabled={savingAcknowledgement || savingDismissal}
+            onClick={() => void dismissAcknowledgement("close_button")}
+            className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
+          >
+            {savingDismissal ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <X className="h-4 w-4" />
+            )}
+          </button>
           <div className="flex items-start gap-3">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded bg-emerald-50 text-emerald-700">
               <ShieldCheck className="h-5 w-5" />
@@ -176,15 +215,15 @@ export default function PolicyView() {
               <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <button
                   type="button"
-                  disabled={savingAcknowledgement}
-                  onClick={() => setShowAcknowledgement(false)}
+                  disabled={savingAcknowledgement || savingDismissal}
+                  onClick={() => void dismissAcknowledgement("continue_without_acknowledgement")}
                   className="h-10 rounded border border-gray-300 px-4 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
                 >
                   อ่านต่อโดยไม่กดรับทราบ
                 </button>
                 <button
                   type="button"
-                  disabled={savingAcknowledgement}
+                  disabled={savingAcknowledgement || savingDismissal}
                   onClick={() => void acknowledgeDocument()}
                   className="flex h-10 items-center justify-center gap-2 rounded bg-emerald-700 px-4 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-60"
                 >
@@ -202,7 +241,7 @@ export default function PolicyView() {
           </div>
         </section>
       )}
-      {!showAcknowledgement && consentForm && !consentComplete && (
+      {showConsentPrompt && consentForm && !consentComplete && (
         <section
           aria-labelledby="consent-title"
           className="fixed inset-x-4 bottom-4 z-50 mx-auto max-h-[90vh] max-w-3xl overflow-y-auto rounded-lg border border-gray-200 bg-white p-5 shadow-2xl"

@@ -13,6 +13,8 @@ export type AdminPolicyStatus =
   | "active"
   | "archived"
   | "pending_review"
+  | "pending_admin_review"
+  | "changes_requested_by_admin"
   | "approved"
   | "rejected"
   | "edited";
@@ -104,6 +106,22 @@ export interface AdminPolicyDetail extends AdminPolicy {
   reviewComment: string | null;
   contentTh: string | null;
   contentEn: string | null;
+}
+
+export interface AdminPolicyHistoryEvent {
+  id: string;
+  type: string;
+  description: string;
+  relatedType: string | null;
+  relatedField: string | null;
+  actor: { id?: string | null; name?: string | null; email?: string | null; role?: string | null } | null;
+  from: { id?: string | null; name?: string | null; email?: string | null; role?: string | null } | null;
+  to: { id?: string | null; name?: string | null; email?: string | null; role?: string | null; queue?: string | null } | null;
+  fromStatus: string | null;
+  toStatus: string | null;
+  comment: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string | null;
 }
 
 export interface AdminMerchant {
@@ -232,9 +250,25 @@ export interface AdminLegalReview {
   websiteName: string;
   legalUserId: string | null;
   legalUserEmail: string;
-  status: "approved" | "rejected" | "edited";
+  status: "approved" | "rejected" | "edited" | "submitted_to_admin";
   comment: string | null;
   reviewedAt: string | null;
+}
+
+export interface AdminPolicyReviewItem {
+  id: string;
+  slug: string;
+  name: string;
+  websiteName: string;
+  merchantId: string;
+  assignedLegalUserId: string | null;
+  status: string;
+  version: number;
+  language: string;
+  reviewComment: string | null;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  updatedAt: string | null;
 }
 
 export interface AdminOverview {
@@ -244,6 +278,7 @@ export interface AdminOverview {
     totalRevenue: number;
     pendingPayments: number;
     pendingLegalReviews: number;
+    pendingAdminReviews: number;
     unassignedLegalReviews: number;
     activeErrors: number;
   };

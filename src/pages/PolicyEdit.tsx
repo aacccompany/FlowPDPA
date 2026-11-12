@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   AlertTriangle,
@@ -9,16 +9,12 @@ import {
   ExternalLink,
   FileEdit,
   Globe2,
-  Search,
   Send,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/services/api";
 import "./MerchantFlow.css";
 import type {
-  ChangeRequestPriority,
-  PolicyActivityLog,
-  PolicyActivityType,
   PolicyChangeRequest,
   PolicyLanguage,
   SavedPolicy,
@@ -33,157 +29,11 @@ const requestStatus: Record<string, { label: string; className: string }> = {
   rejected: { label: "ไม่ดำเนินการ", className: "bg-red-50 text-red-700" },
 };
 
-// Where the policy is in the review, and the one thing to do next.
-function PolicyProgress({ policy }: { policy: SavedPolicy }) {
-  const [copied, setCopied] = useState<"link" | "embed" | "failed" | null>(null);
-  const formatDate = (value?: string | null) =>
-    value
-      ? new Intl.DateTimeFormat("th-TH", {
-          day: "numeric",
-          month: "short",
-          year: "numeric",
-        }).format(new Date(value))
-      : "";
-  const decided = policy.status !== "pending_review";
-  const decisionLabel =
-    policy.status === "approved"
-      ? "อนุมัติแล้ว"
-      : policy.status === "rejected"
-        ? "ไม่อนุมัติ"
-        : policy.status === "edited"
-          ? "ฝ่ายกฎหมายแก้ไขแล้ว"
-          : policy.status === "archived"
-            ? "เก็บถาวร"
-            : "รอผลการตรวจสอบ";
-  const decidedAt = decided
-    ? policy.approvedAt || policy.reviewedAt || policy.updatedAt
-    : null;
-  const steps = [
-    { label: "ส่งให้ตรวจสอบ", done: true, note: formatDate(policy.createdAt) },
-    { label: "ฝ่ายกฎหมายตรวจสอบ", done: decided, note: "" },
-    { label: decisionLabel, done: decided, note: formatDate(decidedAt) },
-  ];
-  // Only the public link the backend actually published; never a guessed URL.
-  const publicUrl = policy.shareUrl ?? null;
-  const copy = async (kind: "link" | "embed", text: string) => {
-    let ok = false;
-    try {
-      // Never hang silently: a refused/pending permission must fall through within 1.5s.
-      await Promise.race([
-        navigator.clipboard.writeText(text),
-        new Promise((_, reject) => window.setTimeout(reject, 1500)),
-      ]);
-      ok = true;
-    } catch {
-      // Clipboard API can be refused (page not focused, non-secure origin): try the old way.
-      try {
-        const field = document.createElement("textarea");
-        field.value = text;
-        field.style.position = "fixed";
-        field.style.opacity = "0";
-        document.body.appendChild(field);
-        field.select();
-        ok = document.execCommand("copy");
-        field.remove();
-      } catch {
-        // leave ok = false: the user is told below
-      }
-    }
-    setCopied(ok ? kind : "failed");
-    window.setTimeout(() => setCopied(null), 4000);
-  };
-  return (
-    <section className="rounded-xl border border-gray-200 bg-white p-4">
-      <h2 className="text-sm font-semibold">สถานะนโยบาย</h2>
-      <ol className="merchant-timeline mt-3">
-        {steps.map((step, index) => (
-          <li
-            key={step.label}
-            data-done={step.done}
-            data-current={!step.done && steps[index - 1]?.done}
-          >
-            <span className="merchant-timeline-mark" aria-hidden="true">
-              {step.done ? (
-                <CheckCircle2 className="h-4 w-4" />
-              ) : steps[index - 1]?.done ? (
-                <Clock3 className="h-4 w-4" />
-              ) : null}
-            </span>
-            <div>
-              <p className="text-sm font-semibold">{step.label}</p>
-              {step.note && <p className="text-xs text-gray-600">{step.note}</p>}
-            </div>
-          </li>
-        ))}
-      </ol>
-      <div className="mt-4 text-sm leading-6 text-gray-700">
-        {policy.status === "pending_review" && (
-          <p>รอฝ่ายกฎหมายตรวจสอบ โดยปกติภายใน 1–2 วันทำการ</p>
-        )}
-        {policy.status === "edited" && (
-          <p>ฝ่ายกฎหมายแก้ไขเนื้อหาให้แล้ว โปรดตรวจดูฉบับล่าสุดทางซ้าย</p>
-        )}
-        {policy.status === "rejected" && (
-          <p>ดูเหตุผลด้านล่าง แล้วส่งคำขอแก้ไขให้ฝ่ายกฎหมายได้ที่ฟอร์ม “ขอแก้ไขนโยบาย”</p>
-        )}
-        {policy.status === "approved" && !publicUrl && (
-          <p>นโยบายนี้ได้รับการอนุมัติแล้ว</p>
-        )}
-        {policy.status === "approved" && publicUrl && (
-          <div>
-            <p className="font-semibold text-gray-900">
-              นำนโยบายไปติดตั้งบนเว็บไซต์
-            </p>
-            <div className="mt-2 flex items-center gap-2 rounded-lg border border-gray-200 bg-white/70 px-3 py-2">
-              <code className="min-w-0 flex-1 select-all truncate text-xs">{publicUrl}</code>
-              <button
-                type="button"
-                className="merchant-button"
-                onClick={() => void copy("link", publicUrl)}
-              >
-                <Copy className="h-4 w-4" />
-                {copied === "link" ? "คัดลอกแล้ว" : "คัดลอกลิงก์"}
-              </button>
-            </div>
-            {copied === "failed" && (
-              <p role="alert" className="mt-2 text-xs text-red-700">
-                คัดลอกอัตโนมัติไม่สำเร็จ ลองคลิกที่ลิงก์เพื่อเลือกทั้งหมดแล้วกด Ctrl + C
-              </p>
-            )}
-            {policy.htmlEmbed && (
-              <button
-                type="button"
-                className="merchant-button mt-2"
-                onClick={() => void copy("embed", policy.htmlEmbed ?? "")}
-              >
-                <Copy className="h-4 w-4" />
-                {copied === "embed" ? "คัดลอกแล้ว" : "คัดลอกโค้ดฝัง"}
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-const activityLabel: Record<PolicyActivityLog["type"], string> = {
-  document_acknowledged: "ลูกค้ารับทราบเอกสาร",
-  customer_consent: "ลูกค้าให้ความยินยอม",
-  merchant_change_requested: "ส่งคำขอแก้ไขให้ฝ่ายกฎหมาย",
-  legal_document_updated: "ฝ่ายกฎหมายแก้ไขเอกสาร",
-};
-
 export default function PolicyEdit() {
   const { policyId = "" } = useParams();
   const { auth } = useAuth();
   const [policy, setPolicy] = useState<SavedPolicy | null>(null);
   const [requests, setRequests] = useState<PolicyChangeRequest[]>([]);
-  const [activityLogs, setActivityLogs] = useState<PolicyActivityLog[]>([]);
-  const [activityType, setActivityType] = useState<"all" | PolicyActivityType>(
-    "all",
-  );
-  const [activitySearch, setActivitySearch] = useState("");
   const [previewLanguage, setPreviewLanguage] = useState<"th" | "en">("th");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -194,31 +44,14 @@ export default function PolicyEdit() {
     sectionTitle: "",
     requestedChange: "",
     reason: "",
-    priority: "normal" as ChangeRequestPriority,
   });
-
-  const filteredActivityLogs = useMemo(() => {
-    const query = activitySearch.trim().toLocaleLowerCase();
-    return activityLogs.filter((log) => {
-      if (activityType !== "all" && log.type !== activityType) return false;
-      if (!query) return true;
-      return [
-        log.id,
-        log.relatedField,
-        log.relatedType,
-        log.description,
-        activityLabel[log.type],
-      ].some((value) => value?.toLocaleLowerCase().includes(query));
-    });
-  }, [activityLogs, activitySearch, activityType]);
 
   useEffect(() => {
     let active = true;
     void Promise.all([
       api.policies.get(policyId),
       api.policies.listChangeRequests(policyId),
-      api.policies.listActivityLogs(policyId),
-    ]).then(([policyResponse, requestsResponse, activityResponse]) => {
+    ]).then(([policyResponse, requestsResponse]) => {
       if (!active) return;
       let loadError = "";
       if (policyResponse.success && policyResponse.data) {
@@ -235,9 +68,6 @@ export default function PolicyEdit() {
       if (requestsResponse.success && requestsResponse.data)
         setRequests(requestsResponse.data);
       else if (!loadError) loadError = requestsResponse.error?.message || "";
-      if (activityResponse.success && activityResponse.data)
-        setActivityLogs(activityResponse.data);
-      else if (!loadError) loadError = activityResponse.error?.message || "";
       setError(loadError);
       setLoading(false);
     });
@@ -260,7 +90,7 @@ export default function PolicyEdit() {
       requestedChange: form.requestedChange.trim(),
       reason: form.reason.trim() || undefined,
       merchantComment: form.reason.trim() || undefined,
-      priority: form.priority,
+      priority: "normal",
     });
     setSaving(false);
     if (!response.success || !response.data) {
@@ -268,15 +98,11 @@ export default function PolicyEdit() {
       return;
     }
     setRequests((current) => [response.data!, ...current]);
-    const activityResponse = await api.policies.listActivityLogs(policyId);
-    if (activityResponse.success && activityResponse.data)
-      setActivityLogs(activityResponse.data);
     setForm((current) => ({
       ...current,
       sectionTitle: "",
       requestedChange: "",
       reason: "",
-      priority: "normal",
     }));
     setSuccess("ส่งคำขอแก้ไขให้ฝ่ายกฎหมายแล้ว ระหว่างนี้เอกสารที่เผยแพร่จะยังไม่เปลี่ยน");
   };
@@ -481,24 +307,6 @@ export default function PolicyEdit() {
                   placeholder="เหตุผลทางธุรกิจหรือคำขอจากลูกค้าที่ตรวจสอบแล้ว"
                 />
               </label>
-              <label className="block text-xs font-semibold text-gray-600">
-                ระดับความสำคัญ
-                <select
-                  value={form.priority}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      priority: event.target.value as ChangeRequestPriority,
-                    }))
-                  }
-                  className="mt-1.5 h-10 w-full border border-gray-300 bg-white px-3 text-sm"
-                >
-                  <option value="low">ต่ำ</option>
-                  <option value="normal">ปกติ</option>
-                  <option value="high">สูง</option>
-                  <option value="urgent">เร่งด่วน</option>
-                </select>
-              </label>
             </div>
             {error && (
               <p className="mt-3 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
@@ -568,105 +376,6 @@ export default function PolicyEdit() {
             )}
           </section>
 
-          <section className="rounded border border-gray-200 bg-white">
-            <div className="border-b border-gray-200 px-4 py-3">
-              <h2 className="text-sm font-semibold">กิจกรรมเอกสาร</h2>
-              <p className="mt-1 text-xs text-gray-500">
-                ประวัติความยินยอมและขั้นตอนเอกสารที่ไม่สามารถแก้ไขย้อนหลังได้
-              </p>
-            </div>
-            <div className="grid gap-2 border-b border-gray-100 p-3 sm:grid-cols-[minmax(0,1fr)_180px]">
-              <label className="relative block">
-                <Search
-                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
-                  aria-hidden="true"
-                />
-                <span className="sr-only">ค้นหากิจกรรม</span>
-                <input
-                  value={activitySearch}
-                  onChange={(event) => setActivitySearch(event.target.value)}
-                  className="h-9 w-full rounded border border-gray-200 pl-9 pr-3 text-xs"
-                  placeholder="ค้นหา รหัส ข้อมูล หรือรายละเอียด"
-                />
-              </label>
-              <label>
-                <span className="sr-only">กรองตามประเภทกิจกรรม</span>
-                <select
-                  value={activityType}
-                  onChange={(event) =>
-                    setActivityType(
-                      event.target.value as "all" | PolicyActivityType,
-                    )
-                  }
-                  className="h-9 w-full rounded border border-gray-200 bg-white px-3 text-xs text-gray-700"
-                >
-                  <option value="all">กิจกรรมทุกประเภท</option>
-                  <option value="document_acknowledged">
-                    การรับทราบเอกสาร
-                  </option>
-                  <option value="customer_consent">ความยินยอมของลูกค้า</option>
-                  <option value="merchant_change_requested">
-                    คำขอแก้ไขจากผู้ประกอบการ
-                  </option>
-                  <option value="legal_document_updated">
-                    ฝ่ายกฎหมายแก้ไขเอกสาร
-                  </option>
-                </select>
-              </label>
-              <p className="text-[11px] text-gray-400 sm:col-span-2">
-                แสดง {filteredActivityLogs.length} จาก {activityLogs.length}{" "}
-                รายการ
-              </p>
-            </div>
-            {activityLogs.length === 0 ? (
-              <div className="px-4 py-8 text-center text-xs text-gray-400">
-                ยังไม่มีกิจกรรมที่บันทึกไว้
-              </div>
-            ) : filteredActivityLogs.length === 0 ? (
-              <div className="px-4 py-8 text-center text-xs text-gray-400">
-                ไม่มีกิจกรรมที่ตรงกับตัวกรอง
-              </div>
-            ) : (
-              <div className="max-h-96 overflow-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="sticky top-0 bg-gray-50 text-gray-500">
-                    <tr>
-                      <th className="px-3 py-2 font-semibold">ID</th>
-                      <th className="px-3 py-2 font-semibold">ข้อมูลที่เกี่ยวข้อง</th>
-                      <th className="px-3 py-2 font-semibold">รายละเอียด</th>
-                      <th className="px-3 py-2 font-semibold">เวลา</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {filteredActivityLogs.map((log) => (
-                      <tr key={log.id}>
-                        <td
-                          className="max-w-24 truncate px-3 py-3 font-mono text-[10px] text-gray-400"
-                          title={log.id}
-                        >
-                          {log.id}
-                        </td>
-                        <td className="px-3 py-3 text-gray-600">
-                          {log.relatedField || log.relatedType}
-                        </td>
-                        <td className="px-3 py-3">
-                          <p className="font-semibold text-gray-700">
-                            {activityLabel[log.type]}
-                          </p>
-                          <p className="mt-1 text-gray-500">
-                            {log.description}
-                          </p>
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-3 text-gray-400">
-                          {new Date(log.createdAt).toLocaleString("th-TH")}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
         </aside>
       </main>
     </div>
