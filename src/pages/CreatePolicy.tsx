@@ -16,6 +16,8 @@ import {
   Languages,
   Upload,
   FileText,
+  Info,
+  CircleHelp,
 } from "lucide-react";
 import { PolicyTypeIcon } from "@/components/policy/PolicyTypeIcon";
 import {
@@ -30,6 +32,8 @@ import { api } from "@/services/api";
 import { fileSha256 } from "@/services/api";
 import type { CompanyDocumentValidationStatus, PolicyQuestionnaire, UserProfile } from "@/services/api";
 
+import "./MerchantFlow.css";
+import { useEscapeKey } from "@/hooks/useEscapeKey";
 // ── Thai RD Company Lookup ────────────────────────────────────
 // Replace with real Thai RD VAT API calls via your backend proxy
 // (https://rdws.rd.go.th/serviceRD3/vatregistrationRI.asmx)
@@ -310,6 +314,25 @@ function CheckboxCard({
   );
 }
 
+// A short plain-language explanation that stays out of the way until opened.
+function HelpNote({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <details className="merchant-help">
+      <summary>
+        <CircleHelp className="w-4 h-4" aria-hidden="true" />
+        {title}
+      </summary>
+      <div>{children}</div>
+    </details>
+  );
+}
+
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
     <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-2">
@@ -443,7 +466,7 @@ function Step1({
                     className="text-xs font-bold px-2 py-0.5 rounded-full"
                     style={{ backgroundColor: "#f1f5f9", color: "#64748b" }}
                   >
-                    Coming Soon
+                    เร็วๆ นี้
                   </span>
                 ) : (
                   <span
@@ -1407,9 +1430,14 @@ function Step3({
       <h2 className="text-xl font-black text-gray-900 mb-1">
         ข้อมูลส่วนบุคคลที่เก็บรวบรวม
       </h2>
-      <p className="text-sm text-gray-400 mb-6">
+      <p className="text-sm text-gray-400 mb-4">
         เลือกทุกประเภทข้อมูลที่ธุรกิจของคุณเก็บจากผู้ใช้งาน
       </p>
+      <HelpNote title="ข้อมูลอ่อนไหวคืออะไร">
+        ข้อมูลที่กฎหมายให้ความคุ้มครองเป็นพิเศษ เช่น สุขภาพ ศาสนา
+        หรือข้อมูลชีวภาพ (ลายนิ้วมือ ใบหน้า) โดยทั่วไปต้องได้รับความยินยอมโดยชัดแจ้งก่อนเก็บ
+        หากธุรกิจของคุณไม่เก็บข้อมูลเหล่านี้ ไม่ต้องเลือกรายการในกลุ่ม “ข้อมูลอ่อนไหว”
+      </HelpNote>
 
       <div className="space-y-5">
         <div>
@@ -1464,9 +1492,13 @@ function Step4({
       <h2 className="text-xl font-black text-gray-900 mb-1">
         วัตถุประสงค์และเครื่องมือบุคคลที่สาม
       </h2>
-      <p className="text-sm text-gray-400 mb-6">
+      <p className="text-sm text-gray-400 mb-4">
         ระบุว่าข้อมูลถูกนำไปใช้ทำอะไร และมีบริการใดที่ได้รับข้อมูล
       </p>
+      <HelpNote title="บุคคลที่สามคืออะไร">
+        บริการภายนอกที่ได้รับข้อมูลจากเว็บไซต์ของคุณ เช่น เครื่องมือวิเคราะห์
+        ระบบชำระเงิน หรือบริการคลาวด์ หากไม่มีเลย ให้เลือก “ไม่มีบุคคลที่สาม”
+      </HelpNote>
 
       <div className="space-y-6">
         <div>
@@ -1592,6 +1624,17 @@ function Step5({
           </div>
         </div>
 
+        <HelpNote title="DPO และระยะเวลาเก็บข้อมูลคืออะไร">
+          <p>
+            <strong>DPO</strong> คือผู้ที่เจ้าของข้อมูลติดต่อเพื่อสอบถามหรือใช้สิทธิเกี่ยวกับข้อมูลของตน
+            ควรใช้อีเมลที่ตรวจสอบสม่ำเสมอ
+          </p>
+          <p className="mt-2">
+            <strong>ระยะเวลาเก็บ</strong> ควรเก็บเท่าที่จำเป็นตามวัตถุประสงค์
+            ข้อมูลที่เกี่ยวกับภาษีอาจต้องเก็บตามที่กฎหมายภาษีกำหนด (ตัวเลือก 7 ปี)
+            ฝ่ายกฎหมายจะตรวจสอบนโยบายก่อนเผยแพร่
+          </p>
+        </HelpNote>
         {/* DPO email */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
@@ -2135,18 +2178,52 @@ export default function CreatePolicy() {
     return true;
   };
 
+  // The first thing still missing on this step, in plain Thai (shown when "ถัดไป" is disabled).
+  const blockedReason = (): string => {
+    if (step === 1) return "ติ๊กยอมรับเงื่อนไขการใช้งานเพื่อไปต่อ";
+    if (step === 2) {
+      if (!data.websiteName) return "กรอกชื่อเว็บไซต์";
+      if (!isValidWebsiteUrl(data.websiteUrl)) return "กรอก URL เว็บไซต์ให้ถูกต้อง";
+      if (!isValidEmail(data.contactEmail)) return "กรอกอีเมลติดต่อให้ถูกต้อง";
+      if (data.contactPhone && !isValidThaiPhone(data.contactPhone))
+        return "เบอร์โทรศัพท์ไม่ถูกต้อง";
+      if (data.ownerType === "person") {
+        if (!data.ownerFullName) return "กรอกชื่อ-นามสกุล";
+        return "กรอกเลขบัตรประชาชน 13 หลัก";
+      }
+      if (
+        !(
+          data.companyName &&
+          data.companyRegNumber &&
+          data.businessObjective &&
+          data.registeredCapital
+        )
+      )
+        return "กรอกข้อมูลนิติบุคคลให้ครบ";
+      return "ยืนยันเอกสารบริษัทให้ผ่านก่อนไปต่อ";
+    }
+    if (step === 3) return "เลือกข้อมูลที่เก็บรวบรวมอย่างน้อย 1 รายการ";
+    if (step === 4) return "เลือกวัตถุประสงค์อย่างน้อย 1 รายการ";
+    if (step === 5) {
+      if (!data.language) return "เลือกภาษาของนโยบาย";
+      if (!isValidEmail(data.dpoEmail)) return "กรอกอีเมลเจ้าหน้าที่คุ้มครองข้อมูล (DPO) ให้ถูกต้อง";
+      return "เลือกระยะเวลาการเก็บรักษาข้อมูล";
+    }
+    return "";
+  };
+
   const startGeneration = async (sourceData: FormData = data) => {
     setGenerating(true);
     setGenerationError("");
     if (!sourceData.policyType || !sourceData.agreedToTerms) {
       setGenerating(false);
-      setGenerationError("Please select a policy type and accept the terms.");
+      setGenerationError("กรุณาเลือกประเภทนโยบายและยอมรับเงื่อนไขการใช้งาน");
       return;
     }
     if (!isValidEmail(sourceData.dpoEmail) || !sourceData.retentionPeriod) {
       setGenerating(false);
       setGenerationError(
-        "Please enter a valid DPO email and select a data retention period.",
+        "กรุณากรอกอีเมล DPO ที่ถูกต้องและเลือกระยะเวลาการเก็บรักษาข้อมูล",
       );
       return;
     }
@@ -2176,7 +2253,7 @@ export default function CreatePolicy() {
 
   return (
     <div
-      className="min-h-screen flex flex-col"
+      className="merchant-flow min-h-screen flex flex-col"
       style={{ backgroundColor: "#f8fafc" }}
     >
       {/* Header */}
@@ -2331,6 +2408,15 @@ export default function CreatePolicy() {
               {step === 5 && <Step5 data={data} setData={setData} />}
               {step === 6 && <Step6 data={data} />}
               {/* Navigation */}
+              {step < steps.length && !canProceed() && (
+                <p
+                  role="status"
+                  className="mt-6 flex items-center gap-2 text-sm text-gray-600"
+                >
+                  <Info className="w-4 h-4" />
+                  {blockedReason()}
+                </p>
+              )}
               <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-100">
                 <button
                   type="button"

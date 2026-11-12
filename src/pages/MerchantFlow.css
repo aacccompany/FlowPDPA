@@ -1,0 +1,168 @@
+/* Merchant standalone pages (create / edit policy): same rounded + glass + minimal system
+   as the dashboard (Dashboard.css) and the Legal portal. Scoped to .merchant-flow. */
+.merchant-flow {
+  --radius-small: 8px;
+  --radius-control: 10px;
+  --radius-nav: 10px;
+  --radius-panel: 16px;
+  --glass-bg: rgba(255, 255, 255, 0.74);
+  --glass-bg-strong: rgba(255, 255, 255, 0.86);
+  --glass-border: rgba(255, 255, 255, 0.85);
+  --glass-edge: rgba(23, 35, 59, 0.10);
+  --glass-blur: blur(16px) saturate(1.3);
+  --glass-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    0 14px 36px -24px rgba(23, 35, 59, 0.24);
+}
+.merchant-flow.merchant-flow {
+  background:
+    radial-gradient(640px 480px at 22% 10%, rgba(16, 185, 129, 0.20), transparent 70%),
+    radial-gradient(600px 460px at 78% 6%, rgba(59, 130, 246, 0.16), transparent 70%),
+    radial-gradient(720px 520px at 50% 70%, rgba(20, 184, 166, 0.12), transparent 70%),
+    #e8eef6 !important;
+  background-attachment: scroll;
+}
+
+/* radius scale */
+.merchant-flow .rounded { border-radius: var(--radius-small); }
+.merchant-flow .rounded-lg,
+.merchant-flow .rounded-md { border-radius: var(--radius-control); }
+.merchant-flow .rounded-xl,
+.merchant-flow .rounded-2xl { border-radius: var(--radius-panel); }
+.merchant-flow input,
+.merchant-flow select,
+.merchant-flow textarea { border-radius: var(--radius-control) !important; }
+.merchant-flow .btn-green,
+.merchant-flow .btn-outline-green { border-radius: var(--radius-control) !important; box-shadow: none !important; transform: none !important; }
+
+/* glass: header, stepper bar, cards */
+.merchant-flow header,
+.merchant-flow .bg-white.border-b {
+  background: var(--glass-bg-strong) !important;
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border-color: var(--glass-edge) !important;
+  box-shadow: none !important;
+}
+.merchant-flow .bg-white.rounded-xl,
+.merchant-flow .bg-white.rounded-2xl,
+.merchant-flow :is(section, form, aside > div).bg-white {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+.merchant-flow :is(section, form, aside > div).bg-white { border-radius: var(--radius-panel); }
+
+/* readability on translucent plates */
+.merchant-flow :is(.text-gray-400, .text-gray-500) { color: #4b5563; }
+.merchant-flow .uppercase { text-transform: none; }
+.merchant-flow [class*="tracking-"] { letter-spacing: normal; }
+.merchant-flow .font-mono,
+.merchant-flow [style*="IBM Plex Mono"] { font-family: inherit !important; font-variant-numeric: tabular-nums; }
+
+/* one icon weight */
+.merchant-flow svg.lucide { stroke-width: 1.75; flex-shrink: 0; }
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .merchant-flow { --glass-bg: #ffffff; --glass-bg-strong: #ffffff; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .merchant-flow { --glass-bg: #ffffff; --glass-bg-strong: #ffffff; }
+  .merchant-flow header,
+  .merchant-flow .bg-white.border-b,
+  .merchant-flow .bg-white.rounded-xl,
+  .merchant-flow .bg-white.rounded-2xl,
+  .merchant-flow :is(section, form, aside > div).bg-white { -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+
+/* No card inside a card: groups nested in a glass panel become flat sections divided by a hairline */
+.merchant-flow .bg-white.rounded-2xl .bg-white.rounded-xl {
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border: 0;
+  border-top: 1px solid var(--glass-edge);
+  border-radius: 0;
+  box-shadow: none;
+}
+.merchant-flow .bg-white.rounded-2xl .bg-white.rounded-xl:first-of-type { border-top: 0; }
+.merchant-flow .bg-white.rounded-2xl .bg-white.rounded-xl::before { display: none; }
+.merchant-flow .bg-white.rounded-2xl .bg-white.rounded-xl { padding-inline: 0; }
+
+/* Plain-language help that opens on demand (wizard) */
+.merchant-flow .merchant-help {
+  margin-bottom: 20px;
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+  color: #374151;
+}
+.merchant-flow .merchant-help summary {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; cursor: pointer; list-style: none;
+  font-weight: 600; color: #066a4f;
+}
+.merchant-flow .merchant-help summary::-webkit-details-marker { display: none; }
+.merchant-flow .merchant-help > div { padding: 0 14px 12px; line-height: 1.7; }
+
+/* Review timeline */
+.merchant-timeline { list-style: none; margin: 0; padding: 0; }
+.merchant-timeline li { display: flex; gap: 12px; padding-bottom: 14px; position: relative; }
+.merchant-timeline li:last-child { padding-bottom: 0; }
+.merchant-timeline li:not(:last-child)::after {
+  content: ''; position: absolute; left: 11px; top: 26px; bottom: 2px; width: 1px; background: var(--glass-edge);
+}
+.merchant-timeline-mark {
+  flex: none; width: 24px; height: 24px; border-radius: 999px; display: grid; place-items: center;
+  border: 1px solid rgba(23, 35, 59, 0.18); background: rgba(255, 255, 255, 0.7); color: #6b7280;
+}
+.merchant-timeline li[data-done='true'] .merchant-timeline-mark { border-color: #066a4f; background: #e8f4ef; color: #066a4f; }
+.merchant-timeline li[data-current='true'] .merchant-timeline-mark { border-color: #8a4f05; background: #fff6e5; color: #8a4f05; }
+.merchant-flow .merchant-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; padding: 0 13px;
+  border: 1px solid rgba(23, 35, 59, 0.14); border-radius: var(--radius-control); background: transparent;
+  color: #374151; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;
+}
+.merchant-flow .merchant-button:hover { background: rgba(255, 255, 255, 0.7); }
+
+/* ═══ Flow pages v2: floating rounded header, rounder scale ═══ */
+.merchant-flow {
+  --radius-small: 12px;
+  --radius-control: 14px;
+  --radius-panel: 24px;
+}
+.merchant-flow.merchant-flow {
+  background:
+    radial-gradient(900px 520px at 18% 6%, rgba(16, 185, 129, 0.20), transparent 70%),
+    radial-gradient(820px 480px at 84% 4%, rgba(59, 130, 246, 0.16), transparent 70%),
+    radial-gradient(900px 560px at 52% 78%, rgba(20, 184, 166, 0.12), transparent 70%),
+    #e8eef6 !important;
+  background-attachment: scroll;
+}
+.merchant-flow > header {
+  position: sticky; top: 12px; z-index: 40;
+  width: calc(100% - 32px); max-width: 1100px; margin: 12px auto 0;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: 999px !important;
+  overflow: hidden;
+  box-shadow: var(--glass-shadow), 0 12px 32px -20px rgba(23, 35, 59, 0.35) !important;
+}
+.merchant-flow .btn-green { border-radius: 999px !important; }
+@media (max-width: 640px) { .merchant-flow > header { width: calc(100% - 20px); top: 8px; } }
+
+/* The step bar becomes a rounded glass card as wide as the floating header */
+.merchant-flow > .bg-white.border-b.border-gray-100 {
+  width: calc(100% - 32px); max-width: 1100px; margin: 10px auto 0;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: 28px;
+  overflow: hidden;
+  box-shadow: var(--glass-shadow) !important;
+}
+@media (max-width: 640px) { .merchant-flow > .bg-white.border-b.border-gray-100 { width: calc(100% - 20px); } }
+
+/* Policy page: content and floating header share one width and edge */
+.merchant-flow > main.grid.grid { max-width: 1312px; width: 100%; margin-inline: auto; padding-inline: 16px; }
+.merchant-flow:has(> main.grid) > header { max-width: 1280px; }

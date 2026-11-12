@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
+  AlertTriangle,
   ArrowLeft,
+  Copy,
   CheckCircle2,
   Clock3,
   ExternalLink,
@@ -11,6 +13,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/services/api";
+import "./MerchantFlow.css";
 import type {
   PolicyChangeRequest,
   PolicyLanguage,
@@ -19,11 +22,11 @@ import type {
 
 const requestStatus: Record<string, { label: string; className: string }> = {
   pending_review: {
-    label: "Pending Legal review",
+    label: "รอฝ่ายกฎหมายตรวจสอบ",
     className: "bg-amber-50 text-amber-700",
   },
-  resolved: { label: "Resolved", className: "bg-emerald-50 text-emerald-700" },
-  rejected: { label: "Rejected", className: "bg-red-50 text-red-700" },
+  resolved: { label: "ดำเนินการแล้ว", className: "bg-emerald-50 text-emerald-700" },
+  rejected: { label: "ไม่ดำเนินการ", className: "bg-red-50 text-red-700" },
 };
 
 export default function PolicyEdit() {
@@ -60,7 +63,7 @@ export default function PolicyEdit() {
           language: policyResponse.data!.language,
         }));
       } else {
-        loadError = policyResponse.error?.message || "Unable to load policy.";
+        loadError = policyResponse.error?.message || "ไม่สามารถโหลดนโยบายได้";
       }
       if (requestsResponse.success && requestsResponse.data)
         setRequests(requestsResponse.data);
@@ -91,7 +94,7 @@ export default function PolicyEdit() {
     });
     setSaving(false);
     if (!response.success || !response.data) {
-      setError(response.error?.message || "Unable to send request to Legal.");
+      setError(response.error?.message || "ไม่สามารถส่งคำขอให้ฝ่ายกฎหมายได้");
       return;
     }
     setRequests((current) => [response.data!, ...current]);
@@ -101,7 +104,7 @@ export default function PolicyEdit() {
       requestedChange: "",
       reason: "",
     }));
-    setSuccess("Change request sent to Legal.");
+    setSuccess("ส่งคำขอแก้ไขให้ฝ่ายกฎหมายแล้ว ระหว่างนี้เอกสารที่เผยแพร่จะยังไม่เปลี่ยน");
   };
 
   if (loading)
@@ -133,14 +136,14 @@ export default function PolicyEdit() {
   );
 
   return (
-    <div className="min-h-screen bg-[#f4f6f9] text-[#172033]">
+    <div className="merchant-flow min-h-screen bg-[#f4f6f9] text-[#172033]">
       <header className="flex h-16 items-center justify-between border-b border-gray-200 bg-white px-4 lg:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <Link
             to="/dashboard"
             state={{ view: "policies" }}
             className="grid h-8 w-8 shrink-0 place-items-center rounded border border-gray-200 text-gray-600 hover:bg-gray-50"
-            aria-label="Back to policies"
+            aria-label="กลับไปยังรายการนโยบาย"
           >
             <ArrowLeft className="h-4 w-4" />
           </Link>
@@ -160,13 +163,13 @@ export default function PolicyEdit() {
             rel="noreferrer"
             className="flex h-9 items-center gap-2 rounded border border-gray-200 px-3 text-xs font-semibold text-gray-700 hover:bg-gray-50"
           >
-            <ExternalLink className="h-3.5 w-3.5" />
+            <ExternalLink className="h-4 w-4" />
             หน้าสาธารณะ
           </a>
         )}
       </header>
 
-      <main className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:p-5">
+      <main className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:p-5">
         <section className="min-w-0 overflow-hidden rounded border border-gray-200 bg-white">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3">
             <div>
@@ -182,28 +185,44 @@ export default function PolicyEdit() {
                   onClick={() => setPreviewLanguage(language)}
                   className={`h-8 rounded border px-3 text-xs font-semibold ${previewLanguage === language ? "border-emerald-700 bg-emerald-50 text-emerald-700" : "border-gray-200 text-gray-600"}`}
                 >
-                  <Globe2 className="mr-1.5 inline h-3.5 w-3.5" />
-                  {language === "th" ? "Thai" : "English"}
+                  <Globe2 className="mr-1.5 inline h-4 w-4" />
+                  {language === "th" ? "ภาษาไทย" : "English"}
                 </button>
               ))}
             </div>
           </div>
           {html ? (
             <iframe
-              title={`${previewLanguage} policy preview`}
+              title={`ตัวอย่างนโยบายภาษา${previewLanguage === "th" ? "ไทย" : "อังกฤษ"}`}
               srcDoc={html}
               sandbox=""
               className="h-[calc(100vh-150px)] min-h-[620px] w-full border-0 bg-white"
             />
           ) : (
             <div className="grid min-h-[620px] place-items-center text-sm text-gray-400">
-              No {previewLanguage === "th" ? "Thai" : "English"} content
-              available.
+              ไม่มีเนื้อหาภาษา{previewLanguage === "th" ? "ไทย" : "อังกฤษ"}
             </div>
           )}
         </section>
 
         <aside className="space-y-4">
+          <PolicyProgress policy={policy} />
+          {policy.status === "rejected" && (
+            <section
+              role="status"
+              className="rounded-xl border border-red-200 bg-red-50 p-4"
+            >
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-red-800">
+                <AlertTriangle className="h-4 w-4" />
+                ฝ่ายกฎหมายไม่อนุมัตินโยบายนี้
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-red-900 whitespace-pre-wrap">
+                {policy.reviewComment
+                  ? "เหตุผล: " + policy.reviewComment
+                  : "ฝ่ายกฎหมายไม่ได้ระบุเหตุผลไว้"}
+              </p>
+            </section>
+          )}
           <form
             onSubmit={submit}
             className="rounded border border-gray-200 bg-white p-4"
@@ -305,7 +324,7 @@ export default function PolicyEdit() {
               className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded bg-emerald-700 text-sm font-semibold text-white disabled:opacity-60"
             >
               <Send className="h-4 w-4" />
-              {saving ? "Sending..." : "Send to Legal"}
+              {saving ? "กำลังส่ง..." : "ส่งให้ฝ่ายกฎหมาย"}
             </button>
           </form>
 
@@ -318,7 +337,7 @@ export default function PolicyEdit() {
             </div>
             {requests.length === 0 ? (
               <div className="px-4 py-8 text-center text-xs text-gray-400">
-                No change requests yet.
+                ยังไม่มีคำขอแก้ไข
               </div>
             ) : (
               <div className="max-h-96 divide-y divide-gray-100 overflow-y-auto">
@@ -330,7 +349,7 @@ export default function PolicyEdit() {
                     <article key={request.id} className="p-4">
                       <div className="flex items-start justify-between gap-3">
                         <p className="text-xs font-semibold text-gray-800">
-                          {request.sectionTitle || "General policy request"}
+                          {request.sectionTitle || "คำขอทั่วไปเกี่ยวกับนโยบาย"}
                         </p>
                         <span
                           className={`shrink-0 rounded px-2 py-1 text-[10px] font-semibold ${status.className}`}

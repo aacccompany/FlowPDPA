@@ -198,3 +198,32 @@ button, input, select, textarea { font: inherit; }
   font-size: 12px;
   font-weight: 700;
 }
+
+
+/* ── Motion system: one easing, two durations, always opt-out for reduced motion ── */
+:root { --ease-out: cubic-bezier(0.22, 1, 0.36, 1); --dur-fast: 140ms; --dur-base: 200ms; }
+
+@keyframes motionFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes motionPop { from { opacity: 0; transform: translateY(8px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes motionBackdrop { from { opacity: 0; } to { opacity: 1; } }
+@keyframes motionDrop { from { opacity: 0; transform: translateY(-8px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes skeletonSweep { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+.motion-view { animation: motionFade var(--dur-base) var(--ease-out) both; }
+.motion-pop { animation: motionPop var(--dur-base) var(--ease-out) both; }
+.motion-backdrop { animation: motionBackdrop var(--dur-fast) ease-out both; }
+
+/* Loading placeholders: same shape as the content they stand in for */
+.skeleton-stack { display: grid; gap: 12px; padding-block: 4px; }
+.skeleton {
+  border-radius: 16px;
+  background: linear-gradient(100deg, rgba(148, 163, 184, 0.16) 30%, rgba(148, 163, 184, 0.30) 50%, rgba(148, 163, 184, 0.16) 70%);
+  background-size: 200% 100%;
+  animation: skeletonSweep 1.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-view, .motion-pop, .motion-backdrop, .merchant-sheet, .legal-sheet,
+  .site-nav-sheet { animation: none !important; }
+  .skeleton { animation: none; }
+}
