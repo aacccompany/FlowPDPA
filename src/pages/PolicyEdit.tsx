@@ -29,6 +29,47 @@ const requestStatus: Record<string, { label: string; className: string }> = {
   rejected: { label: "ไม่ดำเนินการ", className: "bg-red-50 text-red-700" },
 };
 
+function PolicyProgress({ policy }: { policy: SavedPolicy }) {
+  const [copied, setCopied] = useState(false);
+  const reviewed = policy.status !== "pending_review";
+  const publicUrl = policy.shareUrl ?? null;
+  const copyPublicLink = async () => {
+    if (!publicUrl) return;
+    try {
+      await navigator.clipboard.writeText(publicUrl);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2500);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return (
+    <section className="rounded-xl border border-gray-200 bg-white p-4">
+      <h2 className="text-sm font-semibold">สถานะนโยบาย</h2>
+      <ol className="merchant-timeline mt-3">
+        <li data-done="true">
+          <span className="merchant-timeline-mark"><CheckCircle2 className="h-4 w-4" /></span>
+          <p className="text-sm font-semibold">ส่งให้ตรวจสอบแล้ว</p>
+        </li>
+        <li data-done={reviewed} data-current={!reviewed}>
+          <span className="merchant-timeline-mark">
+            {reviewed ? <CheckCircle2 className="h-4 w-4" /> : <Clock3 className="h-4 w-4" />}
+          </span>
+          <p className="text-sm font-semibold">
+            {reviewed ? "ฝ่ายกฎหมายตรวจสอบแล้ว" : "รอฝ่ายกฎหมายตรวจสอบ"}
+          </p>
+        </li>
+      </ol>
+      {publicUrl && (
+        <button type="button" className="mt-4 flex items-center gap-2 text-xs font-semibold text-emerald-700" onClick={() => void copyPublicLink()}>
+          <Copy className="h-4 w-4" />
+          {copied ? "คัดลอกลิงก์แล้ว" : "คัดลอกลิงก์สาธารณะ"}
+        </button>
+      )}
+    </section>
+  );
+}
+
 export default function PolicyEdit() {
   const { policyId = "" } = useParams();
   const { auth } = useAuth();

@@ -19,6 +19,7 @@ import {
   Search,
   ShieldCheck,
   UserRound,
+  XCircle,
 } from "lucide-react";
 import { api } from "@/services/api";
 import type {
@@ -45,7 +46,8 @@ type PolicyStatus =
   | "changes_requested_by_admin"
   | "approved"
   | "edited"
-  | "rejected";
+  | "rejected"
+  | "archived";
 type ChangeStatus =
   | "pending_review"
   | "pending_admin_review"
@@ -76,7 +78,6 @@ interface ChangeRequest {
   websiteName: string;
   sectionTitle: string;
   requestedChange: string;
-  reason?: string | null;
   merchantComment?: string | null;
   requesterName: string;
   language: PolicyChangeRequest["language"];
@@ -116,7 +117,10 @@ const changeFromApi = (request: PolicyChangeRequest): ChangeRequest => ({
   websiteName: request.websiteName || request.policySlug,
   sectionTitle: request.sectionTitle || "ไม่ระบุหัวข้อ",
   requestedChange: request.requestedChange,
-  reason: request.reason,
+  language: request.language,
+  priority: request.priority,
+  reason: request.reason ?? null,
+  selectedText: request.selectedText ?? null,
   merchantComment: request.merchantComment,
   requesterName: request.requesterName || request.requesterEmail,
   status: request.status,
@@ -139,6 +143,14 @@ const statusMeta: Record<
   archived: { label: "เก็บถาวร", color: "#475467", bg: "#f2f4f7" },
 };
 
+const priorityLabel: Record<PolicyChangeRequest["priority"], string> = {
+  low: "ต่ำ",
+  normal: "ปกติ",
+  high: "สูง",
+  urgent: "ด่วนมาก",
+};
+const isHighPriority = (priority: PolicyChangeRequest["priority"]) =>
+  priority === "high" || priority === "urgent";
 const workTypeMeta: Record<LegalWorkType, { label: string; className: string }> = {
   admin_return: {
     label: "Admin ส่งกลับให้แก้ไข",
@@ -250,6 +262,7 @@ function Pagination({
 }
 
 function Deadline({ row }: { row: Submission }) {
+  if (!row.approvalDeadline) return <span className="text-xs text-gray-400">—</span>;
   if (!(["pending_review", "changes_requested_by_admin"] as string[]).includes(row.status))
     return (
       <span className="text-xs text-gray-500 whitespace-nowrap">
@@ -289,7 +302,6 @@ function TopNav({
   setOpen,
   logout,
   reviewer,
-  counts,
 }: {
   view: LegalView;
   changeView: (view: LegalView) => void;
@@ -299,7 +311,6 @@ function TopNav({
   setOpen: (open: boolean) => void;
   logout: () => void;
   reviewer?: LegalDashboard["reviewer"];
-  counts: { queue: number; changes: number };
 }) {
   const items = [
     { id: "dashboard" as const, label: "ภาพรวม", Icon: BarChart3 },
@@ -386,7 +397,7 @@ function TopNav({
             >
               <Icon className="w-4 h-4" />
               {label}
-              {count > 0 && <span className="legal-nav-count">{count}</span>}
+              {(count ?? 0) > 0 && <span className="legal-nav-count">{count}</span>}
             </button>
           ))}
           <button className="legal-nav-pill" onClick={logout}>
@@ -403,10 +414,12 @@ function SubmissionTable({
   rows,
   select,
   workTypeFor,
+  searching = false,
 }: {
   rows: Submission[];
   select: (row: Submission) => void;
   workTypeFor?: (row: Submission) => LegalWorkType;
+  searching?: boolean;
 }) {
   if (!rows.length)
     return (
@@ -507,6 +520,7 @@ function Dashboard({
   const pending = submissions.filter((row) =>
     ["pending_review", "changes_requested_by_admin"].includes(row.status),
   );
+  const pendingChanges = changes.filter((row) => row.status === "pending_review");
   const stats = [
     {
       label: "นโยบายรอตรวจสอบ",
@@ -910,6 +924,15 @@ function Editor({
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [decision, setDecision] = useState<"approved" | "rejected" | null>(null);
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const [confirmApprove, setConfirmApprove] = useState<{ goNext: boolean } | null>(null);
+  const [baseline, setBaseline] = useState(initial);
+  const dirty =
+    draft.contentTh !== baseline.contentTh ||
+    draft.contentEn !== baseline.contentEn ||
+    draft.reviewComment !== baseline.reviewComment ||
+    decision !== null;
   const pendingChanges = changeRequests.filter(
     (request) => request.status === "pending_review",
   );
@@ -920,12 +943,20 @@ function Editor({
         ? { ...current, contentTh: value }
         : { ...current, contentEn: value },
     );
-  const submit = async () => {
+  const submit = async (goNext = false, confirmed = false) => {
+    if (decision === "rejected" && !draft.reviewComment.trim()) {
+      setError("กรุณากรอกความเห็นก่อนไม่อนุมัตินโยบาย");
+      return;
+    }
+    if (decision === "approved" && !confirmed) {
+      setConfirmApprove({ goNext });
+      return;
+    }
     setSaving(true);
     setError("");
     const message = pendingChanges.length
       ? await approveChanges(draft, pendingChanges)
-      : await save({ ...draft, reviewComment: "" }, "approved");
+      : await save(draft, decision, goNext);
     setSaving(false);
     if (message) setError(message);
     else if (decision === null) setBaseline(draft);
@@ -948,42 +979,6 @@ function Editor({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-  // Select the text a merchant asked to change, so the reviewer lands on it.
-  const jumpToText = (request: ChangeRequest) => {
-    const wanted = request.language === "en" ? "en" : request.language === "th" ? "th" : language;
-    const run = () => {
-      const snippet = (request.selectedText ?? "").replace(/\s+/g, " ").trim().slice(0, 24);
-      const root = document.querySelector(".legal-editor-document");
-      if (!snippet || !root) return setJumpNote("ไม่พบข้อความนี้ในเอกสาร");
-      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-        const text = (node.textContent ?? "").replace(/\s+/g, " ");
-        const index = text.indexOf(snippet);
-        if (index === -1) continue;
-        const range = document.createRange();
-        range.setStart(node, Math.min(index, node.textContent?.length ?? 0));
-        range.setEnd(node, Math.min(index + snippet.length, node.textContent?.length ?? 0));
-        const highlights = (CSS as unknown as { highlights?: Map<string, unknown> }).highlights;
-        const HighlightCtor = (window as unknown as { Highlight?: new (r: Range) => unknown }).Highlight;
-        if (highlights && HighlightCtor) {
-          highlights.set("legal-jump", new HighlightCtor(range));
-          window.setTimeout(() => highlights.delete("legal-jump"), 8000);
-        } else {
-          const selection = window.getSelection();
-          selection?.removeAllRanges();
-          selection?.addRange(range);
-        }
-        node.parentElement?.scrollIntoView({ block: "center", behavior: "smooth" });
-        return setJumpNote("");
-      }
-      setJumpNote("ไม่พบข้อความนี้ในเอกสารปัจจุบัน (อาจถูกแก้ไขไปแล้ว)");
-    };
-    const available = draft.language === "both" || draft.language === wanted;
-    if (available && wanted !== language) {
-      setLanguage(wanted);
-      window.setTimeout(run, 700);
-    } else run();
-  };
   return (
     <>
       <ConfirmDialog
@@ -1515,10 +1510,6 @@ export default function Legal() {
         setOpen={setMenuOpen}
         logout={logout}
         reviewer={dashboard?.reviewer}
-        counts={{
-          queue: submissions.filter((r) => r.status === "pending_review").length,
-          changes: changes.filter((r) => r.status === "pending_review").length,
-        }}
       />
       <div className="portal-main">
         <main className="portal-content portal-content-legal">
