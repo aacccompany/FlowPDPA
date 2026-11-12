@@ -460,21 +460,18 @@
    content passes behind a surface (sticky bar, sticky aside, overlay menu);
    the policy editing surface stays solid white for long reading and typing. */
 .portal-shell-legal {
-  --glass-bg: rgba(255, 255, 255, 0.70);
-  --glass-bg-strong: rgba(255, 255, 255, 0.82);
+  --glass-bg: rgba(255, 255, 255, 0.94);
+  --glass-bg-strong: rgba(255, 255, 255, 0.97);
   --glass-border: rgba(255, 255, 255, 0.85);
   --glass-edge: rgba(23, 35, 59, 0.10);
-  --glass-blur: blur(16px) saturate(1.3);
+  --glass-blur: blur(6px);
   --glass-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.85),
     0 14px 36px -24px rgba(23, 35, 59, 0.24);
   /* Glows sit behind the content column (left-aligned, max 1440px), in px so
      they stay under the panels on ultra-wide screens instead of in the corners. */
   background:
-    radial-gradient(640px 480px at 400px 160px, rgba(16, 185, 129, 0.20), transparent 70%),
-    radial-gradient(600px 460px at 1160px 120px, rgba(59, 130, 246, 0.16), transparent 70%),
-    radial-gradient(720px 520px at 760px 680px, rgba(20, 184, 166, 0.12), transparent 70%),
-    #e8eef6;
+    #eceef1;
   background-attachment: scroll;
 }
 
@@ -542,9 +539,7 @@
 /* Sidebar: deep navy glass with a faint green glow so the blur reads on the overlay menu */
 .portal-shell-legal .portal-sidebar {
   background:
-    radial-gradient(460px 340px at 0% 0%, rgba(16, 185, 129, 0.22), transparent 70%),
-    radial-gradient(420px 320px at 100% 100%, rgba(59, 130, 246, 0.15), transparent 70%),
-    rgba(23, 35, 59, 0.90);
+    #17233b;
   -webkit-backdrop-filter: blur(18px) saturate(1.3);
   backdrop-filter: blur(18px) saturate(1.3);
   box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.10), 18px 0 40px -24px rgba(23, 35, 59, 0.5);
@@ -817,4 +812,153 @@
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
+}
+
+/* ═══ Legal portal: dark mode ═══════════════════
+   Opt-in via data-theme="dark" on the shell (toggle in the top bar, remembered
+   per browser). Admin never gets this attribute. The policy document itself
+   (.legal-editor-shell) stays white: it previews what customers will read. */
+.portal-shell-legal[data-theme='dark'] {
+  color-scheme: dark;
+  --line: #313843;
+  --glass-bg: #1b2028;
+  --glass-bg-strong: #1b2028;
+  --glass-border: #2b323c;
+  --glass-edge: #313843;
+  --glass-blur: none;
+  --glass-shadow: 0 14px 36px -24px rgba(0, 0, 0, 0.6);
+  --sidebar-bg: #0f141b;
+  background: #12161c;
+  color: #e6e9ee;
+
+  /* Tailwind v4 reads these variables, so the utility classes follow along */
+  --color-white: #1b2028;
+  --color-gray-50: #202630;
+  --color-gray-100: #272e39;
+  --color-gray-200: #313843;
+  --color-gray-300: #414a57;
+  --color-gray-400: #8b95a3;
+  --color-gray-500: #a3acb9;
+  --color-gray-600: #b6bec9;
+  --color-gray-700: #cdd3dc;
+  --color-gray-800: #dde1e8;
+  --color-gray-900: #eef0f4;
+  --color-red-50: #35191b;
+  --color-red-200: #6b2a2d;
+  --color-red-600: #fca5a5;
+  --color-red-700: #fca5a5;
+  --color-emerald-50: #12302a;
+  --color-emerald-200: #1f5a49;
+  --color-emerald-800: #6ee7b7;
+}
+.portal-shell-legal[data-theme='dark'] .portal-sidebar { background: #0f141b; }
+
+/* Surfaces and text */
+.portal-shell-legal[data-theme='dark'] .portal-topbar,
+.portal-shell-legal[data-theme='dark'] .legal-topnav-bar,
+.portal-shell-legal[data-theme='dark'] .legal-sheet,
+.portal-shell-legal[data-theme='dark'] .legal-hero {
+  background: #1b2028;
+  border-color: #2b323c;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+.portal-shell-legal[data-theme='dark'] .legal-hero {
+  background: linear-gradient(120deg, rgba(16, 185, 129, 0.12), #1b2028 58%);
+}
+.portal-shell-legal[data-theme='dark'] :is(.portal-panel, .portal-kpis, .portal-kpi, .portal-table-wrap) {
+  background: #1b2028;
+  border-color: #2b323c;
+}
+.portal-shell-legal[data-theme='dark'] :is(.portal-panel-head, .portal-table th, .portal-pagination) {
+  background: transparent;
+  border-color: #313843;
+}
+.portal-shell-legal[data-theme='dark'] .portal-table td { border-color: #272e39; }
+.portal-shell-legal[data-theme='dark'] .portal-table tbody tr:hover { background: #222934; }
+.portal-shell-legal[data-theme='dark'] :is(.portal-table th, .portal-empty) { color: #a3acb9; }
+
+/* Controls */
+.portal-shell-legal[data-theme='dark'] :is(.portal-button, .portal-page-button, .portal-filter, .portal-search, .legal-user-chip, .legal-editor-tool) {
+  background: #222934;
+  border-color: #3a4350;
+  color: #dde1e8;
+}
+.portal-shell-legal[data-theme='dark'] :is(.portal-button, .portal-filter, .legal-editor-tool):hover:not(:disabled) {
+  background: #2b3340;
+  border-color: #4a5463;
+}
+.portal-shell-legal[data-theme='dark'] .portal-button.primary,
+.portal-shell-legal[data-theme='dark'] .portal-page-button[data-active='true'],
+.portal-shell-legal[data-theme='dark'] .legal-nav-pill[data-active='true'] {
+  background: #0c8f6a; border-color: #0c8f6a; color: #ffffff;
+}
+.portal-shell-legal[data-theme='dark'] .portal-button.primary:hover { background: #0aa57a; }
+.portal-shell-legal[data-theme='dark'] .portal-button.danger { background: transparent; border-color: #6b2a2d; color: #fca5a5; }
+.portal-shell-legal[data-theme='dark'] .portal-filter[data-active='true'] { background: #12302a; border-color: #1f8f6e; color: #6ee7b7; }
+.portal-shell-legal[data-theme='dark'] .portal-filter[data-tone='danger'][data-active='true'] { background: #35191b; border-color: #b4474b; color: #fca5a5; }
+.portal-shell-legal[data-theme='dark'] .portal-count { background: rgba(255, 255, 255, 0.10); }
+.portal-shell-legal[data-theme='dark'] .legal-nav-pill { color: #cdd3dc; }
+.portal-shell-legal[data-theme='dark'] .legal-nav-pill:hover,
+.portal-shell-legal[data-theme='dark'] .legal-icon-button:hover { background: #2b3340; }
+.portal-shell-legal[data-theme='dark'] .legal-nav-pill[data-active='true'] { color: #ffffff; }
+.portal-shell-legal[data-theme='dark'] .legal-nav-count { background: rgba(255, 255, 255, 0.12); }
+.portal-shell-legal[data-theme='dark'] .legal-icon-button { color: #cdd3dc; }
+.portal-shell-legal[data-theme='dark'] :is(input, select, textarea):not(.legal-editor-document *) {
+  background: #12161c;
+  border-color: #3a4350;
+  color: #e6e9ee;
+}
+.portal-shell-legal[data-theme='dark'] ::placeholder { color: #7d8794; }
+
+/* Dialogs */
+.portal-shell-legal[data-theme='dark'] [role='alertdialog'],
+.portal-shell-legal[data-theme='dark'] [role='dialog'] { color: #e6e9ee; }
+
+/* The document stays white and dark-on-light */
+.portal-shell-legal[data-theme='dark'] .legal-editor-shell {
+  --color-white: #ffffff; --color-gray-50: #f9fafb; --color-gray-100: #f3f4f6; --color-gray-200: #e5e7eb;
+  --color-gray-300: #d1d5db; --color-gray-400: #9ca3af; --color-gray-500: #6b7280; --color-gray-600: #4b5563;
+  --color-gray-700: #374151; --color-gray-800: #1f2937; --color-gray-900: #111827;
+  background: #ffffff; color: #172033; color-scheme: light;
+}
+.portal-shell-legal[data-theme='dark'] .legal-editor-shell :is(input, select, textarea) { background: #ffffff; color: #111827; border-color: #d1d5db; }
+.portal-shell-legal[data-theme='dark'] .legal-editor-toolbar { background: #f9fafb; }
+.portal-shell-legal[data-theme='dark'] .legal-editor-shell :is(.legal-editor-tool, .portal-button) { background: #ffffff; border-color: #e5e7eb; color: #374151; }
+
+/* Dark: undo the forced darker greys used for light glass, and brand colours chosen for white */
+.portal-shell-legal[data-theme='dark'] :is(.portal-panel, .portal-kpis) .text-gray-500,
+.portal-shell-legal[data-theme='dark'] .portal-table th,
+.portal-shell-legal[data-theme='dark'] .portal-empty { color: #a3acb9; }
+.portal-shell-legal[data-theme='dark'] :is(.portal-panel, .portal-kpis) .text-gray-600 { color: #cdd3dc; }
+.portal-shell-legal[data-theme='dark'] .legal-brand-name { color: #eef0f4; }
+.portal-shell-legal[data-theme='dark'] .legal-brand-name span { color: #34d399; }
+.portal-shell-legal[data-theme='dark'] .legal-brand-tag { background: rgba(52, 211, 153, 0.14); color: #6ee7b7; }
+.portal-shell-legal[data-theme='dark'] .portal-count { color: inherit; }
+.portal-shell-legal[data-theme='dark'] .portal-filter[data-active='true'] .portal-count { background: rgba(110, 231, 183, 0.18); }
+
+/* Dark: status colours are set inline in Legal.tsx for white surfaces; lift them here */
+.portal-shell-legal[data-theme='dark'] [style*='color: rgb(138, 79, 5)'] { color: #fbbf24 !important; }
+.portal-shell-legal[data-theme='dark'] [style*='color: rgb(180, 35, 24)'] { color: #fca5a5 !important; }
+.portal-shell-legal[data-theme='dark'] [style*='color: rgb(6, 106, 79)'] { color: #6ee7b7 !important; }
+.portal-shell-legal[data-theme='dark'] [style*='color: rgb(36, 87, 166)'] { color: #93c5fd !important; }
+.portal-shell-legal[data-theme='dark'] :is([style*='color: rgb(71, 84, 103)'], [style*='color: rgb(75, 85, 99)']) { color: #b6bec9 !important; }
+/* Filled green controls keep the original, white-text-safe green */
+.portal-shell-legal[data-theme='dark'] .portal-button.primary,
+.portal-shell-legal[data-theme='dark'] .portal-page-button[data-active='true'],
+.portal-shell-legal[data-theme='dark'] .legal-nav-pill[data-active='true'] { background: #087a5b; border-color: #087a5b; }
+.portal-shell-legal[data-theme='dark'] .portal-button.primary:hover { background: #0a8d69; }
+.portal-shell-legal[data-theme='dark'] .legal-nav-pill[data-active='true'] .legal-nav-count { background: rgba(0, 0, 0, 0.28); }
+/* --color-white is remapped for surfaces, so keep white text actually white */
+.portal-shell-legal[data-theme='dark'] .text-white { color: #ffffff; }
+
+/* Theme switch: every colour fades together, only while switching (so hovers stay snappy) */
+html[data-theme-switching] .portal-shell-legal,
+html[data-theme-switching] .portal-shell-legal *,
+html[data-theme-switching] .portal-shell-legal *::before,
+html[data-theme-switching] .portal-shell-legal *::after {
+  transition: background-color 0.22s var(--ease-out, ease), border-color 0.22s var(--ease-out, ease), color 0.22s var(--ease-out, ease), box-shadow 0.22s var(--ease-out, ease) !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme-switching] .portal-shell-legal,
+  html[data-theme-switching] .portal-shell-legal * { transition: none !important; }
 }

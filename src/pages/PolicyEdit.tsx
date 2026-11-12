@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { useTheme } from "@/hooks/useTheme";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Link, useParams } from "react-router-dom";
 import {
   AlertTriangle,
@@ -71,6 +73,7 @@ function PolicyProgress({ policy }: { policy: SavedPolicy }) {
 }
 
 export default function PolicyEdit() {
+  const [theme, toggleTheme] = useTheme("flowpdpa-merchant-theme");
   const { policyId = "" } = useParams();
   const { auth } = useAuth();
   const [policy, setPolicy] = useState<SavedPolicy | null>(null);
@@ -177,7 +180,7 @@ export default function PolicyEdit() {
   );
 
   return (
-    <div className="merchant-flow min-h-screen bg-[#f4f6f9] text-[#172033]">
+    <div className="merchant-flow min-h-screen bg-[#f4f6f9] text-[#172033]" data-theme={theme}>
       <header className="flex h-16 items-center justify-between border-b border-gray-200 bg-white px-4 lg:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <Link
@@ -197,6 +200,8 @@ export default function PolicyEdit() {
             </p>
           </div>
         </div>
+        <div className="flex items-center gap-2">
+          <ThemeToggle theme={theme} onToggle={toggleTheme} />
         {policy.shareUrl && (
           <a
             href={`/p/${policy.slug}`}
@@ -208,6 +213,7 @@ export default function PolicyEdit() {
             หน้าสาธารณะ
           </a>
         )}
+        </div>
       </header>
 
       <main className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:p-5">

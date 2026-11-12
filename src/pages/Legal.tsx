@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTheme, type Theme } from "@/hooks/useTheme";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -15,6 +16,8 @@ import {
   Languages,
   LogOut,
   Menu,
+  Moon,
+  Sun,
   MessageSquareText,
   Search,
   ShieldCheck,
@@ -301,6 +304,8 @@ function TopNav({
   open,
   setOpen,
   logout,
+  theme,
+  toggleTheme,
   reviewer,
 }: {
   view: LegalView;
@@ -310,6 +315,8 @@ function TopNav({
   open: boolean;
   setOpen: (open: boolean) => void;
   logout: () => void;
+  theme: Theme;
+  toggleTheme: () => void;
   reviewer?: LegalDashboard["reviewer"];
 }) {
   const items = [
@@ -368,6 +375,15 @@ function TopNav({
             <UserRound className="w-4 h-4" />
             <span>{reviewer?.name || "ผู้ตรวจสอบ"}</span>
           </span>
+          <button
+            className="legal-icon-button"
+            onClick={toggleTheme}
+            aria-pressed={theme === "dark"}
+            aria-label={theme === "dark" ? "สลับเป็นโหมดสว่าง" : "สลับเป็นโหมดมืด"}
+            title={theme === "dark" ? "โหมดสว่าง" : "โหมดมืด"}
+          >
+            {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
           <button
             className="legal-icon-button"
             onClick={logout}
@@ -1368,6 +1384,7 @@ export default function Legal() {
     setSelectedId(detail.id);
     return null;
   };
+  const [theme, toggleTheme] = useTheme("flowpdpa-legal-theme");
   const logout = () => setConfirmLogout(true);
   const confirmSignOut = async () => {
     await api.auth.logout();
@@ -1492,7 +1509,7 @@ export default function Legal() {
     return null;
   };
   return (
-    <div className="portal-shell portal-shell-legal">
+    <div className="portal-shell portal-shell-legal" data-theme={theme}>
       <ConfirmDialog
         open={confirmLogout}
         title="ออกจากระบบฝ่ายกฎหมาย?"
@@ -1509,6 +1526,8 @@ export default function Legal() {
         open={menuOpen}
         setOpen={setMenuOpen}
         logout={logout}
+        theme={theme}
+        toggleTheme={toggleTheme}
         reviewer={dashboard?.reviewer}
       />
       <div className="portal-main">
