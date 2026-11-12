@@ -15,16 +15,15 @@ export default function About() {
   return (
     <div style={{ paddingTop: '61px' }}>
       {/* Header */}
-      <div className="py-16 border-b border-gray-100" style={{ backgroundColor: '#fafafa' }}>
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          <p className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.15em] text-gray-400 mb-4">
-            <span className="block w-8 h-px bg-gray-300" />
+      <div style={{ backgroundColor: 'var(--navy)' }}>
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+          <p className="text-xs font-semibold uppercase tracking-widest mb-5" style={{ color: 'var(--green)' }}>
             About Us
           </p>
-          <h1 className="text-3xl sm:text-4xl font-black text-gray-900 mb-5">
+          <h1 className="text-3xl sm:text-4xl font-black text-white mb-5">
             เราเชื่อว่าทุกธุรกิจ<br />สมควรได้รับการคุ้มครองที่ดี
           </h1>
-          <p className="text-gray-500 text-base leading-relaxed">
+          <p className="text-base leading-relaxed" style={{ color: '#64748b' }}>
             FlowPDPA เกิดขึ้นจากความตั้งใจที่จะทำให้การปฏิบัติตามกฎหมาย PDPA เป็นเรื่องที่ทุกธุรกิจไทย
             เข้าถึงได้ง่าย โดยไม่ต้องพึ่งพานักกฎหมายราคาแพงหรือเสียเวลาศึกษาด้วยตัวเอง
           </p>
@@ -100,11 +99,11 @@ export default function About() {
       </div>
 
       {/* CTA */}
-      <div className="py-14 border-t border-gray-100" style={{ backgroundColor: 'var(--blue-dark)' }}>
+      <div className="public-light-cta py-14 border-t border-gray-100" style={{ backgroundColor: 'var(--blue-dark)' }}>
         <div className="max-w-2xl mx-auto px-4 text-center">
           <h2 className="text-2xl font-bold text-white mb-3">พร้อมเริ่มต้นกับ FlowPDPA?</h2>
           <p className="text-blue-200 text-sm mb-6">สร้าง Privacy Policy ที่ถูกต้องตาม PDPA ได้ในไม่กี่นาที</p>
-          <Link to="/create/policy" className="btn-green px-10 py-3 text-sm inline-block" style={{ borderRadius: '8px' }}>
+          <Link to="/get-started" className="btn-green px-10 py-3 text-sm inline-block" style={{ borderRadius: '8px' }}>
             สร้าง Policy เลย
           </Link>
         </div>

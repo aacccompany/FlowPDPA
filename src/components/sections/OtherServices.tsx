@@ -1,3 +1,5 @@
+import { Bell, MessageCircle, Search, ShieldCheck } from 'lucide-react'
+
 const services = [
   {
     name: 'FlowScan',
@@ -5,7 +7,7 @@ const services = [
     desc: 'วางลิงก์เว็บไซต์ของคุณ — ระบบสแกนหาจุดเสี่ยง PDPA และรายงานผลใน 60 วินาที',
     color: 'var(--navy)',
     light: '#f0f4ff',
-    icon: '🔍',
+    Icon: Search,
   },
   {
     name: 'FlowLine',
@@ -13,7 +15,7 @@ const services = [
     desc: 'รับความยินยอมและส่ง Privacy Notice ผ่าน LINE OA ของคุณ เหมาะสำหรับธุรกิจไทยที่ใช้ LINE เป็นช่องทางหลัก',
     color: '#06b640',
     light: '#f0fdf4',
-    icon: '💬',
+    Icon: MessageCircle,
   },
   {
     name: 'FlowBadge',
@@ -21,7 +23,7 @@ const services = [
     desc: 'ตราสัญลักษณ์ PDPA Compliant สำหรับติดบนเว็บไซต์ของคุณ เพิ่มความน่าเชื่อถือให้ลูกค้าเห็นได้ทันที',
     color: 'var(--blue-mid)',
     light: '#eff6ff',
-    icon: '🛡️',
+    Icon: ShieldCheck,
   },
   {
     name: 'FlowAlert',
@@ -29,7 +31,7 @@ const services = [
     desc: 'รับแจ้งเตือนทันทีเมื่อกฎหมาย PDPA มีการเปลี่ยนแปลง พร้อมคำแนะนำว่านโยบายของคุณต้องอัปเดตอะไรบ้าง',
     color: '#d97706',
     light: '#fffbeb',
-    icon: '🔔',
+    Icon: Bell,
   },
 ]
 
@@ -52,7 +54,7 @@ export default function OtherServices() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-          {services.map(({ name, tag, desc, color, light, icon }) => (
+          {services.map(({ name, tag, desc, color, light, Icon }) => (
             <a
               key={name}
               href="#"
@@ -60,10 +62,10 @@ export default function OtherServices() {
             >
               <div className="flex items-start justify-between mb-4">
                 <div
-                  className="w-10 h-10 rounded-lg flex items-center justify-center text-xl"
+                  className="w-10 h-10 rounded-lg flex items-center justify-center"
                   style={{ backgroundColor: light }}
                 >
-                  {icon}
+                  <Icon className="w-5 h-5" style={{ color }} strokeWidth={1.8} aria-hidden="true" />
                 </div>
                 <span
                   className="text-xs font-bold px-2 py-0.5 rounded-full"

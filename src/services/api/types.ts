@@ -1,0 +1,116 @@
+export interface ApiError {
+  code: string
+  message: string
+  details?: unknown
+  status?: number
+}
+
+export interface ApiResponse<T = unknown> {
+  success: boolean
+  data?: T
+  error?: ApiError
+  message?: string
+}
+
+export interface RequestConfig {
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
+  headers?: Record<string, string>
+  body?: unknown
+  timeout?: number
+  authenticated?: boolean
+  retryAuth?: boolean
+  cache?: boolean
+}
+
+export interface ApiUser {
+  id?: string
+  email: string
+  name: string
+  role?: string
+  plan?: string
+  company?: string
+  phone?: string
+  email_verified?: boolean
+  privacy_notice_accepted?: boolean
+  privacy_notice_version?: string | null
+  privacy_notice_accepted_at?: string | null
+  status?: string
+}
+
+export interface PrivacyNoticeStatus {
+  accepted: boolean
+  currentVersion: string
+  acceptedVersion: string | null
+  acceptedAt: string | null
+  noticeUrl: string
+  emailSent?: boolean
+}
+
+export interface AuthPayload {
+  user: ApiUser
+  token?: string
+  access_token?: string
+  refresh_token?: string
+  token_type?: string
+  expires_in?: number
+}
+
+export interface RegistrationStarted {
+  email?: string
+  expiresIn?: number
+  canResendIn?: number
+  nextStep?: string
+  user?: ApiUser
+  token?: string
+  access_token?: string
+  refresh_token?: string
+  expires_in?: number
+}
+
+export interface OtpVerified extends Partial<AuthPayload> {
+  user: ApiUser
+}
+
+export interface RefreshTokenResponse {
+  access_token: string
+  refresh_token: string
+  token_type: string
+  expires_in: number
+}
+
+export interface ProfileAddress {
+  street: string
+  street2: string
+  city: string
+  state: string
+  zip: string
+  country: string
+}
+
+export interface UserProfile {
+  id: string
+  name: string
+  email: string
+  plan: string
+  function: string
+  phone: string
+  mobile: string
+  website: string
+  company_name: string
+  vat: string
+  address: ProfileAddress
+  lang: string
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+export type ProfileUpdatePayload = Omit<UserProfile, 'id' | 'email' | 'plan' | 'createdAt' | 'updatedAt'>
+
+export interface ChangePasswordPayload {
+  currentPassword: string
+  newPassword: string
+}
+
+export interface ChangePasswordResult {
+  message: string
+}

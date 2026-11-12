@@ -20,7 +20,7 @@ const categories = [
       },
       {
         q: 'ถ้าฉันมีหลายเว็บไซต์ ต้องสร้างนโยบายแยกกันหรือไม่',
-        a: 'แผน Free และ Premium รองรับ 1 เว็บไซต์ต่อนโยบาย หากคุณมีหลายเว็บไซต์ สามารถติดต่อเรื่องแผน Enterprise ซึ่งรองรับหลายโดเมนในราคาพิเศษ',
+        a: 'FlowPDPA มีเพียงแพ็กเกจ Free และ Business โดยทั้งสองแพ็กเกจสามารถสร้างเอกสาร PDPA ได้',
       },
     ],
   },
@@ -28,16 +28,16 @@ const categories = [
     label: 'ราคาและการชำระเงิน',
     items: [
       {
-        q: 'ต้องชำระค่าบริการซ้ำทุกปีหรือไม่',
-        a: 'ไม่ต้อง สำหรับ Privacy Policy แบบ Premium ชำระเพียงครั้งเดียว 2,500 บาท (รวม VAT) แล้วรับนโยบายและการอัปเดตตลอดชีพ ไม่มีค่ารายปีหรือค่าต่ออายุซ่อนเร้น',
+        q: 'แพ็กเกจ Business คิดค่าบริการอย่างไร',
+        a: 'แพ็กเกจ Business ราคา 289 บาทต่อเดือน และต่ออายุแบบรายเดือนจนกว่าจะยกเลิก',
       },
       {
         q: 'แผนฟรีมีข้อจำกัดอะไรบ้าง',
-        a: 'แผนฟรีรองรับ Privacy Policy ภาษาไทยสำหรับ 1 เว็บไซต์ พร้อมลิงก์สาธารณะแชร์ได้ แต่ไม่รวมภาษาอังกฤษ การดาวน์โหลดไฟล์ HTML Code สำหรับฝังเว็บ หรือการคุ้มครองตาม GDPR/CCPA',
+        a: 'แพ็กเกจ Free สร้างเอกสาร PDPA ได้ และเก็บ Consent Log ได้สูงสุด 100 รายการ เมื่อเต็มระบบจะแจ้งให้อัปเกรด',
       },
       {
         q: 'รับชำระด้วยช่องทางใดบ้าง',
-        a: 'รับชำระผ่านบัตรเครดิต/เดบิต (Visa, Mastercard) และ QR PromptPay ออกใบกำกับภาษีได้สำหรับแผน Enterprise',
+        a: 'แพ็กเกจ Business ชำระผ่าน Stripe ตามช่องทางที่เปิดให้ใช้บนหน้าชำระเงิน',
       },
       {
         q: 'มีนโยบายคืนเงินหรือไม่',
@@ -89,14 +89,13 @@ export default function FAQPage() {
   return (
     <div style={{ paddingTop: '61px' }}>
       {/* Header */}
-      <div className="py-16 border-b border-gray-100" style={{ backgroundColor: '#fafafa' }}>
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          <p className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.15em] text-gray-400 mb-4">
-            <span className="block w-8 h-px bg-gray-300" />
+      <div style={{ backgroundColor: 'var(--navy)' }}>
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+          <p className="text-xs font-semibold uppercase tracking-widest mb-5" style={{ color: 'var(--green)' }}>
             FAQ
           </p>
-          <h1 className="text-3xl sm:text-4xl font-black text-gray-900 mb-5">คำถามที่พบบ่อย</h1>
-          <p className="text-gray-500 text-base leading-relaxed">
+          <h1 className="text-3xl sm:text-4xl font-black text-white mb-5">คำถามที่พบบ่อย</h1>
+          <p className="text-base leading-relaxed" style={{ color: '#64748b' }}>
             ไม่พบคำตอบที่ต้องการ?{' '}
             <Link to="/#contact" className="font-semibold underline" style={{ color: 'var(--green)' }}>
               ติดต่อทีมงาน
@@ -149,7 +148,7 @@ export default function FAQPage() {
       </div>
 
       {/* CTA */}
-      <div className="py-14 border-t border-gray-100" style={{ backgroundColor: 'var(--blue-dark)' }}>
+      <div className="public-light-cta py-14 border-t border-gray-100" style={{ backgroundColor: 'var(--blue-dark)' }}>
         <div className="max-w-2xl mx-auto px-4 text-center">
           <h2 className="text-2xl font-bold text-white mb-3">ยังมีคำถามอื่นอีกไหม?</h2>
           <p className="text-blue-200 text-sm mb-6">ทีมผู้เชี่ยวชาญของเราพร้อมช่วยเหลือคุณตลอดเวลาทำการ</p>

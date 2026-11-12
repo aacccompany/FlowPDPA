@@ -15,7 +15,6 @@ dist-ssr
 # Environment variables — never commit real secrets
 .env
 .env.*
-!.env.example
 
 # Claude Code local config
 .claude
@@ -30,3 +29,5 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+.agents
+legal-review-workflow-v2.md

@@ -1,0 +1,182 @@
+/* ── Dashboard shell ─────────────────────────── */
+.merchant-shell {
+  --sidebar-bg: #17233b;
+  --sidebar-border: rgba(255,255,255,0.07);
+  --sidebar-hover: rgba(255,255,255,0.06);
+  --sidebar-active: rgba(8,122,91,0.2);
+  --workspace-bg: #f4f6f9;
+  --surface: #ffffff;
+  --surface-muted: #f8f9fb;
+  --ink: #172033;
+  --muted: #667085;
+  --line: #e5e7eb;
+  min-height: 100vh;
+  background: var(--workspace-bg);
+  color: var(--ink);
+  font-family: 'Inter', sans-serif;
+}
+
+/* ── Sidebar ─────────────────────────────────── */
+.merchant-sidebar {
+  width: 260px;
+  background: var(--sidebar-bg);
+  border-right: none;
+}
+
+.merchant-brand {
+  height: 68px;
+  border-bottom: 1px solid var(--sidebar-border);
+  padding: 0 20px;
+}
+
+.merchant-brand-mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  background: #087a5b;
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.merchant-nav-item {
+  position: relative;
+  min-height: 40px;
+  border-radius: 6px;
+  color: #94a3b8;
+  font-size: 14px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.merchant-nav-item:hover {
+  background: var(--sidebar-hover);
+  color: #e2e8f0;
+}
+
+.merchant-nav-item[data-active='true'] {
+  background: var(--sidebar-active);
+  color: #4ade80;
+  font-weight: 600;
+}
+
+.merchant-nav-item[data-active='true']::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  background: #087a5b;
+  border-radius: 0 2px 2px 0;
+}
+
+.merchant-user {
+  border-top: 1px solid var(--sidebar-border);
+  background: rgba(0,0,0,0.15);
+  padding: 12px;
+}
+
+.merchant-avatar {
+  border-radius: 6px;
+  background: rgba(8,122,91,0.25);
+  color: #4ade80;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+/* ── Topbar ──────────────────────────────────── */
+.merchant-topbar {
+  min-height: 64px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+
+/* ── Content ─────────────────────────────────── */
+.merchant-content {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+/* ── Stat block ──────────────────────────────── */
+.merchant-stat + .merchant-stat {
+  border-left: 1px solid var(--line);
+}
+
+/* ── Empty state ─────────────────────────────── */
+.merchant-empty {
+  border-radius: 8px;
+  background: #fff;
+}
+
+/* ── Settings sections ───────────────────────── */
+.merchant-settings-section {
+  border-radius: 8px;
+}
+
+/* ── Form inputs ─────────────────────────────── */
+.merchant-shell input,
+.merchant-shell select,
+.merchant-shell textarea {
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  font-family: 'Inter', sans-serif;
+}
+
+.merchant-shell input:focus,
+.merchant-shell select:focus,
+.merchant-shell textarea:focus {
+  border-color: #087a5b !important;
+  outline: 2px solid rgba(8,122,91,0.1);
+  outline-offset: 0;
+}
+
+/* ── Utility overrides ───────────────────────── */
+.merchant-shell .rounded-xl { border-radius: 8px; }
+.merchant-shell .rounded-lg { border-radius: 6px; }
+.merchant-shell .rounded-full { border-radius: 999px; }
+.merchant-shell .border-gray-100 { border-color: var(--line); }
+.merchant-shell .bg-gray-50 { background-color: var(--surface-muted); }
+.merchant-shell .shadow-sm { box-shadow: none; }
+
+.merchant-shell .btn-green {
+  border-radius: 6px !important;
+  box-shadow: none;
+  transform: none;
+  font-family: 'Inter', sans-serif;
+  font-weight: 700;
+}
+.merchant-shell .btn-green:hover {
+  box-shadow: none;
+  transform: none;
+}
+
+/* ── Nav group label ─────────────────────────── */
+.merchant-nav-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #64748b;
+  padding: 16px 16px 6px;
+}
+
+/* ── Responsive ──────────────────────────────── */
+@media (min-width: 1024px) {
+  .merchant-main { margin-left: 260px; }
+}
+
+@media (max-width: 1023px) {
+  .merchant-sidebar { width: min(84vw, 300px); }
+  .merchant-content { padding-inline: 16px; }
+  .merchant-stat:nth-child(odd) { border-left: 0; }
+  .merchant-stat:nth-child(n + 3) { border-top: 1px solid var(--line); }
+}
+
+@media (max-width: 639px) {
+  .merchant-stat { padding: 16px; gap: 10px; }
+}

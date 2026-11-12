@@ -1,1190 +1,4265 @@
-import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard, Users, CreditCard, Activity, BarChart3,
-  LogOut, ShieldAlert, Search, ChevronLeft, CheckCircle,
-  XCircle, Clock, AlertCircle, TrendingUp, DollarSign,
-  Eye, Ban, Play, X, Menu, RefreshCw, Loader,
-  ArrowUpRight, ArrowDownRight, FileText,
-} from 'lucide-react'
+  Activity,
+  AlertTriangle,
+  BarChart3,
+  Building2,
+  ChevronLeft,
+  ChevronRight,
+  CircleDollarSign,
+  ClipboardCopy,
+  CreditCard,
+  FileText,
+  Gauge,
+  Landmark,
+  LogOut,
+  Eye,
+  ExternalLink,
+  Loader2,
+  Languages,
+  Menu,
+  Pencil,
+  Plus,
+  ReceiptText,
+  Scale,
+  Search,
+  UserCog,
+  Users,
+  WalletCards,
+  X,
+} from "lucide-react";
+import { session } from "@/utils/storage";
+import { api } from "@/services/api";
+import type {
+  AdminAnalytics,
+  AdminAuditLog,
+  AdminErrorLog,
+  AdminLegalReview,
+  AdminLegalStatus,
+  AdminLegalUser,
+  AdminLegalWorkload,
+  AdminMerchant,
+  AdminMerchantActivity,
+  AdminMerchantStatus,
+  AdminOverview,
+  AdminPayment,
+  AdminPaymentDetail,
+  AdminPolicy,
+  AdminPolicyDetail,
+  AdminPolicyHistoryEvent,
+  AdminPolicyReviewItem,
+  AdminPolicyStatus,
+  AdminSubscription,
+  DocumentTemplate,
+  DocumentTemplateInput,
+  AdminCompanyDocument,
+} from "@/services/api";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { marked } from "marked";
+import { normalizePolicyMarkdown } from "@/utils/policyMarkdown";
+import "./Portal.css";
 
-// ── Admin credentials ─────────────────────────────────────────
-const ADMIN_EMAIL    = 'admin@flowpdpa.co.th'
-const ADMIN_PASSWORD = 'admin2025'
+type AdminView =
+  | "overview"
+  | "merchants"
+  | "subscriptions"
+  | "payments"
+  | "policies"
+  | "templates"
+  | "assignments"
+  | "admin_reviews"
+  | "legal"
+  | "logs"
+  | "audit"
+  | "merchant_activity"
+  | "company_documents"
+  | "analytics";
+type Merchant = AdminMerchant;
+type Policy = AdminPolicy;
+type LegalUser = AdminLegalUser;
+type Subscription = AdminSubscription;
+type Payment = AdminPayment;
+type ErrorLog = AdminErrorLog;
+type MerchantStatus = AdminMerchantStatus;
+type PolicyStatus = AdminPolicyStatus;
+type LegalStatus = AdminLegalStatus;
 
-// ── Types ─────────────────────────────────────────────────────
-type AdminView = 'overview' | 'merchants' | 'subscriptions' | 'payments' | 'monitoring' | 'analytics'
+const formatDate = (value: string | null) =>
+  value
+    ? new Date(value).toLocaleString("th-TH", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "-";
+const money = (amount: number) =>
+  new Intl.NumberFormat("th-TH", {
+    style: "currency",
+    currency: "THB",
+    maximumFractionDigits: 2,
+  }).format(amount / 100);
 
-type MerchantStatus = 'active' | 'suspended' | 'pending'
-type SubStatus      = 'active' | 'suspended' | 'cancelled' | 'expired'
-type PayStatus      = 'success' | 'pending' | 'failed'
-type LogLevel       = 'error' | 'warning' | 'critical'
+const badgeMeta: Record<string, { color: string; bg: string }> = {
+  active: { color: "#087a5b", bg: "#e8f4ef" },
+  paid: { color: "#087a5b", bg: "#e8f4ef" },
+  approved: { color: "#087a5b", bg: "#e8f4ef" },
+  pending: { color: "#a86207", bg: "#fff6e5" },
+  pending_review: { color: "#a86207", bg: "#fff6e5" },
+  pending_admin_review: { color: "#2457a6", bg: "#eaf0fa" },
+  changes_requested_by_admin: { color: "#b42318", bg: "#fdf0ef" },
+  past_due: { color: "#a86207", bg: "#fff6e5" },
+  suspended: { color: "#b42318", bg: "#fdf0ef" },
+  failed: { color: "#b42318", bg: "#fdf0ef" },
+  rejected: { color: "#b42318", bg: "#fdf0ef" },
+  critical: { color: "#b42318", bg: "#fdf0ef" },
+  inactive: { color: "#667085", bg: "#f2f4f7" },
+  archived: { color: "#667085", bg: "#f2f4f7" },
+  free: { color: "#667085", bg: "#f2f4f7" },
+  edited: { color: "#2457a6", bg: "#eaf0fa" },
+  warning: { color: "#a86207", bg: "#fff6e5" },
+  error: { color: "#c2410c", bg: "#fff0e8" },
+};
 
-interface Merchant {
-  id: string
-  shop_name: string
-  owner_email: string
-  subscription_status: MerchantStatus
-  plan: string
-  total_scans: number
-  created_at: string
-  line_connected: boolean
-  quota: number
-  used: number
-}
+const auditActionLabels: Record<string, string> = {
+  login_success: "เข้าสู่ระบบสำเร็จ",
+  login_failed: "เข้าสู่ระบบไม่สำเร็จ",
+  password_reset: "ตั้งรหัสผ่านใหม่",
+  merchant_created: "สร้างผู้ประกอบการ",
+  merchant_updated: "แก้ไขผู้ประกอบการ",
+  merchant_status_changed: "เปลี่ยนสถานะผู้ประกอบการ",
+  merchant_deleted: "ลบผู้ประกอบการ",
+  legal_user_created: "สร้างผู้ใช้ฝ่ายกฎหมาย",
+  legal_user_updated: "แก้ไขผู้ใช้ฝ่ายกฎหมาย",
+  legal_user_status_changed: "เปลี่ยนสถานะฝ่ายกฎหมาย",
+  legal_user_deleted: "ลบผู้ใช้ฝ่ายกฎหมาย",
+  policy_created: "สร้างนโยบาย",
+  terms_privacy_accepted: "ยอมรับเงื่อนไขและนโยบายความเป็นส่วนตัว",
+  company_authority_accepted: "ยืนยันอำนาจดำเนินการแทนนิติบุคคล",
+  policy_regenerated: "สร้างนโยบายใหม่",
+  policy_archived: "จัดเก็บนโยบาย",
+  subscription_cancelled: "ยกเลิกการต่ออายุ",
+  subscription_resumed: "เปิดการต่ออายุ",
+};
 
-interface Subscription {
-  id: string
-  merchant_name: string
-  plan: string
-  status: SubStatus
-  billing_cycle: string
-  expires_at: string
-  started_at: string
-  amount: number
-}
-
-interface Payment {
-  id: string
-  merchant_name: string
-  amount: number
-  gateway: string
-  status: PayStatus
-  created_at: string
-  plan: string
-}
-
-interface ErrorLog {
-  id: string
-  level: LogLevel
-  service: string
-  message: string
-  merchant_id: string
-  created_at: string
-}
-
-// ── Mock Data ─────────────────────────────────────────────────
-const mockMerchants: Merchant[] = [
-  { id: 'M001', shop_name: 'ร้านดอกไม้ขอนแก่น',   owner_email: 'flower@shop.th',   subscription_status: 'active',    plan: 'Pro',     total_scans: 342,  created_at: '2024-01-15', line_connected: true,  quota: 1000, used: 342 },
-  { id: 'M002', shop_name: 'คาเฟ่สุขใจ',            owner_email: 'cafe@sujai.th',    subscription_status: 'active',    plan: 'Starter', total_scans: 128,  created_at: '2024-02-03', line_connected: true,  quota: 200,  used: 128 },
-  { id: 'M003', shop_name: 'Tech Startup Co.',      owner_email: 'hello@techco.th',  subscription_status: 'suspended', plan: 'Pro',     total_scans: 890,  created_at: '2023-11-22', line_connected: false, quota: 1000, used: 890 },
-  { id: 'M004', shop_name: 'ออนไลน์ช็อปปิ้ง 99',   owner_email: 'shop99@mail.com',  subscription_status: 'active',    plan: 'Free',    total_scans: 38,   created_at: '2024-04-10', line_connected: false, quota: 50,   used: 38  },
-  { id: 'M005', shop_name: 'คลินิกสุขภาพดี',        owner_email: 'health@clinic.th', subscription_status: 'active',    plan: 'Pro',     total_scans: 1205, created_at: '2023-09-01', line_connected: true,  quota: 1000, used: 1000 },
-  { id: 'M006', shop_name: 'บริษัท นำเข้าสินค้า',  owner_email: 'import@biz.co.th', subscription_status: 'pending',   plan: 'Starter', total_scans: 0,    created_at: '2025-05-17', line_connected: false, quota: 200,  used: 0   },
-  { id: 'M007', shop_name: 'ร้านอาหารไทยแท้',       owner_email: 'thai@food.th',     subscription_status: 'active',    plan: 'Starter', total_scans: 76,   created_at: '2024-03-28', line_connected: true,  quota: 200,  used: 76  },
-  { id: 'M008', shop_name: 'Studio Photo Art',      owner_email: 'studio@photo.th',  subscription_status: 'active',    plan: 'Free',    total_scans: 12,   created_at: '2025-01-09', line_connected: false, quota: 50,   used: 12  },
-]
-
-const mockSubscriptions: Subscription[] = [
-  { id: 'SUB001', merchant_name: 'ร้านดอกไม้ขอนแก่น', plan: 'Pro',     status: 'active',    billing_cycle: 'monthly', expires_at: '2025-06-15', started_at: '2025-05-15', amount: 799  },
-  { id: 'SUB002', merchant_name: 'คาเฟ่สุขใจ',          plan: 'Starter', status: 'active',    billing_cycle: 'monthly', expires_at: '2025-06-03', started_at: '2025-05-03', amount: 299  },
-  { id: 'SUB003', merchant_name: 'Tech Startup Co.',    plan: 'Pro',     status: 'suspended', billing_cycle: 'yearly',  expires_at: '2025-11-22', started_at: '2024-11-22', amount: 7990 },
-  { id: 'SUB004', merchant_name: 'คลินิกสุขภาพดี',      plan: 'Pro',     status: 'active',    billing_cycle: 'yearly',  expires_at: '2025-09-01', started_at: '2024-09-01', amount: 7990 },
-  { id: 'SUB005', merchant_name: 'บริษัท นำเข้าสินค้า', plan: 'Starter', status: 'cancelled', billing_cycle: 'monthly', expires_at: '2025-04-28', started_at: '2025-03-28', amount: 299  },
-  { id: 'SUB006', merchant_name: 'ร้านอาหารไทยแท้',     plan: 'Starter', status: 'active',    billing_cycle: 'monthly', expires_at: '2025-06-28', started_at: '2025-05-28', amount: 299  },
-]
-
-const mockPayments: Payment[] = [
-  { id: 'PAY001', merchant_name: 'ร้านดอกไม้ขอนแก่น', amount: 799,  gateway: 'promptpay', status: 'success', created_at: '2025-05-15T10:22:00Z', plan: 'Pro'     },
-  { id: 'PAY002', merchant_name: 'คาเฟ่สุขใจ',          amount: 299,  gateway: 'promptpay', status: 'success', created_at: '2025-05-03T09:14:00Z', plan: 'Starter' },
-  { id: 'PAY003', merchant_name: 'บริษัท นำเข้าสินค้า', amount: 299,  gateway: 'promptpay', status: 'pending', created_at: '2025-05-17T14:05:00Z', plan: 'Starter' },
-  { id: 'PAY004', merchant_name: 'Tech Startup Co.',    amount: 7990, gateway: 'bank_transfer', status: 'failed',  created_at: '2025-04-10T16:33:00Z', plan: 'Pro'     },
-  { id: 'PAY005', merchant_name: 'ร้านอาหารไทยแท้',     amount: 299,  gateway: 'promptpay', status: 'success', created_at: '2025-05-28T11:00:00Z', plan: 'Starter' },
-  { id: 'PAY006', merchant_name: 'Studio Photo Art',    amount: 0,    gateway: 'free',      status: 'success', created_at: '2025-01-09T08:45:00Z', plan: 'Free'    },
-]
-
-const mockErrorLogs: ErrorLog[] = [
-  { id: 'LOG001', level: 'error',    service: 'slip_verification', message: 'Timeout connecting to bank validation API',   merchant_id: 'M003', created_at: '2025-05-19T09:15:00Z' },
-  { id: 'LOG002', level: 'warning',  service: 'line_notify',       message: 'LINE channel token expired for merchant',      merchant_id: 'M003', created_at: '2025-05-19T08:30:00Z' },
-  { id: 'LOG003', level: 'critical', service: 'payment_gateway',   message: 'PromptPay QR generation failed (3 retries)',   merchant_id: 'M006', created_at: '2025-05-19T07:55:00Z' },
-  { id: 'LOG004', level: 'error',    service: 'slip_verification', message: 'Invalid EMVCo QR format received',             merchant_id: 'M005', created_at: '2025-05-18T22:10:00Z' },
-  { id: 'LOG005', level: 'warning',  service: 'quota_checker',     message: 'Merchant reached 100% quota limit',            merchant_id: 'M005', created_at: '2025-05-18T20:00:00Z' },
-  { id: 'LOG006', level: 'error',    service: 'auth',              message: 'JWT verification failed — expired token',      merchant_id: 'M001', created_at: '2025-05-18T18:44:00Z' },
-]
-
-// ── Shared UI helpers ─────────────────────────────────────────
-function Badge({ label, color, bg }: { label: string; color: string; bg: string }) {
+function Badge({ value }: { value: string }) {
+  const meta = badgeMeta[value] || { color: "#475467", bg: "#f2f4f7" };
+  const labels: Record<string, string> = {
+    active: "ใช้งานอยู่",
+    paid: "ชำระแล้ว",
+    approved: "อนุมัติแล้ว",
+    pending: "รอดำเนินการ",
+    pending_review: "รอตรวจสอบ",
+    pending_admin_review: "รอ Admin ตรวจซ้ำ",
+    changes_requested_by_admin: "Admin ส่งกลับแก้ไข",
+    submitted_to_admin: "ส่งให้ Admin ตรวจแล้ว",
+    past_due: "เกินกำหนด",
+    suspended: "ระงับการใช้งาน",
+    failed: "ไม่สำเร็จ",
+    rejected: "ไม่อนุมัติ",
+    critical: "วิกฤต",
+    inactive: "ไม่ใช้งาน",
+    archived: "เก็บถาวร",
+    free: "ฟรี",
+    edited: "แก้ไขแล้ว",
+    warning: "คำเตือน",
+    error: "ข้อผิดพลาด",
+    create: "สร้าง",
+    update: "แก้ไข",
+    delete: "ลบ",
+    read: "อ่าน",
+    ...auditActionLabels,
+  };
   return (
     <span
-      className="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap"
-      style={{ color, backgroundColor: bg }}
+      className="portal-badge"
+      style={{ color: meta.color, background: meta.bg }}
     >
-      {label}
+      {labels[value] || value.replaceAll("_", " ")}
     </span>
-  )
+  );
 }
 
-function merchantStatusBadge(status: MerchantStatus) {
-  const map: Record<MerchantStatus, { label: string; color: string; bg: string }> = {
-    active:    { label: 'Active',    color: '#059669', bg: 'rgba(5,150,105,0.12)'  },
-    suspended: { label: 'Suspended', color: '#dc2626', bg: 'rgba(220,38,38,0.1)'   },
-    pending:   { label: 'Pending',   color: '#d97706', bg: 'rgba(217,119,6,0.12)'  },
-  }
-  const s = map[status]
-  return <Badge label={s.label} color={s.color} bg={s.bg} />
+const ADMIN_PAGE_SIZE = 10;
+
+function usePagination<T>(rows: T[], pageSize = ADMIN_PAGE_SIZE) {
+  const [requestedPage, setRequestedPage] = useState(1);
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+  const page = Math.min(requestedPage, pageCount);
+  const pageRows = rows.slice((page - 1) * pageSize, page * pageSize);
+  return { page, pageCount, pageRows, pageSize, setPage: setRequestedPage };
 }
 
-function subStatusBadge(status: SubStatus) {
-  const map: Record<SubStatus, { label: string; color: string; bg: string }> = {
-    active:    { label: 'Active',    color: '#059669', bg: 'rgba(5,150,105,0.12)'  },
-    suspended: { label: 'Suspended', color: '#dc2626', bg: 'rgba(220,38,38,0.1)'   },
-    cancelled: { label: 'Cancelled', color: '#64748b', bg: '#f1f5f9'                },
-    expired:   { label: 'Expired',   color: '#9ca3af', bg: '#f8fafc'               },
-  }
-  const s = map[status]
-  return <Badge label={s.label} color={s.color} bg={s.bg} />
-}
-
-function payStatusBadge(status: PayStatus) {
-  const map: Record<PayStatus, { label: string; color: string; bg: string }> = {
-    success: { label: 'Success', color: '#059669', bg: 'rgba(5,150,105,0.12)'  },
-    pending: { label: 'Pending', color: '#d97706', bg: 'rgba(217,119,6,0.12)'  },
-    failed:  { label: 'Failed',  color: '#dc2626', bg: 'rgba(220,38,38,0.1)'   },
-  }
-  const s = map[status]
-  return <Badge label={s.label} color={s.color} bg={s.bg} />
-}
-
-function logLevelBadge(level: LogLevel) {
-  const map: Record<LogLevel, { label: string; color: string; bg: string }> = {
-    critical: { label: 'Critical', color: '#dc2626', bg: 'rgba(220,38,38,0.1)'  },
-    error:    { label: 'Error',    color: '#ea580c', bg: 'rgba(234,88,12,0.1)'  },
-    warning:  { label: 'Warning',  color: '#d97706', bg: 'rgba(217,119,6,0.1)'  },
-  }
-  const s = map[level]
-  return <Badge label={s.label} color={s.color} bg={s.bg} />
-}
-
-function planBadge(plan: string) {
-  const color = plan === 'Pro' ? '#7c3aed' : plan === 'Starter' ? 'var(--blue-mid)' : '#64748b'
-  const bg    = plan === 'Pro' ? 'rgba(124,58,237,0.1)' : plan === 'Starter' ? 'rgba(37,99,235,0.1)' : '#f1f5f9'
-  return <Badge label={plan} color={color} bg={bg} />
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-function formatDateTime(iso: string) {
-  return new Date(iso).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-}
-
-function KpiCard({ label, value, sub, Icon, color, trend }: {
-  label: string; value: string; sub?: string
-  Icon: React.ElementType; color: string; trend?: 'up' | 'down'
+function Pagination({
+  page,
+  pageCount,
+  total,
+  pageSize,
+  setPage,
+}: {
+  page: number;
+  pageCount: number;
+  total: number;
+  pageSize: number;
+  setPage: (page: number) => void;
 }) {
+  const first = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const last = Math.min(page * pageSize, total);
+  const pageItems: Array<number | string> = [];
+  const visiblePages = Array.from(
+    new Set([1, page - 1, page, page + 1, pageCount]),
+  )
+    .filter((value) => value >= 1 && value <= pageCount)
+    .sort((a, b) => a - b);
+  visiblePages.forEach((value, index) => {
+    const previous = visiblePages[index - 1];
+    if (previous && value - previous > 1) pageItems.push(`ellipsis-${value}`);
+    pageItems.push(value);
+  });
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-5">
-      <div className="flex items-start justify-between mb-3">
-        <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: color + '18' }}>
-          <Icon className="w-5 h-5" style={{ color }} />
-        </div>
-        {trend && (
-          trend === 'up'
-            ? <ArrowUpRight className="w-4 h-4 text-green-500" />
-            : <ArrowDownRight className="w-4 h-4 text-red-400" />
-        )}
-      </div>
-      <div className="text-2xl font-black text-gray-900 mb-0.5">{value}</div>
-      <div className="text-xs font-medium text-gray-400">{label}</div>
-      {sub && <div className="text-xs text-gray-300 mt-1">{sub}</div>}
-    </div>
-  )
-}
-
-// ── Views ─────────────────────────────────────────────────────
-
-function Overview() {
-  const activeMerchants  = mockMerchants.filter(m => m.subscription_status === 'active').length
-  const totalRevenue     = mockPayments.filter(p => p.status === 'success').reduce((s, p) => s + p.amount, 0)
-  const pendingPayments  = mockPayments.filter(p => p.status === 'pending').length
-  const openErrors       = mockErrorLogs.filter(l => l.level === 'critical' || l.level === 'error').length
-
-  return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-black text-gray-900 mb-1">Admin Overview</h1>
-        <p className="text-sm text-gray-400">Platform-wide summary — FlowPDPA Backoffice</p>
-      </div>
-
-      {/* KPI grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <KpiCard label="Active Merchants"   value={String(activeMerchants)}       Icon={Users}         color="#2563eb" trend="up" />
-        <KpiCard label="Total Revenue (฿)"  value={totalRevenue.toLocaleString()}  Icon={DollarSign}    color="#059669" trend="up" />
-        <KpiCard label="Pending Payments"   value={String(pendingPayments)}        Icon={Clock}         color="#d97706" />
-        <KpiCard label="Active Errors"      value={String(openErrors)}             Icon={AlertCircle}   color="#dc2626" trend="down" />
-      </div>
-
-      {/* Usage snapshot */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
-        <div
-          className="lg:col-span-2 rounded-xl p-6"
-          style={{ background: 'linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%)', border: '1px solid rgba(255,255,255,0.06)' }}
-        >
-          <p className="text-xs font-semibold uppercase tracking-wider mb-4" style={{ color: 'var(--green)' }}>Scan Activity (This Month)</p>
-          <div className="grid grid-cols-3 gap-4">
-            {[
-              { label: 'Total Scans Today', value: '1,204' },
-              { label: 'Total Scans / Month', value: '28,450' },
-              { label: 'Error Rate', value: '1.2%' },
-            ].map(({ label, value }) => (
-              <div key={label}>
-                <div className="text-2xl font-black text-white mb-1">{value}</div>
-                <div className="text-xs" style={{ color: '#64748b' }}>{label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl border border-gray-100 p-6">
-          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-4">Plan Distribution</p>
-          {[
-            { plan: 'Pro',     count: mockMerchants.filter(m => m.plan === 'Pro').length,     color: '#7c3aed' },
-            { plan: 'Starter', count: mockMerchants.filter(m => m.plan === 'Starter').length, color: 'var(--blue-mid)' },
-            { plan: 'Free',    count: mockMerchants.filter(m => m.plan === 'Free').length,    color: '#94a3b8' },
-          ].map(({ plan, count, color }) => (
-            <div key={plan} className="flex items-center justify-between py-2.5 border-b border-gray-50 last:border-0">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                <span className="text-sm text-gray-700">{plan}</span>
-              </div>
-              <span className="text-sm font-bold text-gray-900">{count} merchants</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Recent activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Recent payments */}
-        <div className="bg-white rounded-xl border border-gray-100">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <h2 className="text-sm font-bold text-gray-900">Recent Payments</h2>
-          </div>
-          <div className="divide-y divide-gray-50">
-            {mockPayments.slice(0, 4).map(p => (
-              <div key={p.id} className="flex items-center justify-between px-5 py-3">
-                <div>
-                  <p className="text-sm font-semibold text-gray-900 truncate max-w-[160px]">{p.merchant_name}</p>
-                  <p className="text-xs text-gray-400">{formatDate(p.created_at)}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-bold text-gray-800">฿{p.amount.toLocaleString()}</span>
-                  {payStatusBadge(p.status)}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Recent errors */}
-        <div className="bg-white rounded-xl border border-gray-100">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <h2 className="text-sm font-bold text-gray-900">Recent Errors</h2>
-          </div>
-          <div className="divide-y divide-gray-50">
-            {mockErrorLogs.slice(0, 4).map(log => (
-              <div key={log.id} className="px-5 py-3">
-                <div className="flex items-start justify-between gap-3 mb-1">
-                  {logLevelBadge(log.level)}
-                  <span className="text-xs text-gray-300 shrink-0">{formatDateTime(log.created_at)}</span>
-                </div>
-                <p className="text-xs text-gray-600 leading-relaxed truncate">{log.message}</p>
-                <p className="text-xs text-gray-300 mt-0.5">{log.service}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function MerchantsView() {
-  const [search, setSearch] = useState('')
-  const [filterStatus, setFilterStatus] = useState<'all' | MerchantStatus>('all')
-  const [detail, setDetail] = useState<Merchant | null>(null)
-
-  const filtered = mockMerchants.filter(m => {
-    const matchSearch = m.shop_name.toLowerCase().includes(search.toLowerCase()) || m.owner_email.includes(search)
-    const matchStatus = filterStatus === 'all' || m.subscription_status === filterStatus
-    return matchSearch && matchStatus
-  })
-
-  if (detail) return <MerchantDetail merchant={detail} onBack={() => setDetail(null)} />
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-black text-gray-900 mb-0.5">Merchants</h1>
-          <p className="text-sm text-gray-400">{mockMerchants.length} merchants registered</p>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3 mb-5">
-        <div className="relative flex-1 min-w-48">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
-          <input
-            type="text"
-            placeholder="ค้นหา ชื่อร้าน หรือ อีเมล..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none text-gray-800"
-            onFocus={e => (e.currentTarget.style.borderColor = 'var(--green)')}
-            onBlur={e => (e.currentTarget.style.borderColor = '#e5e7eb')}
-          />
-        </div>
-        <div className="flex gap-2">
-          {(['all', 'active', 'suspended', 'pending'] as const).map(s => (
-            <button
-              key={s}
-              onClick={() => setFilterStatus(s)}
-              className="text-xs font-semibold px-3 py-2 rounded-lg border transition-colors capitalize"
-              style={{
-                backgroundColor: filterStatus === s ? 'var(--navy)' : 'white',
-                color: filterStatus === s ? 'white' : '#6b7280',
-                borderColor: filterStatus === s ? 'var(--navy)' : '#e5e7eb',
-              }}
-            >
-              {s === 'all' ? 'All' : s}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-        <div className="hidden md:grid grid-cols-12 px-5 py-3 bg-gray-50 border-b border-gray-100 text-xs font-semibold uppercase tracking-wider text-gray-400 gap-3">
-          <div className="col-span-3">ร้านค้า</div>
-          <div className="col-span-3">อีเมล</div>
-          <div className="col-span-2">Plan</div>
-          <div className="col-span-2">Status</div>
-          <div className="col-span-1">Scans</div>
-          <div className="col-span-1 text-right">ดู</div>
-        </div>
-
-        {filtered.length === 0 ? (
-          <div className="py-14 text-center text-sm text-gray-400">ไม่พบผลลัพธ์</div>
-        ) : (
-          <div className="divide-y divide-gray-50">
-            {filtered.map(m => (
-              <div key={m.id} className="grid grid-cols-2 md:grid-cols-12 gap-3 px-5 py-3.5 items-center hover:bg-gray-50 transition-colors">
-                <div className="col-span-2 md:col-span-3">
-                  <p className="text-sm font-semibold text-gray-900">{m.shop_name}</p>
-                  <p className="text-xs text-gray-400 md:hidden">{m.owner_email}</p>
-                </div>
-                <div className="hidden md:block md:col-span-3 text-xs text-gray-500 truncate">{m.owner_email}</div>
-                <div className="hidden md:block md:col-span-2">{planBadge(m.plan)}</div>
-                <div className="col-span-1 md:col-span-2">{merchantStatusBadge(m.subscription_status)}</div>
-                <div className="hidden md:block md:col-span-1 text-xs text-gray-500">{m.total_scans.toLocaleString()}</div>
-                <div className="col-span-1 flex justify-end">
-                  <button
-                    onClick={() => setDetail(m)}
-                    className="w-7 h-7 flex items-center justify-center rounded-md text-gray-300 hover:bg-gray-100 hover:text-gray-600 transition-colors"
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function MerchantDetail({ merchant, onBack }: { merchant: Merchant; onBack: () => void }) {
-  const sub = mockSubscriptions.find(s => s.merchant_name === merchant.shop_name)
-  const pays = mockPayments.filter(p => p.merchant_name === merchant.shop_name)
-  const quotaPct = Math.round((merchant.used / merchant.quota) * 100)
-
-  return (
-    <div>
-      <button
-        onClick={onBack}
-        className="flex items-center gap-2 text-sm font-semibold text-gray-400 hover:text-gray-700 transition-colors mb-6"
-      >
-        <ChevronLeft className="w-4 h-4" /> Back to Merchants
-      </button>
-
-      <div className="flex items-start justify-between flex-wrap gap-4 mb-6">
-        <div>
-          <h1 className="text-xl font-black text-gray-900 mb-1">{merchant.shop_name}</h1>
-          <p className="text-sm text-gray-400">{merchant.owner_email} · Joined {formatDate(merchant.created_at)}</p>
-        </div>
-        <div className="flex gap-2">
-          {merchantStatusBadge(merchant.subscription_status)}
-          {planBadge(merchant.plan)}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-        {/* Usage */}
-        <div className="bg-white rounded-xl border border-gray-100 p-5">
-          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">Quota Usage</p>
-          <div className="flex items-end gap-2 mb-2">
-            <span className="text-2xl font-black text-gray-900">{merchant.used}</span>
-            <span className="text-sm text-gray-400 mb-0.5">/ {merchant.quota} scans</span>
-          </div>
-          <div className="w-full h-2 rounded-full bg-gray-100 overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all"
-              style={{
-                width: `${Math.min(quotaPct, 100)}%`,
-                backgroundColor: quotaPct >= 90 ? '#dc2626' : quotaPct >= 70 ? '#d97706' : 'var(--green)',
-              }}
-            />
-          </div>
-          <p className="text-xs text-gray-400 mt-1">{quotaPct}% used</p>
-        </div>
-
-        {/* Subscription */}
-        <div className="bg-white rounded-xl border border-gray-100 p-5">
-          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">Subscription</p>
-          {sub ? (
-            <>
-              <div className="flex items-center gap-2 mb-2">{subStatusBadge(sub.status)}</div>
-              <p className="text-sm text-gray-700 mb-1">Plan: <strong>{sub.plan}</strong> ({sub.billing_cycle})</p>
-              <p className="text-sm text-gray-700">Expires: <strong>{formatDate(sub.expires_at)}</strong></p>
-              <p className="text-xs text-gray-400 mt-2">฿{sub.amount.toLocaleString()} / cycle</p>
-            </>
-          ) : (
-            <p className="text-sm text-gray-400">No active subscription</p>
-          )}
-        </div>
-
-        {/* LINE */}
-        <div className="bg-white rounded-xl border border-gray-100 p-5">
-          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">LINE Integration</p>
-          <div className="flex items-center gap-2 mb-2">
-            <span
-              className="w-2.5 h-2.5 rounded-full"
-              style={{ backgroundColor: merchant.line_connected ? 'var(--green)' : '#dc2626' }}
-            />
-            <span className="text-sm font-semibold text-gray-700">
-              {merchant.line_connected ? 'Connected' : 'Not connected'}
-            </span>
-          </div>
-          <p className="text-xs text-gray-400 mt-1">
-            {merchant.line_connected
-              ? 'Webhook active, notifications enabled'
-              : 'Merchant has not set up LINE integration'}
-          </p>
-        </div>
-      </div>
-
-      {/* Payment history */}
-      <div className="bg-white rounded-xl border border-gray-100">
-        <div className="px-5 py-4 border-b border-gray-100">
-          <h2 className="text-sm font-bold text-gray-900">Payment History</h2>
-        </div>
-        {pays.length === 0 ? (
-          <div className="py-10 text-center text-sm text-gray-400">No payments found</div>
-        ) : (
-          <div className="divide-y divide-gray-50">
-            {pays.map(p => (
-              <div key={p.id} className="flex items-center justify-between px-5 py-3">
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">{p.plan} plan</p>
-                  <p className="text-xs text-gray-400">{p.gateway} · {formatDateTime(p.created_at)}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-bold">฿{p.amount.toLocaleString()}</span>
-                  {payStatusBadge(p.status)}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function SubscriptionsView() {
-  const [filterStatus, setFilterStatus] = useState<'all' | SubStatus>('all')
-  const [actionFeedback, setActionFeedback] = useState<string | null>(null)
-
-  const filtered = mockSubscriptions.filter(
-    s => filterStatus === 'all' || s.status === filterStatus
-  )
-
-  function handleAction(id: string, action: 'activate' | 'suspend') {
-    setActionFeedback(`${action === 'activate' ? 'Activated' : 'Suspended'} subscription ${id}`)
-    setTimeout(() => setActionFeedback(null), 3000)
-  }
-
-  return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-xl font-black text-gray-900 mb-0.5">Subscriptions</h1>
-        <p className="text-sm text-gray-400">{mockSubscriptions.length} subscriptions total</p>
-      </div>
-
-      {actionFeedback && (
-        <div
-          className="flex items-center gap-2 px-4 py-3 rounded-lg mb-4 text-sm font-semibold"
-          style={{ backgroundColor: 'rgba(5,150,105,0.1)', color: 'var(--green)', border: '1px solid rgba(5,150,105,0.2)' }}
-        >
-          <CheckCircle className="w-4 h-4" /> {actionFeedback}
-        </div>
-      )}
-
-      {/* Filter */}
-      <div className="flex flex-wrap gap-2 mb-5">
-        {(['all', 'active', 'suspended', 'cancelled', 'expired'] as const).map(s => (
-          <button
-            key={s}
-            onClick={() => setFilterStatus(s)}
-            className="text-xs font-semibold px-3 py-2 rounded-lg border transition-colors capitalize"
-            style={{
-              backgroundColor: filterStatus === s ? 'var(--navy)' : 'white',
-              color: filterStatus === s ? 'white' : '#6b7280',
-              borderColor: filterStatus === s ? 'var(--navy)' : '#e5e7eb',
-            }}
-          >
-            {s === 'all' ? 'All' : s}
-          </button>
-        ))}
-      </div>
-
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-        <div className="hidden md:grid grid-cols-12 px-5 py-3 bg-gray-50 border-b border-gray-100 text-xs font-semibold uppercase tracking-wider text-gray-400 gap-3">
-          <div className="col-span-1">ID</div>
-          <div className="col-span-3">ร้านค้า</div>
-          <div className="col-span-2">Plan</div>
-          <div className="col-span-2">Status</div>
-          <div className="col-span-2">Expires</div>
-          <div className="col-span-1">Amount</div>
-          <div className="col-span-1 text-right">Actions</div>
-        </div>
-
-        <div className="divide-y divide-gray-50">
-          {filtered.map(s => (
-            <div key={s.id} className="grid grid-cols-2 md:grid-cols-12 gap-3 px-5 py-4 items-center hover:bg-gray-50 transition-colors">
-              <div className="hidden md:block md:col-span-1">
-                <span className="text-xs font-mono text-gray-400">{s.id}</span>
-              </div>
-              <div className="col-span-2 md:col-span-3">
-                <p className="text-sm font-semibold text-gray-900">{s.merchant_name}</p>
-                <p className="text-xs text-gray-400">{s.billing_cycle}</p>
-              </div>
-              <div className="hidden md:block md:col-span-2">{planBadge(s.plan)}</div>
-              <div className="col-span-1 md:col-span-2">{subStatusBadge(s.status)}</div>
-              <div className="hidden md:block md:col-span-2 text-xs text-gray-500">{formatDate(s.expires_at)}</div>
-              <div className="hidden md:block md:col-span-1 text-sm font-bold text-gray-800">฿{s.amount.toLocaleString()}</div>
-              <div className="col-span-1 flex items-center justify-end gap-1">
-                {s.status === 'suspended' && (
-                  <button
-                    title="Activate"
-                    onClick={() => handleAction(s.id, 'activate')}
-                    className="w-7 h-7 flex items-center justify-center rounded-md text-gray-300 hover:bg-green-50 hover:text-green-600 transition-colors"
-                  >
-                    <Play className="w-3.5 h-3.5" />
-                  </button>
-                )}
-                {s.status === 'active' && (
-                  <button
-                    title="Suspend"
-                    onClick={() => handleAction(s.id, 'suspend')}
-                    className="w-7 h-7 flex items-center justify-center rounded-md text-gray-300 hover:bg-red-50 hover:text-red-500 transition-colors"
-                  >
-                    <Ban className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function PaymentsView() {
-  const [filterStatus, setFilterStatus] = useState<'all' | PayStatus>('all')
-  const [actionFeedback, setActionFeedback] = useState<string | null>(null)
-
-  const filtered = mockPayments.filter(
-    p => filterStatus === 'all' || p.status === filterStatus
-  )
-
-  function handleApprove(id: string) {
-    setActionFeedback(`Payment ${id} approved successfully.`)
-    setTimeout(() => setActionFeedback(null), 3000)
-  }
-
-  return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-xl font-black text-gray-900 mb-0.5">Payments</h1>
-        <p className="text-sm text-gray-400">{mockPayments.length} payment records</p>
-      </div>
-
-      {actionFeedback && (
-        <div
-          className="flex items-center gap-2 px-4 py-3 rounded-lg mb-4 text-sm font-semibold"
-          style={{ backgroundColor: 'rgba(5,150,105,0.1)', color: 'var(--green)', border: '1px solid rgba(5,150,105,0.2)' }}
-        >
-          <CheckCircle className="w-4 h-4" /> {actionFeedback}
-        </div>
-      )}
-
-      {/* KPI row */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        {[
-          { label: 'Total Collected',  value: '฿' + mockPayments.filter(p => p.status === 'success').reduce((s,p) => s+p.amount, 0).toLocaleString(), color: '#059669' },
-          { label: 'Pending Review',   value: String(mockPayments.filter(p => p.status === 'pending').length),  color: '#d97706' },
-          { label: 'Failed',           value: String(mockPayments.filter(p => p.status === 'failed').length),   color: '#dc2626' },
-        ].map(({ label, value, color }) => (
-          <div key={label} className="bg-white rounded-xl border border-gray-100 p-4 text-center">
-            <div className="text-xl font-black mb-0.5" style={{ color }}>{value}</div>
-            <div className="text-xs text-gray-400">{label}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Filter */}
-      <div className="flex gap-2 mb-5">
-        {(['all', 'success', 'pending', 'failed'] as const).map(s => (
-          <button
-            key={s}
-            onClick={() => setFilterStatus(s)}
-            className="text-xs font-semibold px-3 py-2 rounded-lg border transition-colors capitalize"
-            style={{
-              backgroundColor: filterStatus === s ? 'var(--navy)' : 'white',
-              color: filterStatus === s ? 'white' : '#6b7280',
-              borderColor: filterStatus === s ? 'var(--navy)' : '#e5e7eb',
-            }}
-          >
-            {s === 'all' ? 'All' : s}
-          </button>
-        ))}
-      </div>
-
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-        <div className="hidden md:grid grid-cols-12 px-5 py-3 bg-gray-50 border-b border-gray-100 text-xs font-semibold uppercase tracking-wider text-gray-400 gap-3">
-          <div className="col-span-1">ID</div>
-          <div className="col-span-3">ร้านค้า</div>
-          <div className="col-span-2">Plan</div>
-          <div className="col-span-2">Gateway</div>
-          <div className="col-span-1">Amount</div>
-          <div className="col-span-2">Status</div>
-          <div className="col-span-1 text-right">Action</div>
-        </div>
-
-        <div className="divide-y divide-gray-50">
-          {filtered.map(p => (
-            <div key={p.id} className="grid grid-cols-2 md:grid-cols-12 gap-3 px-5 py-3.5 items-center hover:bg-gray-50 transition-colors">
-              <div className="hidden md:block md:col-span-1 text-xs font-mono text-gray-400">{p.id}</div>
-              <div className="col-span-2 md:col-span-3">
-                <p className="text-sm font-semibold text-gray-900">{p.merchant_name}</p>
-                <p className="text-xs text-gray-400">{formatDateTime(p.created_at)}</p>
-              </div>
-              <div className="hidden md:block md:col-span-2">{planBadge(p.plan)}</div>
-              <div className="hidden md:block md:col-span-2 text-xs text-gray-500 capitalize">{p.gateway.replace('_', ' ')}</div>
-              <div className="hidden md:block md:col-span-1 text-sm font-bold text-gray-800">
-                {p.amount === 0 ? <span className="text-gray-400">Free</span> : `฿${p.amount.toLocaleString()}`}
-              </div>
-              <div className="col-span-1 md:col-span-2">{payStatusBadge(p.status)}</div>
-              <div className="col-span-1 flex justify-end">
-                {p.status === 'pending' && (
-                  <button
-                    onClick={() => handleApprove(p.id)}
-                    className="text-xs font-bold px-3 py-1.5 rounded-lg transition-colors"
-                    style={{ backgroundColor: 'rgba(5,150,105,0.1)', color: 'var(--green)' }}
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(5,150,105,0.2)')}
-                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'rgba(5,150,105,0.1)')}
-                  >
-                    Approve
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function MonitoringView() {
-  const [filterLevel, setFilterLevel] = useState<'all' | LogLevel>('all')
-  const [refreshing, setRefreshing] = useState(false)
-
-  const filtered = mockErrorLogs.filter(l => filterLevel === 'all' || l.level === filterLevel)
-
-  function handleRefresh() {
-    setRefreshing(true)
-    setTimeout(() => setRefreshing(false), 1000)
-  }
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-black text-gray-900 mb-0.5">Monitoring</h1>
-          <p className="text-sm text-gray-400">System health and error logs</p>
-        </div>
+    <footer className="portal-pagination">
+      <p className="text-xs text-gray-500">
+        แสดง{" "}
+        <strong className="text-gray-700">
+          {first}-{last}
+        </strong>{" "}
+        จาก <strong className="text-gray-700">{total}</strong> รายการ
+      </p>
+      <div className="portal-pagination-pages">
         <button
-          onClick={handleRefresh}
-          className="flex items-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+          className="portal-page-button"
+          disabled={page === 1}
+          onClick={() => setPage(page - 1)}
+          aria-label="หน้าก่อนหน้า"
         >
-          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-          Refresh
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        {pageItems.map((value) =>
+          typeof value === "number" ? (
+            <button
+              key={value}
+              className="portal-page-button"
+              data-active={page === value}
+              onClick={() => setPage(value)}
+              aria-label={`หน้า ${value}`}
+            >
+              {value}
+            </button>
+          ) : (
+            <span
+              key={value}
+              className="px-1 text-sm text-gray-400"
+              aria-hidden="true"
+            >
+              …
+            </span>
+          ),
+        )}
+        <button
+          className="portal-page-button"
+          disabled={page === pageCount}
+          onClick={() => setPage(page + 1)}
+          aria-label="หน้าถัดไป"
+        >
+          <ChevronRight className="w-4 h-4" />
         </button>
       </div>
-
-      {/* System health cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {[
-          { label: 'Scans Today',      value: '1,204', color: '#059669', Icon: Activity },
-          { label: 'Scans This Month', value: '28,450', color: 'var(--blue-mid)', Icon: BarChart3 },
-          { label: 'Active Merchants', value: String(mockMerchants.filter(m => m.subscription_status === 'active').length), color: '#7c3aed', Icon: Users },
-          { label: 'Error Rate',       value: '1.2%',  color: '#dc2626', Icon: AlertCircle },
-        ].map(({ label, value, color, Icon }) => (
-          <KpiCard key={label} label={label} value={value} Icon={Icon} color={color} />
-        ))}
-      </div>
-
-      {/* Error logs */}
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h2 className="text-sm font-bold text-gray-900">Error Logs</h2>
-          <div className="flex gap-2">
-            {(['all', 'critical', 'error', 'warning'] as const).map(l => (
-              <button
-                key={l}
-                onClick={() => setFilterLevel(l)}
-                className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors capitalize"
-                style={{
-                  backgroundColor: filterLevel === l ? 'var(--navy)' : 'white',
-                  color: filterLevel === l ? 'white' : '#6b7280',
-                  borderColor: filterLevel === l ? 'var(--navy)' : '#e5e7eb',
-                }}
-              >
-                {l === 'all' ? 'All' : l}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="divide-y divide-gray-50">
-          {filtered.map(log => (
-            <div key={log.id} className="px-5 py-4 hover:bg-gray-50 transition-colors">
-              <div className="flex items-start justify-between gap-4 mb-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  {logLevelBadge(log.level)}
-                  <span
-                    className="text-xs font-mono px-2 py-0.5 rounded"
-                    style={{ backgroundColor: '#f1f5f9', color: '#475569' }}
-                  >
-                    {log.service}
-                  </span>
-                  <span className="text-xs text-gray-400 font-mono">{log.merchant_id}</span>
-                </div>
-                <span className="text-xs text-gray-300 shrink-0">{formatDateTime(log.created_at)}</span>
-              </div>
-              <p className="text-sm text-gray-700">{log.message}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
+    </footer>
+  );
 }
 
-function AnalyticsView() {
-  const totalRevenue = mockPayments.filter(p => p.status === 'success').reduce((s, p) => s + p.amount, 0)
-  const revenueByPlan = [
-    { plan: 'Pro',     revenue: mockPayments.filter(p => p.plan === 'Pro'     && p.status === 'success').reduce((s, p) => s + p.amount, 0) },
-    { plan: 'Starter', revenue: mockPayments.filter(p => p.plan === 'Starter' && p.status === 'success').reduce((s, p) => s + p.amount, 0) },
-    { plan: 'Free',    revenue: 0 },
-  ]
-
-  const topMerchants = [...mockMerchants].sort((a, b) => b.total_scans - a.total_scans).slice(0, 5)
-  const lowUsage     = mockMerchants.filter(m => m.total_scans < 50 && m.subscription_status === 'active')
-
+function PageTitle({
+  eyebrow,
+  title,
+  description,
+  action,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  action?: React.ReactNode;
+}) {
   return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-xl font-black text-gray-900 mb-0.5">Analytics</h1>
-        <p className="text-sm text-gray-400">Platform revenue and merchant performance</p>
+    <header className="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+      <div>
+        <p className="text-[11px] font-medium text-green-700 mb-2">{eyebrow}</p>
+        <h1 className="text-2xl font-bold">{title}</h1>
+        <p className="text-sm text-gray-500 mt-1">{description}</p>
       </div>
+      {action}
+    </header>
+  );
+}
 
-      {/* Revenue KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <KpiCard label="Total Revenue"    value={`฿${totalRevenue.toLocaleString()}`}  Icon={DollarSign}  color="#059669" trend="up" />
-        <KpiCard label="MRR (Est.)"       value="฿63,500"                              Icon={TrendingUp}  color="var(--blue-mid)" trend="up" />
-        <KpiCard label="Churn Rate"       value="3.1%"                                 Icon={XCircle}     color="#dc2626" />
-        <KpiCard label="Renewal Rate"     value="96.9%"                                Icon={CheckCircle} color="#059669" trend="up" />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        {/* Revenue by plan */}
-        <div className="bg-white rounded-xl border border-gray-100 p-6">
-          <h2 className="text-sm font-bold text-gray-900 mb-5">Revenue by Plan</h2>
-          {revenueByPlan.map(({ plan, revenue }) => {
-            const pct = totalRevenue > 0 ? Math.round((revenue / totalRevenue) * 100) : 0
-            return (
-              <div key={plan} className="mb-4 last:mb-0">
-                <div className="flex items-center justify-between mb-1.5">
-                  <div className="flex items-center gap-2">
-                    {planBadge(plan)}
-                  </div>
-                  <span className="text-sm font-bold text-gray-800">฿{revenue.toLocaleString()}</span>
-                </div>
-                <div className="w-full h-2 rounded-full bg-gray-100 overflow-hidden">
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${pct}%`,
-                      backgroundColor: plan === 'Pro' ? '#7c3aed' : plan === 'Starter' ? 'var(--blue-mid)' : '#e5e7eb',
-                    }}
-                  />
-                </div>
-                <p className="text-xs text-gray-400 mt-1">{pct}% of total revenue</p>
-              </div>
-            )
-          })}
+function Sidebar({
+  view,
+  change,
+  adminReviewCount,
+  open,
+  close,
+  logout,
+}: {
+  view: AdminView;
+  change: (view: AdminView) => void;
+  adminReviewCount: number;
+  open: boolean;
+  close: () => void;
+  logout: () => void;
+}) {
+  const groups = [
+    {
+      label: "แพลตฟอร์ม",
+      items: [
+        { id: "overview" as const, text: "ภาพรวม", Icon: Gauge },
+        { id: "merchants" as const, text: "ผู้ประกอบการ", Icon: Users },
+      ],
+    },
+    {
+      label: "งานที่ต้องดำเนินการ",
+      items: [
+        {
+          id: "admin_reviews" as const,
+          text: "ตรวจซ้ำก่อนส่งลูกค้า",
+          Icon: UserCog,
+          count: adminReviewCount,
+        },
+      ],
+    },
+    {
+      label: "เนื้อหาและการกำกับดูแล",
+      items: [
+        { id: "policies" as const, text: "นโยบาย", Icon: FileText },
+        { id: "company_documents" as const, text: "เอกสารนิติบุคคล", Icon: Building2 },
+        {
+          id: "templates" as const,
+          text: "เทมเพลตเอกสาร",
+          Icon: Languages,
+        },
+        { id: "legal" as const, text: "จัดการฝ่ายกฎหมาย", Icon: Scale },
+      ],
+    },
+    {
+      label: "การเรียกเก็บเงิน",
+      items: [
+        {
+          id: "subscriptions" as const,
+          text: "การสมัครสมาชิก",
+          Icon: WalletCards,
+        },
+        { id: "payments" as const, text: "การชำระเงิน", Icon: ReceiptText },
+      ],
+    },
+    {
+      label: "การติดตามระบบ",
+      items: [
+        {
+          id: "merchant_activity" as const,
+          text: "กิจกรรมผู้ประกอบการ",
+          Icon: Activity,
+        },
+        { id: "audit" as const, text: "บันทึกกิจกรรม", Icon: Activity },
+        { id: "logs" as const, text: "บันทึกระบบ", Icon: AlertTriangle },
+        { id: "analytics" as const, text: "การวิเคราะห์", Icon: BarChart3 },
+      ],
+    },
+  ];
+  return (
+    <>
+      {open && (
+        <button
+          className="portal-overlay"
+          onClick={close}
+          aria-label="ปิดเมนูนำทาง"
+        />
+      )}
+      <aside className="portal-sidebar" data-open={open}>
+        <div className="portal-brand">
+          <img
+            src="/favicon.svg"
+            alt="FlowPDPA"
+            style={{
+              width: "32px",
+              height: "32px",
+              filter: "brightness(0) invert(1)",
+              flexShrink: 0,
+            }}
+          />
+          <div>
+            <p className="text-sm font-extrabold" style={{ color: "#ffffff" }}>
+              Flow<span style={{ color: "#4ade80" }}>PDPA</span>
+            </p>
+            <p className="text-[10px]" style={{ color: "#475569" }}>
+              ระบบผู้ดูแล
+            </p>
+          </div>
         </div>
-
-        {/* Growth snapshot */}
-        <div
-          className="rounded-xl p-6"
-          style={{ background: 'linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%)', border: '1px solid rgba(255,255,255,0.06)' }}
-        >
-          <h2 className="text-sm font-bold text-white mb-5">Growth Snapshot</h2>
-          <div className="space-y-4">
-            {[
-              { label: 'Month-over-month growth', value: '+12.4%', positive: true  },
-              { label: 'New merchants (this month)', value: '+3',   positive: true  },
-              { label: 'Churned merchants',          value: '1',    positive: false },
-              { label: 'Avg. scans per merchant',    value: '374',  positive: true  },
-            ].map(({ label, value, positive }) => (
-              <div key={label} className="flex items-center justify-between py-2.5 border-b border-white/5 last:border-0">
-                <span className="text-sm" style={{ color: '#94a3b8' }}>{label}</span>
-                <span
-                  className="text-sm font-black"
-                  style={{ color: positive ? 'var(--green)' : '#f87171' }}
+        <nav className="portal-nav flex-1 overflow-y-auto">
+          {groups.map((group) => (
+            <div key={group.label}>
+              <p className="portal-nav-label">{group.label}</p>
+              {group.items.map(({ id, text, Icon, ...item }) => (
+                <button
+                  key={id}
+                  className="portal-nav-item"
+                  data-active={view === id}
+                  onClick={() => {
+                    change(id);
+                    close();
+                  }}
                 >
-                  {value}
-                </span>
-              </div>
-            ))}
+                  <Icon />
+                  <span className="flex-1 text-left">{text}</span>
+                  {"count" in item && item.count > 0 ? (
+                    <span className="min-w-5 rounded-full bg-emerald-400 px-1.5 py-0.5 text-center text-[10px] font-black text-slate-950">
+                      {item.count > 99 ? "99+" : item.count}
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          ))}
+        </nav>
+        <div className="portal-account">
+          <div className="flex items-center gap-3 mb-3">
+            <span
+              className="w-8 h-8 grid place-items-center rounded"
+              style={{
+                backgroundColor: "rgba(8,122,91,0.25)",
+                color: "#4ade80",
+              }}
+            >
+              <UserCog className="w-4 h-4" />
+            </span>
+            <div>
+              <p className="text-xs font-semibold" style={{ color: "#e2e8f0" }}>
+                ผู้ดูแลแพลตฟอร์ม
+              </p>
+              <p className="text-[11px]" style={{ color: "#475569" }}>
+                admin@flowpdpa.co.th
+              </p>
+            </div>
           </div>
+          <button className="portal-nav-item" onClick={logout}>
+            <LogOut />
+            ออกจากระบบ
+          </button>
         </div>
-      </div>
+      </aside>
+    </>
+  );
+}
 
-      {/* Merchant performance tables */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Top active merchants */}
-        <div className="bg-white rounded-xl border border-gray-100">
-          <div className="px-5 py-4 border-b border-gray-100">
-            <h2 className="text-sm font-bold text-gray-900">Top Active Merchants</h2>
+function Overview({
+  overview,
+  legalUsers,
+  change,
+}: {
+  overview: AdminOverview;
+  legalUsers: LegalUser[];
+  change: (view: AdminView) => void;
+}) {
+  const stats = [
+    {
+      label: "ผู้ประกอบการที่ใช้งานอยู่",
+      value: overview.kpi.activeMerchants,
+      Icon: Users,
+      color: "#2457a6",
+    },
+    {
+      label: "รายการรอตรวจสอบ",
+      value: overview.kpi.pendingLegalReviews,
+      Icon: FileText,
+      color: "#a86207",
+    },
+    {
+      label: "เจ้าหน้าที่กฎหมายที่ใช้งานอยู่",
+      value: legalUsers.filter((row) => row.status === "active").length,
+      Icon: Scale,
+      color: "#087a5b",
+    },
+    {
+      label: "ยอดรับชำระทั้งหมด",
+      value: money(overview.kpi.totalRevenue),
+      Icon: CircleDollarSign,
+      color: "#087a5b",
+    },
+  ];
+  return (
+    <>
+      <PageTitle
+        eyebrow="การดำเนินงานแพลตฟอร์ม"
+        title="ภาพรวมผู้ดูแลระบบ"
+        description="ติดตามบัญชี นโยบาย การชำระเงิน และกระบวนการตรวจสอบด้านกฎหมาย"
+      />
+      <section className="portal-kpis">
+        {stats.map(({ label, value, Icon, color }) => (
+          <div className="portal-kpi" key={label}>
+            <Icon className="w-4 h-4 mb-4" style={{ color }} />
+            <p className="text-2xl font-semibold">{value}</p>
+            <p className="text-xs text-gray-500 mt-1">{label}</p>
           </div>
-          <div className="divide-y divide-gray-50">
-            {topMerchants.map((m, i) => (
-              <div key={m.id} className="flex items-center justify-between px-5 py-3">
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-black text-gray-300 w-4">#{i + 1}</span>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">{m.shop_name}</p>
-                    <div className="flex items-center gap-1.5 mt-0.5">{planBadge(m.plan)}</div>
+        ))}
+      </section>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+        <section className="portal-panel">
+          <div className="portal-panel-head">
+            <div>
+              <h2 className="text-sm font-semibold">การชำระเงินล่าสุด</h2>
+              <p className="text-xs text-gray-400 mt-1">
+                รายการใบแจ้งหนี้ล่าสุดจาก Stripe
+              </p>
+            </div>
+            <button
+              className="portal-button"
+              onClick={() => change("payments")}
+            >
+              ดูการชำระเงิน <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          {overview.recentPayments.length ? (
+            <div className="divide-y divide-gray-100">
+              {overview.recentPayments.map((payment) => (
+                <div
+                  className="flex items-center justify-between gap-4 px-5 py-3.5"
+                  key={payment.id}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold">
+                      {payment.merchantName ||
+                        payment.merchantEmail ||
+                        "Unknown merchant"}
+                    </p>
+                    <p className="mt-1 text-[11px] text-gray-400">
+                      {payment.policyType || "Subscription"} ·{" "}
+                      {formatDate(payment.paidAt || payment.createdAt)}
+                    </p>
                   </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-bold text-gray-900">{m.total_scans.toLocaleString()}</p>
-                  <p className="text-xs text-gray-400">scans</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Low usage merchants */}
-        <div className="bg-white rounded-xl border border-gray-100">
-          <div className="px-5 py-4 border-b border-gray-100">
-            <h2 className="text-sm font-bold text-gray-900">Low Usage (Active Plan)</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Active subscription but &lt;50 scans — may churn</p>
-          </div>
-          {lowUsage.length === 0 ? (
-            <div className="py-10 text-center text-sm text-gray-400">No at-risk merchants</div>
-          ) : (
-            <div className="divide-y divide-gray-50">
-              {lowUsage.map(m => (
-                <div key={m.id} className="flex items-center justify-between px-5 py-3">
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">{m.shop_name}</p>
-                    <p className="text-xs text-gray-400">{m.owner_email}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold" style={{ color: '#d97706' }}>{m.total_scans} scans</p>
-                    <p className="text-xs text-gray-400">{planBadge(m.plan)}</p>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span className="text-sm font-semibold">
+                      {money(payment.amountPaid)}
+                    </span>
+                    <Badge value={payment.status} />
                   </div>
                 </div>
               ))}
             </div>
+          ) : (
+            <div className="portal-empty">ยังไม่มีรายการชำระเงิน</div>
           )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Admin Login Gate ──────────────────────────────────────────
-function AdminLoginGate({ onSuccess }: { onSuccess: () => void }) {
-  const [email, setEmail]   = useState('')
-  const [pw, setPw]         = useState('')
-  const [error, setError]   = useState('')
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (email === ADMIN_EMAIL && pw === ADMIN_PASSWORD) {
-      localStorage.setItem('flowpdpa_admin', '1')
-      onSuccess()
-    } else {
-      setError('Invalid admin credentials')
-    }
-  }
-
-  return (
-    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--navy)' }}>
-      <div
-        className="w-full max-w-sm rounded-2xl p-8"
-        style={{ backgroundColor: '#0f1f38', border: '1px solid rgba(255,255,255,0.07)', boxShadow: '0 32px 64px -12px rgba(0,0,0,0.5)' }}
-      >
-        <div
-          className="w-12 h-12 rounded-xl flex items-center justify-center mb-6"
-          style={{ backgroundColor: 'rgba(220,38,38,0.15)' }}
-        >
-          <ShieldAlert className="w-6 h-6 text-red-400" />
-        </div>
-        <h1 className="text-xl font-black text-white mb-1">Admin Access</h1>
-        <p className="text-sm mb-7" style={{ color: '#64748b' }}>FlowPDPA Backoffice — restricted area</p>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {['email', 'password'].map(field => (
-            <div key={field}>
-              <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: '#64748b' }}>
-                {field === 'email' ? 'Admin Email' : 'Password'}
-              </label>
-              <input
-                type={field === 'password' ? 'password' : 'email'}
-                required
-                placeholder={field === 'email' ? 'admin@flowpdpa.co.th' : '••••••••'}
-                value={field === 'email' ? email : pw}
-                onChange={e => { field === 'email' ? setEmail(e.target.value) : setPw(e.target.value); setError('') }}
-                className="w-full rounded-lg px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none transition-colors"
-                style={{ backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
-                onFocus={e => (e.currentTarget.style.borderColor = '#dc2626')}
-                onBlur={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)')}
-              />
+        </section>
+        <section className="portal-panel">
+          <div className="portal-panel-head">
+            <div>
+              <h2 className="text-sm font-semibold">รายการที่ต้องดำเนินการ</h2>
+              <p className="text-xs text-gray-400 mt-1">
+                Operational items needing action
+              </p>
             </div>
-          ))}
-
-          {error && (
-            <div className="text-xs px-3 py-2.5 rounded-lg" style={{ backgroundColor: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}>
-              {error}
-            </div>
-          )}
-
-          <button type="submit" className="w-full py-3 rounded-lg text-sm font-bold text-white transition-colors" style={{ backgroundColor: '#dc2626' }}
-            onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#b91c1c')}
-            onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#dc2626')}
-          >
-            Access Backoffice
-          </button>
-        </form>
-
-        <div className="mt-5 px-3 py-2.5 rounded-lg text-xs" style={{ backgroundColor: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.15)' }}>
-          <p className="font-semibold text-red-400 mb-0.5">Demo Credentials</p>
-          <p style={{ color: '#475569' }}>Email: <span className="text-white">admin@flowpdpa.co.th</span></p>
-          <p style={{ color: '#475569' }}>Pass: <span className="text-white">admin2025</span></p>
-        </div>
-
-        <div className="mt-6 text-center">
-          <Link to="/" className="text-xs transition-colors" style={{ color: '#334155' }}
-            onMouseEnter={e => (e.currentTarget.style.color = '#64748b')}
-            onMouseLeave={e => (e.currentTarget.style.color = '#334155')}
-          >
-            ← Back to FlowPDPA
-          </Link>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Sidebar nav ───────────────────────────────────────────────
-const navItems: { key: AdminView; label: string; Icon: React.ElementType }[] = [
-  { key: 'overview',       label: 'Overview',       Icon: LayoutDashboard },
-  { key: 'merchants',      label: 'Merchants',       Icon: Users           },
-  { key: 'subscriptions',  label: 'Subscriptions',   Icon: FileText        },
-  { key: 'payments',       label: 'Payments',        Icon: CreditCard      },
-  { key: 'monitoring',     label: 'Monitoring',      Icon: Activity        },
-  { key: 'analytics',      label: 'Analytics',       Icon: BarChart3       },
-]
-
-// ── Main Admin ────────────────────────────────────────────────
-export default function Admin() {
-  const navigate          = useNavigate()
-  const [authed, setAuthed]           = useState(false)
-  const [view, setView]               = useState<AdminView>('overview')
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [loading, setLoading]         = useState(true)
-
-  useEffect(() => {
-    const ok = localStorage.getItem('flowpdpa_admin') === '1'
-    setAuthed(ok)
-    setLoading(false)
-  }, [])
-
-  function handleLogout() {
-    localStorage.removeItem('flowpdpa_admin')
-    navigate('/')
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--navy)' }}>
-        <Loader className="w-6 h-6 animate-spin text-gray-500" />
-      </div>
-    )
-  }
-
-  if (!authed) return <AdminLoginGate onSuccess={() => setAuthed(true)} />
-
-  const pending = mockPayments.filter(p => p.status === 'pending').length
-  const errors  = mockErrorLogs.filter(l => l.level === 'critical').length
-
-  return (
-    <div className="min-h-screen flex" style={{ backgroundColor: '#f8fafc' }}>
-
-      {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 z-20 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />
-      )}
-
-      {/* Sidebar */}
-      <aside
-        className={`fixed top-0 left-0 h-full z-30 flex flex-col transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}
-        style={{ width: '240px', backgroundColor: 'var(--navy)', borderRight: '1px solid rgba(255,255,255,0.06)' }}
-      >
-        {/* Logo */}
-        <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-          <div>
-            <div className="flex items-center gap-0.5">
-              <span className="font-black text-base text-white tracking-tight">Flow</span>
-              <span className="font-black text-base tracking-tight" style={{ color: 'var(--green)' }}>PDPA</span>
-            </div>
-            <span
-              className="text-xs font-bold px-2 py-0.5 rounded mt-1 inline-block"
-              style={{ backgroundColor: 'rgba(220,38,38,0.2)', color: '#f87171' }}
-            >
-              Admin
-            </span>
           </div>
-          <button className="lg:hidden text-gray-500 hover:text-white" onClick={() => setSidebarOpen(false)}>
+          <div className="divide-y divide-gray-100">
+            {[
+              {
+                label: "Pending payments",
+                value: overview.kpi.pendingPayments,
+                Icon: CreditCard,
+                view: "payments" as const,
+              },
+              {
+                label: "Active system errors",
+                value: overview.kpi.activeErrors,
+                Icon: AlertTriangle,
+                view: "logs" as const,
+              },
+              {
+                label: "Unassigned legal reviews",
+                value: overview.kpi.unassignedLegalReviews,
+                Icon: Users,
+                view: "policies" as const,
+              },
+            ].map((item) => (
+              <button
+                key={item.label}
+                className="w-full p-5 flex items-center justify-between text-left hover:bg-gray-50"
+                onClick={() => change(item.view)}
+              >
+                <span className="flex items-center gap-3 text-sm">
+                  <item.Icon className="w-4 h-4 text-gray-400" />
+                  {item.label}
+                </span>
+                <span className="font-semibold">{item.value}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      </div>
+    </>
+  );
+}
+
+const emptyMerchantDraft = {
+  name: "",
+  email: "",
+  password: "",
+  companyName: "",
+  phone: "",
+  website: "",
+  status: "active" as MerchantStatus,
+  plan: "Free",
+};
+type MerchantDraft = typeof emptyMerchantDraft;
+
+function MerchantFormModal({
+  title,
+  draft,
+  setDraft,
+  close,
+  submit,
+  submitLabel,
+  requirePassword = false,
+}: {
+  title: string;
+  draft: MerchantDraft;
+  setDraft: React.Dispatch<React.SetStateAction<MerchantDraft>>;
+  close: () => void;
+  submit: () => void;
+  submitLabel: string;
+  requirePassword?: boolean;
+}) {
+  const fields = [
+    "name",
+    "email",
+    "companyName",
+    "phone",
+    "website",
+    "password",
+  ] as const;
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/30 p-4">
+      <section className="portal-panel w-full max-w-lg">
+        <div className="portal-panel-head">
+          <h2 className="text-sm font-semibold">{title}</h2>
+          <button
+            className="portal-button px-2"
+            onClick={close}
+            aria-label="ปิด"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>
-
-        {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          {navItems.map(({ key, label, Icon }) => {
-            const active = view === key
-            const badge = key === 'payments' && pending > 0 ? pending
-                        : key === 'monitoring' && errors > 0 ? errors
-                        : null
-            return (
-              <button
-                key={key}
-                onClick={() => { setView(key); setSidebarOpen(false) }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left"
-                style={{
-                  backgroundColor: active ? 'rgba(220,38,38,0.15)' : 'transparent',
-                  color: active ? '#f87171' : '#475569',
-                }}
-                onMouseEnter={e => { if (!active) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.04)' }}
-                onMouseLeave={e => { if (!active) e.currentTarget.style.backgroundColor = 'transparent' }}
-              >
-                <Icon className="w-4 h-4 shrink-0" />
-                <span className="flex-1">{label}</span>
-                {badge !== null && (
-                  <span
-                    className="text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center"
-                    style={{ backgroundColor: 'rgba(220,38,38,0.25)', color: '#f87171' }}
-                  >
-                    {badge}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </nav>
-
-        {/* Bottom */}
-        <div className="px-3 py-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          <div className="flex items-center gap-3 px-3 py-2.5 mb-1">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0" style={{ backgroundColor: '#dc2626' }}>
-              A
-            </div>
-            <div className="overflow-hidden">
-              <div className="text-xs font-semibold text-white truncate">Admin</div>
-              <div className="text-xs truncate" style={{ color: '#334155' }}>admin@flowpdpa.co.th</div>
-            </div>
-          </div>
+        <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
+          {fields.map((field) => (
+            <label
+              className={`block text-xs font-semibold text-gray-600 ${field === "website" || field === "password" ? "sm:col-span-2" : ""}`}
+              key={field}
+            >
+              {field === "companyName"
+                ? "Company name"
+                : field === "password" && !requirePassword
+                  ? "New password (optional)"
+                  : field}
+              <input
+                required={
+                  field === "name" ||
+                  field === "email" ||
+                  (field === "password" && requirePassword)
+                }
+                minLength={field === "password" ? 8 : undefined}
+                className="mt-2 h-10 w-full rounded border border-gray-300 px-3 text-sm font-normal"
+                type={
+                  field === "password"
+                    ? "password"
+                    : field === "email"
+                      ? "email"
+                      : field === "website"
+                        ? "url"
+                        : "text"
+                }
+                value={draft[field]}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    [field]: event.target.value,
+                  }))
+                }
+              />
+            </label>
+          ))}
+          {!requirePassword ? (
+            <>
+              <label className="block text-xs font-semibold text-gray-600">
+                Status
+                <select
+                  className="mt-2 h-10 w-full rounded border border-gray-300 px-3 text-sm font-normal"
+                  value={draft.status}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      status: event.target.value as MerchantStatus,
+                    }))
+                  }
+                >
+                  {(["active", "pending", "suspended", "inactive"] as const).map(
+                    (value) => (
+                      <option key={value}>{value}</option>
+                    ),
+                  )}
+                </select>
+              </label>
+              <label className="block text-xs font-semibold text-gray-600">
+                Plan
+                <input
+                  className="mt-2 h-10 w-full rounded border border-gray-300 px-3 text-sm font-normal"
+                  value={draft.plan}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      plan: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+            </>
+          ) : null}
           <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
-            style={{ color: '#475569' }}
-            onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = '#ef4444' }}
-            onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#475569' }}
+            className="portal-button primary sm:col-span-2"
+            onClick={submit}
           >
-            <LogOut className="w-4 h-4 shrink-0" /> Logout
+            {submitLabel}
           </button>
         </div>
-      </aside>
+      </section>
+    </div>
+  );
+}
 
-      {/* Main */}
-      <div className="flex-1 flex flex-col min-w-0 lg:ml-60">
+function MerchantView({
+  rows,
+  setRows,
+  viewPolicies,
+}: {
+  rows: Merchant[];
+  setRows: React.Dispatch<React.SetStateAction<Merchant[]>>;
+  viewPolicies: (merchant: Merchant) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | MerchantStatus>(
+    "all",
+  );
+  const [error, setError] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [draft, setDraft] = useState(emptyMerchantDraft);
+  const [editing, setEditing] = useState<Merchant | null>(null);
+  const [editDraft, setEditDraft] = useState(emptyMerchantDraft);
+  const [deleting, setDeleting] = useState<Merchant | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const visible = rows.filter((row) => {
+    const matchesQuery = `${row.id} ${row.name} ${row.email} ${row.companyName || ""}`
+      .toLowerCase()
+      .includes(query.toLowerCase());
+    return (
+      matchesQuery && (statusFilter === "all" || row.status === statusFilter)
+    );
+  });
+  const pagination = usePagination(visible);
+  const refresh = async () => {
+    const response = await api.admin.listMerchants({
+      status: statusFilter === "all" ? undefined : statusFilter,
+      search: query || undefined,
+      limit: 200,
+    });
+    if (response.success && response.data) setRows(response.data.merchants);
+  };
+  const updateStatus = async (id: string, status: MerchantStatus) => {
+    setError("");
+    const response = await api.admin.updateMerchantStatus(id, status);
+    if (!response.success) {
+      setError(response.error?.message || "Unable to update merchant status.");
+      return;
+    }
+    setRows((current) =>
+      current.map((row) => (row.id === id ? { ...row, status } : row)),
+    );
+  };
+  const create = async () => {
+    if (
+      !draft.name.trim() ||
+      !draft.email.trim() ||
+      draft.password.length < 8
+    ) {
+      setError(
+        "Name, email, and a password of at least 8 characters are required.",
+      );
+      return;
+    }
+    setError("");
+    const response = await api.admin.createMerchant({
+      ...draft,
+      name: draft.name.trim(),
+      email: draft.email.trim().toLowerCase(),
+    });
+    if (!response.success) {
+      setError(response.error?.message || "Unable to create merchant.");
+      return;
+    }
+    setDraft(emptyMerchantDraft);
+    setCreating(false);
+    await refresh();
+  };
+  const startEdit = (row: Merchant) => {
+    setEditing(row);
+    setError("");
+    setEditDraft({
+      name: row.name,
+      email: row.email,
+      password: "",
+      companyName: row.companyName || "",
+      phone: row.phone || "",
+      website: "",
+      status: row.status,
+      plan: "Free",
+    });
+  };
+  const saveEdit = async () => {
+    if (!editing || !editDraft.name.trim() || !editDraft.email.trim()) return;
+    const { password, ...fields } = editDraft;
+    const response = await api.admin.updateMerchant(editing.id, {
+      ...fields,
+      ...(password ? { password } : {}),
+    });
+    if (!response.success || !response.data) {
+      setError(response.error?.message || "Unable to update merchant.");
+      return;
+    }
+    setRows((current) =>
+      current.map((row) =>
+        row.id === editing.id ? { ...row, ...response.data?.merchant } : row,
+      ),
+    );
+    setEditing(null);
+  };
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    setDeleteLoading(true);
+    setError("");
+    const response = await api.admin.deleteMerchant(deleting.id);
+    setDeleteLoading(false);
+    if (!response.success) {
+      setError(response.error?.message || "Unable to delete merchant.");
+      return;
+    }
+    setRows((current) => current.filter((row) => row.id !== deleting.id));
+    setDeleting(null);
+  };
+  return (
+    <>
+      <PageTitle
+        eyebrow="การจัดการบัญชี"
+        title="ผู้ประกอบการ"
+        description="ค้นหาบัญชีและควบคุมสิทธิ์การเข้าใช้แพลตฟอร์ม"
+        action={
+          <button
+            className="portal-button primary"
+            onClick={() => setCreating(true)}
+          >
+            <Plus className="w-4 h-4" />
+            Create merchant
+          </button>
+        }
+      />
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <SearchBox
+          value={query}
+          setValue={setQuery}
+          placeholder="ค้นหาผู้ประกอบการ"
+        />
+        <select
+          className="portal-filter h-9"
+          value={statusFilter}
+          onChange={(event) =>
+            setStatusFilter(event.target.value as "all" | MerchantStatus)
+          }
+        >
+          <option value="all">ทุกสถานะ</option>
+          {(["active", "pending", "suspended", "inactive"] as const).map(
+            (value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ),
+          )}
+        </select>
+      </div>
+      {error && (
+        <p className="mb-4 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {error}
+        </p>
+      )}
+      <section className="portal-panel">
+        <div className="portal-table-wrap">
+          <table className="portal-table">
+            <thead>
+              <tr>
+                <th>ผู้ประกอบการ</th>
+                <th>บริษัท</th>
+                <th>นโยบาย</th>
+                <th>สมาชิกที่ใช้งานอยู่</th>
+                <th>วันที่สมัคร</th>
+                <th>เข้าสู่ระบบล่าสุด</th>
+                <th>สถานะ</th>
+                <th>จัดการ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pagination.pageRows.map((row) => (
+                <tr key={row.id}>
+                  <td>
+                    <p className="font-semibold">{row.name}</p>
+                    <p className="text-xs text-gray-400">{row.email}</p>
+                    <div className="mt-1 flex items-center gap-1 text-[11px] text-gray-500">
+                      <span className="shrink-0">รหัส:</span>
+                      <code className="select-all break-all">{row.id}</code>
+                      <button
+                        type="button"
+                        className="shrink-0 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-emerald-700"
+                        title="คัดลอก Merchant ID"
+                        aria-label={`คัดลอก Merchant ID ของ ${row.name}`}
+                        onClick={() => {
+                          void navigator.clipboard.writeText(row.id).catch(() => {
+                            setError("ไม่สามารถคัดลอก Merchant ID ได้");
+                          });
+                        }}
+                      >
+                        <ClipboardCopy className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                  <td>{row.companyName || "-"}</td>
+                  <td>
+                    <button
+                      type="button"
+                      className="font-semibold text-emerald-700 underline-offset-2 hover:underline disabled:cursor-default disabled:text-gray-400 disabled:no-underline"
+                      disabled={row.policyCount === 0}
+                      onClick={() => viewPolicies(row)}
+                      title={row.policyCount === 0 ? "ผู้ประกอบการรายนี้ยังไม่มีเอกสาร" : `ดูเอกสารของ ${row.name}`}
+                    >
+                      {row.policyCount}
+                    </button>
+                  </td>
+                  <td>{row.activeSubscriptions}</td>
+                  <td>{formatDate(row.createdAt)}</td>
+                  <td>{formatDate(row.lastLoginAt)}</td>
+                  <td>
+                    <Badge value={row.status} />
+                  </td>
+                  <td>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        className="portal-button"
+                        disabled={row.policyCount === 0}
+                        onClick={() => viewPolicies(row)}
+                        title={row.policyCount === 0 ? "ผู้ประกอบการรายนี้ยังไม่มีเอกสาร" : undefined}
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        ดูเอกสาร
+                      </button>
+                      <button
+                        className="portal-button"
+                        onClick={() => startEdit(row)}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        Edit
+                      </button>
+                      <select
+                        className="portal-filter"
+                        value={row.status}
+                        onChange={(event) =>
+                          void updateStatus(
+                            row.id,
+                            event.target.value as MerchantStatus,
+                          )
+                        }
+                      >
+                        {["active", "pending", "suspended", "inactive"].map(
+                          (value) => (
+                            <option key={value}>{value}</option>
+                          ),
+                        )}
+                      </select>
+                      <button
+                        className="portal-button text-red-700"
+                        onClick={() => setDeleting(row)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <Pagination {...pagination} total={visible.length} />
+      </section>
+      {creating && (
+        <MerchantFormModal
+          title="สร้างผู้ประกอบการ"
+          draft={draft}
+          setDraft={setDraft}
+          close={() => setCreating(false)}
+          submit={() => void create()}
+          submitLabel="Create account"
+          requirePassword
+        />
+      )}
+      {editing && (
+        <MerchantFormModal
+          title="แก้ไขผู้ประกอบการ"
+          draft={editDraft}
+          setDraft={setEditDraft}
+          close={() => setEditing(null)}
+          submit={() => void saveEdit()}
+          submitLabel="Save changes"
+        />
+      )}
+      <ConfirmDialog
+        open={Boolean(deleting)}
+        title="ลบผู้ประกอบการหรือไม่"
+        description={`ระบบจะปิดใช้งาน ${deleting?.name || "ผู้ประกอบการรายนี้"} และเก็บนโยบายสาธารณะทั้งหมดเป็นรายการถาวร โดยยังคงประวัติการชำระเงินไว้เพื่อตรวจสอบ`}
+        confirmLabel="ลบผู้ประกอบการ"
+        tone="destructive"
+        loading={deleteLoading}
+        onConfirm={() => void confirmDelete()}
+        onCancel={() => setDeleting(null)}
+      />
+    </>
+  );
+}
 
-        {/* Top bar */}
-        <header className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 bg-white" style={{ borderBottom: '1px solid #e5e7eb' }}>
-          <div className="flex items-center gap-3">
+const policyHistoryLabels: Record<string, string> = {
+  merchant_submitted_to_legal: "ลูกค้าส่งเอกสารให้ฝ่ายกฎหมาย",
+  merchant_change_requested: "ลูกค้าส่งคำขอแก้ไข",
+  legal_submitted_to_admin: "ฝ่ายกฎหมายตรวจและส่งให้ Admin",
+  admin_changes_requested: "Admin ส่งกลับให้ฝ่ายกฎหมายแก้ไข",
+  admin_approved: "Admin อนุมัติเอกสาร",
+  legal_document_updated: "ฝ่ายกฎหมายแก้ไขเอกสาร",
+};
+
+function actorLabel(actor: AdminPolicyHistoryEvent["actor"]) {
+  if (!actor) return "ระบบ";
+  return actor.name || actor.email || actor.role || "ระบบ";
+}
+
+function PolicyHistoryModal({
+  policyName,
+  events,
+  loading,
+  close,
+}: {
+  policyName: string;
+  events: AdminPolicyHistoryEvent[];
+  loading: boolean;
+  close: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-3 sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label="ประวัติเอกสาร"
+    >
+      <section className="portal-panel flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden">
+        <header className="portal-panel-head shrink-0">
+          <div>
+            <p className="text-sm font-semibold">ประวัติเอกสาร</p>
+            <p className="mt-1 text-xs text-gray-400">{policyName}</p>
+          </div>
+          <button type="button" className="portal-button px-2" onClick={close} aria-label="ปิดประวัติเอกสาร">
+            <X className="h-4 w-4" />
+          </button>
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+          {loading ? (
+            <div className="portal-empty">กำลังโหลดประวัติ...</div>
+          ) : events.length === 0 ? (
+            <div className="portal-empty">ยังไม่มีประวัติสำหรับเอกสารนี้</div>
+          ) : (
+            <ol className="space-y-0">
+              {events.map((event, index) => (
+                <li key={event.id} className="relative grid grid-cols-[20px_1fr] gap-3 pb-6 last:pb-0">
+                  {index < events.length - 1 ? (
+                    <span className="absolute left-[9px] top-5 h-full w-px bg-gray-200" />
+                  ) : null}
+                  <span className="relative mt-1.5 h-5 w-5 rounded-full border-4 border-emerald-100 bg-emerald-600" />
+                  <article className="rounded border border-gray-200 bg-white p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <p className="text-sm font-semibold text-gray-900">
+                        {policyHistoryLabels[event.type] || event.description}
+                      </p>
+                      <time className="text-[11px] text-gray-400">{formatDate(event.createdAt)}</time>
+                    </div>
+                    <p className="mt-2 text-xs text-gray-600">
+                      ดำเนินการโดย <span className="font-semibold">{actorLabel(event.actor)}</span>
+                    </p>
+                    {(event.from?.role || event.to?.role) ? (
+                      <p className="mt-1 text-xs text-gray-500">
+                        {event.from?.role || "-"} → {event.to?.role || "-"}
+                      </p>
+                    ) : null}
+                    {event.relatedField ? (
+                      <p className="mt-1 text-xs text-gray-500">หัวข้อ: {event.relatedField}</p>
+                    ) : null}
+                    {event.description && policyHistoryLabels[event.type] ? (
+                      <p className="mt-2 whitespace-pre-wrap text-xs text-gray-600">{event.description}</p>
+                    ) : null}
+                    {event.comment ? (
+                      <p className="mt-2 rounded bg-gray-50 px-3 py-2 text-xs text-gray-600">{event.comment}</p>
+                    ) : null}
+                  </article>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function PolicyView({
+  rows,
+  legalUsers,
+  setRows,
+  merchantFilter,
+  setMerchantFilter,
+  clearMerchantFilter,
+}: {
+  rows: Policy[];
+  legalUsers: LegalUser[];
+  setRows: React.Dispatch<React.SetStateAction<Policy[]>>;
+  merchantFilter: { id: string; name: string } | null;
+  setMerchantFilter: (merchant: { id: string; name: string } | null) => void;
+  clearMerchantFilter: () => void;
+}) {
+  const [filter, setFilter] = useState<"all" | PolicyStatus>("all");
+  const [query, setQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [error, setError] = useState("");
+  const [selectedPolicy, setSelectedPolicy] =
+    useState<AdminPolicyDetail | null>(null);
+  const [contentOpen, setContentOpen] = useState(false);
+  const [contentLoading, setContentLoading] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyPolicyName, setHistoryPolicyName] = useState("");
+  const [historyEvents, setHistoryEvents] = useState<AdminPolicyHistoryEvent[]>([]);
+  const merchantOptions = useMemo(() => {
+    const merchants = new Map<
+      string,
+      { id: string; name: string; email: string }
+    >();
+    rows.forEach((row) => {
+      if (row.merchantId) {
+        merchants.set(row.merchantId, {
+          id: row.merchantId,
+          name: row.merchantName || row.merchantEmail || row.merchantId,
+          email: row.merchantEmail || "",
+        });
+      }
+    });
+    return Array.from(merchants.values()).sort((a, b) =>
+      a.name.localeCompare(b.name, "th"),
+    );
+  }, [rows]);
+  const visible = rows.filter((row) => {
+    const matchesQuery =
+      `${row.websiteName} ${row.slug} ${row.merchantName || ""} ${row.merchantEmail || ""}`
+        .toLowerCase()
+        .includes(query.trim().toLowerCase());
+    return (
+      matchesQuery &&
+      (!merchantFilter || row.merchantId === merchantFilter.id) &&
+      (filter === "all" || row.status === filter) &&
+      (typeFilter === "all" || row.type === typeFilter)
+    );
+  });
+  const pagination = usePagination(visible);
+  const assign = async (id: string, legalId: string) => {
+    if (!legalId) return;
+    setError("");
+    const response = await api.admin.assignLegal(id, legalId);
+    if (!response.success) {
+      setError(response.error?.message || "Unable to assign legal reviewer.");
+      return;
+    }
+    setRows((current) =>
+      current.map((row) =>
+        row.id === id ? { ...row, assignedLegalUserId: legalId } : row,
+      ),
+    );
+  };
+  const openContent = async (policyId: string) => {
+    setSelectedPolicy(null);
+    setContentOpen(true);
+    setContentLoading(true);
+    setError("");
+    const response = await api.admin.getPolicy(policyId);
+    setContentLoading(false);
+    if (!response.success || !response.data) {
+      setError(response.error?.message || "Unable to load policy content.");
+      return;
+    }
+    setSelectedPolicy(response.data.policy);
+  };
+  const openHistory = async (row: Policy) => {
+    setHistoryPolicyName(row.websiteName);
+    setHistoryEvents([]);
+    setHistoryOpen(true);
+    setHistoryLoading(true);
+    setError("");
+    const response = await api.admin.getPolicyHistory(row.id);
+    setHistoryLoading(false);
+    if (!response.success || !response.data) {
+      setError(response.error?.message || "ไม่สามารถโหลดประวัติเอกสารได้");
+      return;
+    }
+    setHistoryEvents(response.data.events);
+  };
+  return (
+    <>
+      <PageTitle
+        eyebrow="การดำเนินงานด้านนโยบาย"
+        title={merchantFilter ? `เอกสารของ ${merchantFilter.name}` : "นโยบายทั้งหมด"}
+        description="ตรวจสอบสถานะกระบวนการและปรับการมอบหมายฝ่ายกฎหมายได้"
+      />
+      {merchantFilter ? (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
+          <span>กำลังแสดงเฉพาะเอกสารของ <strong>{merchantFilter.name}</strong></span>
+          <button type="button" className="portal-button bg-white" onClick={clearMerchantFilter}>
+            แสดงทั้งหมด
+          </button>
+        </div>
+      ) : null}
+      <div className="mb-3 grid gap-2 md:grid-cols-[minmax(280px,1fr)_minmax(210px,280px)_minmax(160px,220px)]">
+        <SearchBox
+          value={query}
+          setValue={setQuery}
+          placeholder="ค้นหาชื่อเว็บไซต์, slug หรือผู้ประกอบการ"
+        />
+        <MerchantFilterPicker
+          options={merchantOptions}
+          selected={merchantFilter}
+          onChange={setMerchantFilter}
+        />
+        <select
+          className="portal-filter h-9 w-full"
+          value={typeFilter}
+          onChange={(event) => setTypeFilter(event.target.value)}
+          aria-label="กรองตามประเภทเอกสาร"
+        >
+          <option value="all">ประเภทเอกสารทั้งหมด</option>
+          {Array.from(new Set(rows.map((row) => row.type))).map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        {(
+          [
+            "all",
+            "pending_review",
+            "approved",
+            "edited",
+            "rejected",
+            "archived",
+          ] as const
+        ).map((value) => (
+          <button
+            key={value}
+            className="portal-filter"
+            data-active={filter === value}
+            onClick={() => setFilter(value)}
+          >
+            {value.replaceAll("_", " ")}
+          </button>
+        ))}
+      </div>
+      {error && (
+        <p className="mb-4 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {error}
+        </p>
+      )}
+      <section className="portal-panel">
+        <div className="portal-table-wrap">
+          <table className="portal-table">
+            <thead>
+              <tr>
+                <th>เว็บไซต์ / นโยบาย</th>
+                <th>ผู้ประกอบการ</th>
+                <th>ภาษา</th>
+                <th>สถานะ</th>
+                <th>ผู้ตรวจสอบฝ่ายกฎหมาย</th>
+                <th>แก้ไขล่าสุด</th>
+                <th>จัดการ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pagination.pageRows.map((row) => (
+                <tr key={row.id}>
+                  <td>
+                    <p className="font-semibold">{row.websiteName}</p>
+                    <p className="text-xs text-gray-400">{row.slug}</p>
+                  </td>
+                  <td>{row.merchantName || "-"}</td>
+                  <td>{row.language.toUpperCase()}</td>
+                  <td>
+                    <Badge value={row.status} />
+                  </td>
+                  <td>
+                    <select
+                      className="portal-filter"
+                      value={row.assignedLegalUserId || ""}
+                      onChange={(event) =>
+                        void assign(row.id, event.target.value)
+                      }
+                    >
+                      <option value="" disabled>
+                        Unassigned
+                      </option>
+                      {legalUsers
+                        .filter((user) => user.status === "active")
+                        .map((user) => (
+                          <option value={user.id} key={user.id}>
+                            {user.name}
+                          </option>
+                        ))}
+                    </select>
+                  </td>
+                  <td>{formatDate(row.updatedAt)}</td>
+                  <td>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="portal-button"
+                        onClick={() => void openContent(row.id)}
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        ดูเอกสาร
+                      </button>
+                      <button
+                        type="button"
+                        className="portal-button"
+                        onClick={() => void openHistory(row)}
+                      >
+                        <Activity className="w-3.5 h-3.5" />
+                        ประวัติ
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <Pagination {...pagination} total={visible.length} />
+      </section>
+      {contentOpen && (
+        <PolicyContentModal
+          policy={selectedPolicy}
+          loading={contentLoading}
+          close={() => {
+            setContentOpen(false);
+            setSelectedPolicy(null);
+          }}
+        />
+      )}
+      {historyOpen && (
+        <PolicyHistoryModal
+          policyName={historyPolicyName}
+          events={historyEvents}
+          loading={historyLoading}
+          close={() => setHistoryOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
+function BillingView({
+  mode,
+  subscriptions,
+  payments,
+}: {
+  mode: "subscriptions" | "payments";
+  subscriptions: Subscription[];
+  payments: Payment[];
+}) {
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [paymentDetail, setPaymentDetail] = useState<AdminPaymentDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
+  const openPayment = async (paymentId: string) => {
+    setDetailLoading(true);
+    setDetailError("");
+    const response = await api.admin.getPayment(paymentId);
+    setDetailLoading(false);
+    if (response.success && response.data?.payment) {
+      setPaymentDetail(response.data.payment);
+      return;
+    }
+    setDetailError(response.error?.message ?? "ไม่สามารถโหลดรายละเอียดการชำระเงินได้");
+  };
+  const visibleSubscriptions = subscriptions.filter((row) => {
+    const matchesQuery =
+      `${row.id} ${row.merchantName || ""} ${row.merchantEmail || ""}`
+        .toLowerCase()
+        .includes(query.toLowerCase());
+    return (
+      matchesQuery &&
+      (statusFilter === "all" || row.status === statusFilter) &&
+      (typeFilter === "all" || row.plan === typeFilter)
+    );
+  });
+  const visiblePayments = payments.filter((row) => {
+    const matchesQuery =
+      `${row.id} ${row.stripeInvoiceId || ""} ${row.merchantName || ""} ${row.merchantEmail || ""}`
+        .toLowerCase()
+        .includes(query.toLowerCase());
+    return (
+      matchesQuery &&
+      (statusFilter === "all" || row.status === statusFilter) &&
+      (typeFilter === "all" || row.plan === typeFilter)
+    );
+  });
+  const subscriptionPagination = usePagination(visibleSubscriptions);
+  const paymentPagination = usePagination(visiblePayments);
+  const source = mode === "subscriptions" ? subscriptions : payments;
+  const statuses = Array.from(new Set(source.map((row) => row.status)));
+  const policyTypes = Array.from(
+    new Set(
+      source
+        .map((row) => row.plan)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+  return (
+    <>
+      <PageTitle
+        eyebrow="การติดตาม Stripe"
+        title={mode === "subscriptions" ? "การสมัครสมาชิก" : "การชำระเงิน"}
+        description="ข้อมูลการเรียกเก็บเงินแบบอ่านอย่างเดียวที่ซิงก์จาก Stripe"
+      />
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <SearchBox
+          value={query}
+          setValue={setQuery}
+          placeholder={
+            mode === "subscriptions"
+              ? "ค้นหาการสมัครสมาชิก"
+              : "ค้นหาการชำระเงิน"
+          }
+        />
+        <select
+          className="portal-filter h-9"
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value)}
+        >
+          <option value="all">ทุกสถานะ</option>
+          {statuses.map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+        <select
+          className="portal-filter h-9"
+          value={typeFilter}
+          onChange={(event) => setTypeFilter(event.target.value)}
+        >
+          <option value="all">ทุกแพ็กเกจ</option>
+          {policyTypes.map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+      </div>
+      <section className="portal-panel">
+        <div className="portal-table-wrap">
+          {mode === "subscriptions" ? (
+            <table className="portal-table">
+              <thead>
+                <tr>
+                  <th>การสมัครสมาชิก</th>
+                  <th>ผู้ประกอบการ</th>
+                  <th>แพ็กเกจ / รอบบิล</th>
+                  <th>วันเริ่มรอบ</th>
+                  <th>วันสิ้นสุดรอบ</th>
+                  <th>การยกเลิก</th>
+                  <th>สถานะ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {subscriptionPagination.pageRows.map((row) => (
+                  <tr key={row.id}>
+                    <td className="font-mono text-xs" title={row.stripeSubscriptionId || row.id}>{row.stripeSubscriptionId || row.id}</td>
+                    <td>
+                      <p className="font-semibold">{row.merchantName || "-"}</p>
+                      <p className="text-xs text-gray-400">
+                        {row.merchantEmail}
+                      </p>
+                    </td>
+                    <td>
+                      <p className="font-semibold capitalize">{row.plan || "-"}</p>
+                      <p className="text-xs text-gray-400">{row.billingCycle === "annual" ? "รายปี" : row.billingCycle === "monthly" ? "รายเดือน" : "-"}</p>
+                    </td>
+                    <td>{formatDate(row.currentPeriodStart)}</td>
+                    <td>{formatDate(row.currentPeriodEnd)}</td>
+                    <td>{row.cancelAtPeriodEnd ? "At period end" : "-"}</td>
+                    <td>
+                      <Badge value={row.status} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <table className="portal-table">
+              <thead>
+                <tr>
+                  <th>ใบแจ้งหนี้</th>
+                  <th>ผู้ประกอบการ</th>
+                  <th>แพ็กเกจ / รอบบิล</th>
+                  <th>จำนวนเงิน</th>
+                  <th>วันที่ชำระ</th>
+                  <th>สถานะ</th>
+                  <th>รายละเอียด</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paymentPagination.pageRows.map((row) => (
+                  <tr key={row.id}>
+                    <td className="font-mono text-xs">
+                      {row.stripeInvoiceId || row.id}
+                    </td>
+                    <td>{row.merchantName || "-"}</td>
+                    <td>
+                      <p className="font-semibold capitalize">{row.plan || "-"}</p>
+                      <p className="text-xs text-gray-400">{row.billingCycle === "annual" ? "รายปี" : row.billingCycle === "monthly" ? "รายเดือน" : "-"}</p>
+                    </td>
+                    <td>
+                      {money(row.amountPaid)} {row.currency.toUpperCase()}
+                    </td>
+                    <td>{formatDate(row.paidAt)}</td>
+                    <td>
+                      <Badge value={row.status} />
+                    </td>
+                    <td>
+                      <button type="button" onClick={() => void openPayment(row.id)} className="portal-action-btn">
+                        <Eye className="h-3.5 w-3.5" /> ดูรายละเอียด
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        {mode === "subscriptions" ? (
+          <Pagination
+            {...subscriptionPagination}
+            total={visibleSubscriptions.length}
+          />
+        ) : (
+          <Pagination {...paymentPagination} total={visiblePayments.length} />
+        )}
+      </section>
+      {(detailLoading || detailError || paymentDetail) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4" onMouseDown={() => { if (!detailLoading) { setPaymentDetail(null); setDetailError(""); } }}>
+          <section className="max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+            <header className="sticky top-0 z-10 flex items-start justify-between border-b border-gray-200 bg-white px-6 py-5">
+              <div><p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700">Stripe invoice</p><h2 className="mt-1 text-lg font-bold text-gray-900">รายละเอียดการชำระเงิน</h2></div>
+              <button type="button" aria-label="ปิด" onClick={() => { setPaymentDetail(null); setDetailError(""); }} className="grid h-8 w-8 place-items-center rounded border border-gray-200"><X className="h-4 w-4" /></button>
+            </header>
+            {detailLoading ? <div className="grid min-h-64 place-items-center"><Loader2 className="h-6 w-6 animate-spin text-emerald-700" /></div> : detailError ? <div className="m-6 border border-red-200 bg-red-50 p-4 text-sm text-red-700">{detailError}</div> : paymentDetail ? (
+              <div className="space-y-6 p-6">
+                <div className="grid gap-px overflow-hidden rounded-lg border border-gray-200 bg-gray-200 sm:grid-cols-3">
+                  {[["ยอดรวม", `${money(paymentDetail.total)} ${paymentDetail.currency.toUpperCase()}`],["ชำระแล้ว", `${money(paymentDetail.amountPaid)} ${paymentDetail.currency.toUpperCase()}`],["ยอดคงเหลือ", `${money(paymentDetail.amountRemaining)} ${paymentDetail.currency.toUpperCase()}`]].map(([label,value]) => <div key={label} className="bg-white p-4"><p className="text-xs text-gray-400">{label}</p><p className="mt-1 text-lg font-bold text-gray-900">{value}</p></div>)}
+                </div>
+                <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
+                  {[["ผู้ประกอบการ", paymentDetail.merchantName || "-"],["อีเมล", paymentDetail.customerEmail || paymentDetail.merchantEmail || "-"],["เลข Invoice", paymentDetail.invoiceNumber || paymentDetail.stripeInvoiceId || "-"],["แพ็กเกจ", `${paymentDetail.plan || "-"} · ${paymentDetail.billingCycle === "annual" ? "รายปี" : "รายเดือน"}`],["สถานะ", paymentDetail.status],["วิธีเรียกเก็บ", paymentDetail.collectionMethod || "-"],["เริ่มรอบ", formatDate(paymentDetail.periodStart)],["สิ้นสุดรอบ", formatDate(paymentDetail.periodEnd)],["Stripe Customer", paymentDetail.stripeCustomerId || "-"],["Stripe Subscription", paymentDetail.stripeSubscriptionId || "-"]].map(([label,value]) => <div key={label}><p className="text-xs text-gray-400">{label}</p><p className="mt-1 break-all text-sm font-semibold text-gray-800">{value}</p></div>)}
+                </div>
+                <div><h3 className="mb-3 text-sm font-bold text-gray-900">รายการในใบแจ้งหนี้</h3><div className="divide-y divide-gray-100 rounded-lg border border-gray-200">{paymentDetail.lines.map((line) => <div key={line.id} className="flex items-start justify-between gap-4 p-4"><div><p className="text-sm font-semibold text-gray-800">{line.description || "รายการแพ็กเกจ"}</p><p className="mt-1 text-xs text-gray-400">จำนวน {line.quantity ?? 1} · {formatDate(line.periodStart)} – {formatDate(line.periodEnd)}</p></div><p className="shrink-0 text-sm font-bold">{money(line.amount)} {line.currency.toUpperCase()}</p></div>)}</div></div>
+                <div className="flex flex-wrap gap-2">{paymentDetail.hostedInvoiceUrl ? <a href={paymentDetail.hostedInvoiceUrl} target="_blank" rel="noreferrer" className="portal-action-btn"><ExternalLink className="h-3.5 w-3.5" /> เปิดใบแจ้งหนี้</a> : null}{paymentDetail.invoicePdf ? <a href={paymentDetail.invoicePdf} target="_blank" rel="noreferrer" className="portal-action-btn"><ExternalLink className="h-3.5 w-3.5" /> ดาวน์โหลด PDF</a> : null}</div>
+              </div>
+            ) : null}
+          </section>
+        </div>
+      )}
+    </>
+  );
+}
+
+function policyPreviewDocument(content: string) {
+  const source = /<(?:!doctype|html|body|h[1-6]|p|div|ul|ol)\b/i.test(content)
+    ? content
+    : (marked.parse(normalizePolicyMarkdown(content), {
+        async: false,
+      }) as string);
+  const parsed = new DOMParser().parseFromString(source, "text/html");
+  parsed
+    .querySelectorAll(
+      "script, iframe, object, embed, form, meta[http-equiv], base",
+    )
+    .forEach((node) => node.remove());
+  parsed.querySelectorAll("*").forEach((node) => {
+    Array.from(node.attributes).forEach((attribute) => {
+      if (
+        attribute.name.toLowerCase().startsWith("on") ||
+        /javascript:/i.test(attribute.value)
+      )
+        node.removeAttribute(attribute.name);
+    });
+  });
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src https: data:"><style>body{max-width:850px;margin:0 auto;padding:40px 48px;color:#172033;font:15px/1.75 Arial,'Noto Sans Thai',sans-serif}h1{font-size:30px}h2{font-size:22px;margin-top:32px;padding-top:18px;border-top:1px solid #dce1e8}h3{font-size:18px}a{color:#087a5b}li{margin:6px 0}blockquote{margin:18px 0;padding:12px 16px;border-left:3px solid #087a5b;background:#edf5f2}table{width:100%;border-collapse:collapse}th,td{border:1px solid #dce1e8;padding:8px;text-align:left}@media(max-width:640px){body{padding:24px 18px}}</style></head><body>${parsed.body.innerHTML}</body></html>`;
+}
+
+function PolicyContentModal({
+  policy,
+  loading,
+  close,
+}: {
+  policy: AdminPolicyDetail | null;
+  loading: boolean;
+  close: () => void;
+}) {
+  const availableLanguages = policy
+    ? (
+        [
+          ["th", policy.contentTh],
+          ["en", policy.contentEn],
+        ] as const
+      ).filter((entry): entry is readonly ["th" | "en", string] =>
+        Boolean(entry[1]),
+      )
+    : [];
+  const [language, setLanguage] = useState<"th" | "en">("th");
+  const selectedLanguage = availableLanguages.some(
+    ([value]) => value === language,
+  )
+    ? language
+    : availableLanguages[0]?.[0];
+  const content =
+    selectedLanguage === "en" ? policy?.contentEn : policy?.contentTh;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-3 sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label="เนื้อหานโยบาย"
+    >
+      <section className="portal-panel flex h-[92vh] w-full max-w-6xl flex-col overflow-hidden">
+        <header className="portal-panel-head shrink-0">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold">
+              {policy?.websiteName || "Policy content"}
+            </p>
+            <p className="mt-1 truncate text-xs text-gray-400">
+              {policy?.slug || "Loading document..."}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="portal-button px-2"
+            onClick={close}
+            aria-label="ปิดเนื้อหานโยบาย"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </header>
+        {loading ? (
+          <div className="portal-empty flex-1">กำลังโหลดเนื้อหานโยบาย...</div>
+        ) : policy ? (
+          <>
+            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-gray-200 px-5 py-3">
+              <Badge value={policy.status} />
+              <span className="text-xs text-gray-500">
+                Version {policy.version}
+              </span>
+              <span className="text-xs text-gray-300">|</span>
+              <span className="text-xs text-gray-500">
+                Reviewed {formatDate(policy.reviewedAt)}
+              </span>
+              <div className="ml-auto flex gap-2">
+                {availableLanguages.map(([value]) => (
+                  <button
+                    type="button"
+                    className="portal-filter"
+                    data-active={selectedLanguage === value}
+                    onClick={() => setLanguage(value)}
+                    key={value}
+                  >
+                    <Languages className="w-3.5 h-3.5" />
+                    {value === "th" ? "Thai" : "English"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {content ? (
+              <iframe
+                className="min-h-0 flex-1 w-full bg-white"
+                sandbox=""
+                srcDoc={policyPreviewDocument(content)}
+                title={`${policy.websiteName} ${selectedLanguage || ""} policy`}
+              />
+            ) : (
+              <div className="portal-empty flex-1">
+                No policy content is available.
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="portal-empty flex-1">
+            Unable to load policy content.
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function LegalAssignments({
+  users,
+  policies,
+}: {
+  users: LegalUser[];
+  policies: Policy[];
+}) {
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [reviewerFilter, setReviewerFilter] = useState("all");
+  const [error, setError] = useState("");
+  const [selectedPolicy, setSelectedPolicy] =
+    useState<AdminPolicyDetail | null>(null);
+  const [contentOpen, setContentOpen] = useState(false);
+  const [contentLoading, setContentLoading] = useState(false);
+  const visible = policies.filter((row) => {
+    if (!row.assignedLegalUserId) return false;
+    const reviewer = users.find((user) => user.id === row.assignedLegalUserId);
+    const matchesQuery =
+      `${row.websiteName} ${row.slug} ${row.merchantName || ""} ${reviewer?.name || ""} ${reviewer?.email || ""}`
+        .toLowerCase()
+        .includes(query.toLowerCase());
+    return (
+      matchesQuery &&
+      (statusFilter === "all" || row.status === statusFilter) &&
+      (reviewerFilter === "all" || row.assignedLegalUserId === reviewerFilter)
+    );
+  });
+  const pagination = usePagination(visible);
+  const openContent = async (policyId: string) => {
+    setSelectedPolicy(null);
+    setContentOpen(true);
+    setContentLoading(true);
+    setError("");
+    const response = await api.admin.getPolicy(policyId);
+    setContentLoading(false);
+    if (!response.success || !response.data) {
+      setError(response.error?.message || "Unable to load policy content.");
+      return;
+    }
+    setSelectedPolicy(response.data.policy);
+  };
+
+  return (
+    <>
+      <PageTitle
+        eyebrow="การดำเนินงานฝ่ายกฎหมาย"
+        title="การมอบหมายตรวจสอบ"
+        description="ติดตามนโยบายที่มอบหมายตามผู้ตรวจสอบและสถานะการตรวจสอบ"
+      />
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        {(["all", "pending_review", "approved", "rejected"] as const).map(
+          (value) => (
             <button
-              className="lg:hidden p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
-              onClick={() => setSidebarOpen(true)}
+              key={value}
+              className="portal-filter"
+              data-active={statusFilter === value}
+              onClick={() => setStatusFilter(value)}
             >
-              <Menu className="w-5 h-5" />
+              {value === "all" ? "All reviews" : value.replaceAll("_", " ")}
             </button>
-            <div>
-              <h1 className="text-sm font-bold text-gray-900 capitalize">{navItems.find(n => n.key === view)?.label}</h1>
-              <p className="text-xs text-gray-400 hidden sm:block">FlowPDPA Admin Backoffice</p>
+          ),
+        )}
+        <div className="sm:ml-auto">
+          <SearchBox
+            value={query}
+            setValue={setQuery}
+            placeholder="ค้นหานโยบายที่มอบหมาย"
+          />
+        </div>
+        <select
+          className="portal-filter h-9"
+          value={reviewerFilter}
+          onChange={(event) => setReviewerFilter(event.target.value)}
+          aria-label="กรองตามผู้ตรวจสอบฝ่ายกฎหมาย"
+        >
+          <option value="all">ผู้ตรวจสอบฝ่ายกฎหมายทั้งหมด</option>
+          {users.map((user) => (
+            <option value={user.id} key={user.id}>
+              {user.name} ({user.email})
+            </option>
+          ))}
+        </select>
+      </div>
+      {error && (
+        <p className="mb-4 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {error}
+        </p>
+      )}
+      <section className="portal-panel">
+        <div className="portal-table-wrap">
+          <table className="portal-table">
+            <thead>
+              <tr>
+                <th>นโยบาย</th>
+                <th>ผู้ตรวจสอบฝ่ายกฎหมาย</th>
+                <th>ผู้ประกอบการ</th>
+                <th>สถานะ</th>
+                <th>กำหนดส่ง</th>
+                <th>เนื้อหา</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pagination.pageRows.map((row) => {
+                const reviewer = users.find(
+                  (user) => user.id === row.assignedLegalUserId,
+                );
+                return (
+                  <tr key={row.id}>
+                    <td>
+                      <p className="font-semibold">{row.websiteName}</p>
+                      <p className="text-xs text-gray-400">{row.slug}</p>
+                    </td>
+                    <td>
+                      <p className="font-semibold">
+                        {reviewer?.name || "Unknown reviewer"}
+                      </p>
+                      <p className="text-xs text-gray-400">{reviewer?.email}</p>
+                    </td>
+                    <td>{row.merchantName || row.merchantEmail || "-"}</td>
+                    <td>
+                      <Badge value={row.status} />
+                    </td>
+                    <td>{formatDate(row.approvalDeadline)}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="portal-button"
+                        onClick={() => void openContent(row.id)}
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <Pagination {...pagination} total={visible.length} />
+      </section>
+      {contentOpen && (
+        <PolicyContentModal
+          policy={selectedPolicy}
+          loading={contentLoading}
+          close={() => {
+            setContentOpen(false);
+            setSelectedPolicy(null);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function AdminReviewQueue() {
+  const [items, setItems] = useState<AdminPolicyReviewItem[]>([]);
+  const [comments, setComments] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [selectedPolicy, setSelectedPolicy] =
+    useState<AdminPolicyDetail | null>(null);
+  const [contentOpen, setContentOpen] = useState(false);
+  const [contentLoading, setContentLoading] = useState(false);
+
+  const loadQueue = async () => {
+    setLoading(true);
+    const response = await api.admin.listAdminReviewQueue();
+    setLoading(false);
+    if (!response.success || !response.data) {
+      setError(response.error?.message || "ไม่สามารถโหลดคิวตรวจซ้ำได้");
+      return;
+    }
+    setItems(response.data.items);
+    setError("");
+  };
+
+  useEffect(() => {
+    void loadQueue();
+  }, []);
+
+  const openContent = async (policyId: string) => {
+    setSelectedPolicy(null);
+    setContentOpen(true);
+    setContentLoading(true);
+    const response = await api.admin.getPolicy(policyId);
+    setContentLoading(false);
+    if (response.success && response.data) {
+      setSelectedPolicy(response.data.policy);
+    } else {
+      setError(response.error?.message || "ไม่สามารถเปิดเอกสารได้");
+    }
+  };
+
+  const decide = async (
+    item: AdminPolicyReviewItem,
+    status: "approved" | "changes_requested",
+  ) => {
+    const comment = comments[item.id]?.trim() || "";
+    if (status === "changes_requested" && !comment) {
+      setError("กรุณาระบุสิ่งที่ Legal ต้องแก้ไขก่อนส่งกลับ");
+      return;
+    }
+    setSavingId(item.id);
+    setError("");
+    const response = await api.admin.decideAdminPolicyReview(
+      item.id,
+      status,
+      comment,
+    );
+    setSavingId(null);
+    if (!response.success) {
+      setError(response.error?.message || "ไม่สามารถบันทึกผลตรวจได้");
+      return;
+    }
+    setItems((current) => current.filter((row) => row.id !== item.id));
+  };
+
+  return (
+    <>
+      <PageTitle
+        eyebrow="ADMIN QUALITY GATE"
+        title="ตรวจซ้ำก่อนส่งเอกสารให้ลูกค้า"
+        description="ตรวจฉบับที่ Legal แก้ไข อนุมัติเพื่อส่งลูกค้า หรือตีกลับพร้อมเหตุผล"
+      />
+      <div className="mb-5 grid grid-cols-[1fr_auto_1fr_auto_1fr] items-center gap-2 rounded border border-emerald-200 bg-white p-4 text-center text-xs">
+        <span className="font-semibold text-gray-500">ลูกค้า</span>
+        <ChevronRight className="h-4 w-4 text-gray-300" />
+        <span className="font-semibold text-emerald-700">Legal ตรวจแล้ว</span>
+        <ChevronRight className="h-4 w-4 text-gray-300" />
+        <span className="rounded bg-blue-50 px-3 py-2 font-bold text-blue-700">Admin ตรวจซ้ำ</span>
+      </div>
+      {error ? (
+        <p className="mb-4 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {error}
+        </p>
+      ) : null}
+      <section className="portal-panel">
+        {loading ? (
+          <div className="portal-empty">กำลังโหลดคิวตรวจซ้ำ...</div>
+        ) : items.length === 0 ? (
+          <div className="portal-empty">ไม่มีเอกสารรอ Admin ตรวจซ้ำ</div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {items.map((item) => (
+              <article key={item.id} className="grid gap-4 p-5 lg:grid-cols-[1fr_1.2fr_auto] lg:items-center">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="font-bold text-gray-900">{item.websiteName}</h2>
+                    <Badge value={item.status} />
+                  </div>
+                  <p className="mt-1 text-xs text-gray-400">
+                    {item.slug} · Version {item.version}
+                  </p>
+                  <p className="mt-2 text-xs text-gray-600">
+                    Legal: {item.reviewedBy || "-"} · {formatDate(item.reviewedAt)}
+                  </p>
+                </div>
+                <div>
+                  <p className="mb-1 text-xs font-semibold text-gray-600">ความคิดเห็น Admin</p>
+                  <textarea
+                    className="min-h-20 w-full rounded border border-gray-300 p-2.5 text-sm"
+                    value={comments[item.id] || ""}
+                    onChange={(event) =>
+                      setComments((current) => ({
+                        ...current,
+                        [item.id]: event.target.value,
+                      }))
+                    }
+                    placeholder="ระบุเหตุผลเมื่อต้องการส่งกลับ Legal"
+                  />
+                  {item.reviewComment ? (
+                    <p className="mt-2 border-l-2 border-emerald-300 pl-2 text-xs text-gray-500">
+                      หมายเหตุจาก Legal: {item.reviewComment}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap gap-2 lg:w-48 lg:flex-col">
+                  <button
+                    type="button"
+                    className="portal-button justify-center"
+                    onClick={() => void openContent(item.id)}
+                  >
+                    <Eye className="h-3.5 w-3.5" /> ดูเอกสาร
+                  </button>
+                  <button
+                    type="button"
+                    className="portal-button primary justify-center"
+                    disabled={savingId === item.id}
+                    onClick={() => void decide(item, "approved")}
+                  >
+                    อนุมัติและส่งลูกค้า
+                  </button>
+                  <button
+                    type="button"
+                    className="portal-button danger justify-center"
+                    disabled={savingId === item.id}
+                    onClick={() => void decide(item, "changes_requested")}
+                  >
+                    ส่งกลับ Legal
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+      {contentOpen ? (
+        <PolicyContentModal
+          policy={selectedPolicy}
+          loading={contentLoading}
+          close={() => {
+            setContentOpen(false);
+            setSelectedPolicy(null);
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function LegalManagement({
+  users,
+  setUsers,
+  workload,
+  reviews,
+}: {
+  users: LegalUser[];
+  setUsers: React.Dispatch<React.SetStateAction<LegalUser[]>>;
+  workload: AdminLegalWorkload[];
+  reviews: AdminLegalReview[];
+}) {
+  const [tab, setTab] = useState<"users" | "workload" | "history">("users");
+  const [creating, setCreating] = useState(false);
+  const [draft, setDraft] = useState({
+    name: "",
+    email: "",
+    password: "",
+    phone: "",
+  });
+  const [editing, setEditing] = useState<LegalUser | null>(null);
+  const [editDraft, setEditDraft] = useState({
+    name: "",
+    email: "",
+    phone: "",
+  });
+  const [deleting, setDeleting] = useState<LegalUser | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedPolicy, setSelectedPolicy] =
+    useState<AdminPolicyDetail | null>(null);
+  const [contentOpen, setContentOpen] = useState(false);
+  const [contentLoading, setContentLoading] = useState(false);
+  const visibleUsers = users.filter(
+    (row) =>
+      `${row.name} ${row.email} ${row.phone || ""}`
+        .toLowerCase()
+        .includes(query.toLowerCase()) &&
+      (statusFilter === "all" || row.status === statusFilter),
+  );
+  const visibleWorkload = workload.filter(
+    (row) =>
+      row.name.toLowerCase().includes(query.toLowerCase()) &&
+      (statusFilter !== "overdue" || row.overdue > 0),
+  );
+  const visibleReviews = reviews.filter(
+    (row) =>
+      `${row.legalUserEmail} ${row.websiteName} ${row.policySlug} ${row.comment || ""}`
+        .toLowerCase()
+        .includes(query.toLowerCase()) &&
+      (statusFilter === "all" || row.status === statusFilter),
+  );
+  const userPagination = usePagination(visibleUsers);
+  const workloadPagination = usePagination(visibleWorkload);
+  const reviewPagination = usePagination(visibleReviews);
+  const refreshUsers = async () => {
+    const response = await api.admin.listLegalUsers();
+    if (response.success && response.data) setUsers(response.data.legalUsers);
+  };
+  const create = async () => {
+    if (!draft.name || !draft.email || draft.password.length < 8) {
+      setError(
+        "Name, email, and a password of at least 8 characters are required.",
+      );
+      return;
+    }
+    setError("");
+    const response = await api.admin.createLegalUser({
+      ...draft,
+      status: "active",
+    });
+    if (!response.success) {
+      setError(response.error?.message || "Unable to create legal user.");
+      return;
+    }
+    await refreshUsers();
+    setDraft({ name: "", email: "", password: "", phone: "" });
+    setCreating(false);
+  };
+  const startEdit = (row: LegalUser) => {
+    setError("");
+    setEditing(row);
+    setEditDraft({ name: row.name, email: row.email, phone: row.phone || "" });
+  };
+  const saveEdit = async () => {
+    if (!editing) return;
+    if (!editDraft.name.trim() || !editDraft.email.trim()) {
+      setError("Name and email are required.");
+      return;
+    }
+    setError("");
+    const response = await api.admin.updateLegalUser(editing.id, {
+      name: editDraft.name,
+      email: editDraft.email,
+      phone: editDraft.phone,
+    });
+    if (!response.success || !response.data) {
+      setError(response.error?.message || "Unable to update legal user.");
+      return;
+    }
+    setUsers((current) =>
+      current.map((row) =>
+        row.id === editing.id ? { ...row, ...response.data } : row,
+      ),
+    );
+    setEditing(null);
+  };
+  const updateStatus = async (id: string, status: LegalStatus) => {
+    setError("");
+    const response = await api.admin.updateLegalUserStatus(id, status);
+    if (!response.success) {
+      setError(response.error?.message || "Unable to update legal user.");
+      return;
+    }
+    setUsers((current) =>
+      current.map((row) => (row.id === id ? { ...row, status } : row)),
+    );
+  };
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    setDeleteLoading(true);
+    setError("");
+    const response = await api.admin.deleteLegalUser(deleting.id);
+    setDeleteLoading(false);
+    if (!response.success) {
+      setError(response.error?.message || "Unable to delete legal user.");
+      return;
+    }
+    setUsers((current) => current.filter((row) => row.id !== deleting.id));
+    setDeleting(null);
+  };
+  const openContent = async (policyId: string) => {
+    setSelectedPolicy(null);
+    setContentOpen(true);
+    setContentLoading(true);
+    setError("");
+    const response = await api.admin.getPolicy(policyId);
+    setContentLoading(false);
+    if (!response.success || !response.data) {
+      setError(response.error?.message || "Unable to load policy content.");
+      return;
+    }
+    setSelectedPolicy(response.data.policy);
+  };
+  return (
+    <>
+      <PageTitle
+        eyebrow="การจัดการฝ่ายกฎหมาย"
+        title="ทีมกฎหมาย"
+        description="จัดการผู้ตรวจสอบ ภาระงาน การมอบหมาย และประวัติการตรวจสอบ"
+        action={
+          <button
+            className="portal-button primary"
+            onClick={() => setCreating(true)}
+          >
+            <Plus className="w-4 h-4" />
+            Create legal user
+          </button>
+        }
+      />
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        {(["users", "workload", "history"] as const).map((value) => (
+          <button
+            key={value}
+            className="portal-filter"
+            data-active={tab === value}
+            onClick={() => {
+              setTab(value);
+              setStatusFilter("all");
+            }}
+          >
+            {value}
+          </button>
+        ))}
+        <div className="sm:ml-auto">
+          <SearchBox
+            value={query}
+            setValue={setQuery}
+            placeholder={
+              tab === "history" ? "Search review history" : "Search legal team"
+            }
+          />
+        </div>
+        <select
+          className="portal-filter h-9"
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value)}
+        >
+          <option value="all">
+            All{" "}
+            {tab === "history"
+              ? "actions"
+              : tab === "workload"
+                ? "workload"
+                : "statuses"}
+          </option>
+          {tab === "users" ? (
+            (["active", "suspended", "inactive"] as const).map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))
+          ) : tab === "workload" ? (
+            <option value="overdue">เฉพาะรายการเกินกำหนด</option>
+          ) : (
+            (["submitted_to_admin", "approved", "rejected", "edited"] as const).map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))
+          )}
+        </select>
+      </div>
+      {error && (
+        <p className="mb-4 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {error}
+        </p>
+      )}
+      <section className="portal-panel">
+        <div className="portal-table-wrap">
+          {tab === "users" ? (
+            <table className="portal-table">
+              <thead>
+                <tr>
+                  <th>เจ้าหน้าที่กฎหมาย</th>
+                  <th>โทรศัพท์</th>
+                  <th>รอดำเนินการ</th>
+                  <th>อนุมัติแล้ว</th>
+                  <th>ไม่อนุมัติ</th>
+                  <th>สถานะ</th>
+                  <th>จัดการ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {userPagination.pageRows.map((row) => (
+                  <tr key={row.id}>
+                    <td>
+                      <p className="font-semibold">{row.name}</p>
+                      <p className="text-xs text-gray-400">{row.email}</p>
+                    </td>
+                    <td>{row.phone || "-"}</td>
+                    <td>{row.pendingReviews}</td>
+                    <td>{row.approvedCount}</td>
+                    <td>{row.rejectedCount}</td>
+                    <td>
+                      <Badge value={row.status} />
+                    </td>
+                    <td>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          className="portal-button"
+                          onClick={() => startEdit(row)}
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          Edit
+                        </button>
+                        <select
+                          className="portal-filter"
+                          value={row.status}
+                          onChange={(event) =>
+                            void updateStatus(
+                              row.id,
+                              event.target.value as LegalStatus,
+                            )
+                          }
+                          aria-label={`อัปเดตสถานะของ ${row.name}`}
+                        >
+                          {["active", "suspended", "inactive"].map((value) => (
+                            <option key={value}>{value}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="portal-button text-red-700"
+                          onClick={() => setDeleting(row)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : tab === "workload" ? (
+            <table className="portal-table">
+              <thead>
+                <tr>
+                  <th>ผู้ตรวจสอบ</th>
+                  <th>รอดำเนินการ</th>
+                  <th>เกินกำหนด</th>
+                  <th>อนุมัติเดือนนี้</th>
+                  <th>เวลาตรวจเฉลี่ย</th>
+                  <th>ภาระงาน</th>
+                </tr>
+              </thead>
+              <tbody>
+                {workloadPagination.pageRows.map((row) => (
+                  <tr key={row.legalUserId}>
+                    <td className="font-semibold">{row.name}</td>
+                    <td>{row.pending}</td>
+                    <td>{row.overdue}</td>
+                    <td>{row.approvedThisMonth}</td>
+                    <td>{row.averageReviewHours}h</td>
+                    <td>
+                      <div className="w-32 h-1.5 bg-gray-100">
+                        <div
+                          className="h-full bg-green-700"
+                          style={{
+                            width: Math.min(100, row.pending * 12) + "%",
+                          }}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <table className="portal-table">
+              <thead>
+                <tr>
+                  <th>ผู้ตรวจสอบ</th>
+                  <th>นโยบาย</th>
+                  <th>การดำเนินการ</th>
+                  <th>ความคิดเห็น</th>
+                  <th>วันที่ตรวจสอบ</th>
+                  <th>เนื้อหา</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reviewPagination.pageRows.map((row) => (
+                  <tr key={row.reviewId}>
+                    <td>{row.legalUserEmail}</td>
+                    <td>
+                      <p className="font-semibold">{row.websiteName}</p>
+                      <p className="text-xs text-gray-400">{row.policySlug}</p>
+                    </td>
+                    <td>
+                      <Badge value={row.status} />
+                    </td>
+                    <td>{row.comment || "-"}</td>
+                    <td>{formatDate(row.reviewedAt)}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="portal-button"
+                        onClick={() => void openContent(row.policyId)}
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        {tab === "users" ? (
+          <Pagination {...userPagination} total={visibleUsers.length} />
+        ) : tab === "workload" ? (
+          <Pagination {...workloadPagination} total={visibleWorkload.length} />
+        ) : (
+          <Pagination {...reviewPagination} total={visibleReviews.length} />
+        )}
+      </section>
+      {creating && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/30 p-4">
+          <div className="portal-panel w-full max-w-md">
+            <div className="portal-panel-head">
+              <h2 className="text-sm font-semibold">สร้างเจ้าหน้าที่กฎหมาย</h2>
+              <button
+                className="portal-button px-2"
+                onClick={() => setCreating(false)}
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              {(["name", "email", "password", "phone"] as const).map(
+                (field) => (
+                  <label
+                    className="block text-xs font-semibold text-gray-600 capitalize"
+                    key={field}
+                  >
+                    {field}
+                    <input
+                      className="mt-2 w-full h-10 border border-gray-300 rounded px-3 text-sm font-normal"
+                      type={
+                        field === "password"
+                          ? "password"
+                          : field === "email"
+                            ? "email"
+                            : "text"
+                      }
+                      value={draft[field]}
+                      onChange={(event) =>
+                        setDraft((current) => ({
+                          ...current,
+                          [field]: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                ),
+              )}
+              <button
+                className="portal-button primary w-full"
+                onClick={() => void create()}
+              >
+                Create account
+              </button>
             </div>
           </div>
-          <Link
-            to="/dashboard"
-            className="text-xs font-semibold transition-colors px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
-          >
-            ← User Dashboard
-          </Link>
-        </header>
+        </div>
+      )}
+      {editing && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/30 p-4">
+          <div className="portal-panel w-full max-w-md">
+            <div className="portal-panel-head">
+              <h2 className="text-sm font-semibold">แก้ไขเจ้าหน้าที่กฎหมาย</h2>
+              <button
+                className="portal-button px-2"
+                onClick={() => setEditing(null)}
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              {(["name", "email", "phone"] as const).map((field) => (
+                <label
+                  className="block text-xs font-semibold text-gray-600 capitalize"
+                  key={field}
+                >
+                  {field}
+                  <input
+                    className="mt-2 w-full h-10 border border-gray-300 rounded px-3 text-sm font-normal"
+                    type={field === "email" ? "email" : "text"}
+                    value={editDraft[field]}
+                    onChange={(event) =>
+                      setEditDraft((current) => ({
+                        ...current,
+                        [field]: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+              ))}
+              <button
+                className="portal-button primary w-full"
+                onClick={() => void saveEdit()}
+              >
+                Save changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      <ConfirmDialog
+        open={Boolean(deleting)}
+        title="ลบเจ้าหน้าที่กฎหมายหรือไม่"
+        description={`ระบบจะปิดใช้งาน ${deleting?.name || "เจ้าหน้าที่กฎหมายรายนี้"} และมอบหมายนโยบายที่ค้างอยู่ให้ผู้อื่น`}
+        confirmLabel="ลบเจ้าหน้าที่กฎหมาย"
+        tone="destructive"
+        loading={deleteLoading}
+        onConfirm={() => void confirmDelete()}
+        onCancel={() => setDeleting(null)}
+      />
+      {contentOpen && (
+        <PolicyContentModal
+          policy={selectedPolicy}
+          loading={contentLoading}
+          close={() => {
+            setContentOpen(false);
+            setSelectedPolicy(null);
+          }}
+        />
+      )}
+    </>
+  );
+}
 
-        {/* Content */}
-        <main className="flex-1 p-6">
-          {view === 'overview'      && <Overview />}
-          {view === 'merchants'     && <MerchantsView />}
-          {view === 'subscriptions' && <SubscriptionsView />}
-          {view === 'payments'      && <PaymentsView />}
-          {view === 'monitoring'    && <MonitoringView />}
-          {view === 'analytics'     && <AnalyticsView />}
+function LogsView({ logs }: { logs: ErrorLog[] }) {
+  const [query, setQuery] = useState("");
+  const [level, setLevel] = useState("all");
+  const [service, setService] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const services = useMemo(
+    () => Array.from(new Set(logs.map((log) => log.service))).sort(),
+    [logs],
+  );
+  const visible = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase();
+    const fromTime = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : null;
+    const toTime = dateTo ? new Date(`${dateTo}T23:59:59.999`).getTime() : null;
+    return logs.filter((log) => {
+      if (level !== "all" && log.level !== level) return false;
+      if (service !== "all" && log.service !== service) return false;
+      const createdTime = log.createdAt ? new Date(log.createdAt).getTime() : null;
+      if (fromTime !== null && (createdTime === null || createdTime < fromTime)) return false;
+      if (toTime !== null && (createdTime === null || createdTime > toTime)) return false;
+      if (!normalized) return true;
+      return [
+        log.id,
+        log.service,
+        log.message,
+        log.level,
+        log.context?.method,
+        log.context?.path,
+        log.context?.relatedField,
+        log.context?.policyId,
+      ].some((value) =>
+        String(value || "")
+          .toLocaleLowerCase()
+          .includes(normalized),
+      );
+    });
+  }, [logs, query, level, service, dateFrom, dateTo]);
+  const pagination = usePagination(visible);
+  const hasFilters = Boolean(query || level !== "all" || service !== "all" || dateFrom || dateTo);
+  const clearFilters = () => {
+    setQuery("");
+    setLevel("all");
+    setService("all");
+    setDateFrom("");
+    setDateTo("");
+  };
+  return (
+    <>
+      <PageTitle
+        eyebrow="การติดตามแพลตฟอร์ม"
+        title="บันทึกระบบ"
+        description="ข้อผิดพลาด คำเตือน บริการขัดข้อง และข้อมูลสำหรับวิเคราะห์ปัญหา"
+      />
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <SearchBox
+          value={query}
+          setValue={setQuery}
+          placeholder="ค้นหาบันทึก"
+        />
+        <select
+          className="portal-filter h-9"
+          value={level}
+          onChange={(event) => setLevel(event.target.value)}
+        >
+          <option value="all">ทุกระดับ</option>
+          <option value="warning">คำเตือน</option>
+          <option value="error">ข้อผิดพลาด</option>
+          <option value="critical">วิกฤต</option>
+        </select>
+        <select
+          className="portal-filter h-9"
+          value={service}
+          onChange={(event) => setService(event.target.value)}
+        >
+          <option value="all">ทุกบริการ</option>
+          {services.map((value) => (
+            <option key={value} value={value}>{value}</option>
+          ))}
+        </select>
+        <label className="flex items-center gap-2 text-xs text-gray-500">
+          จาก
+          <input
+            type="date"
+            className="portal-filter h-9"
+            value={dateFrom}
+            max={dateTo || undefined}
+            onChange={(event) => setDateFrom(event.target.value)}
+          />
+        </label>
+        <label className="flex items-center gap-2 text-xs text-gray-500">
+          ถึง
+          <input
+            type="date"
+            className="portal-filter h-9"
+            value={dateTo}
+            min={dateFrom || undefined}
+            onChange={(event) => setDateTo(event.target.value)}
+          />
+        </label>
+        {hasFilters ? (
+          <button type="button" className="portal-button" onClick={clearFilters}>
+            <X className="h-3.5 w-3.5" />
+            ล้างตัวกรอง
+          </button>
+        ) : null}
+        <span className="text-xs text-gray-400">
+          แสดง {visible.length} จาก {logs.length} รายการ
+        </span>
+      </div>
+      <section className="portal-panel">
+        {visible.length === 0 ? (
+          <div className="portal-empty">ไม่พบบันทึกที่ตรงกับตัวกรอง</div>
+        ) : (
+          <>
+            <div className="portal-table-wrap">
+              <table className="portal-table">
+                <thead>
+                  <tr>
+                    <th>เวลา</th>
+                    <th>ระดับ</th>
+                    <th>บริการ</th>
+                    <th>รายละเอียด</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagination.pageRows.map((row) => (
+                      <tr key={row.id}>
+                        <td>{formatDate(row.createdAt)}</td>
+                        <td>
+                          <Badge value={row.level} />
+                        </td>
+                        <td>{row.service || "-"}</td>
+                        <td>{row.message}</td>
+                      </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination {...pagination} total={visible.length} />
+          </>
+        )}
+      </section>
+    </>
+  );
+}
+
+const companyValidationLabels: Record<string, string> = {
+  UPLOADING: "กำลังอัปโหลด", UPLOADED: "อัปโหลดแล้ว", QUEUED: "อยู่ในคิว",
+  PROCESSING: "กำลังตรวจ", RETRYING: "กำลังลองใหม่", PASSED: "ผ่าน",
+  FAILED: "ไม่ผ่าน", NEEDS_REVIEW: "รอตรวจโดยผู้ดูแล", ERROR: "เกิดข้อผิดพลาด",
+};
+const companyArchiveLabels: Record<string, string> = {
+  NOT_STARTED: "ยังไม่เริ่ม", QUEUED: "อยู่ในคิว", UPLOADING: "กำลังสำรอง",
+  ARCHIVED: "สำรองแล้ว", RETRYING: "กำลังลองใหม่", FAILED: "สำรองไม่สำเร็จ",
+};
+
+function CompanyDocumentsView() {
+  const [rows, setRows] = useState<AdminCompanyDocument[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
+  const [validationStatus, setValidationStatus] = useState("");
+  const [archiveStatus, setArchiveStatus] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageCount, setPageCount] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [selected, setSelected] = useState<AdminCompanyDocument | null>(null);
+  const [viewUrl, setViewUrl] = useState("");
+  const [note, setNote] = useState("");
+  const [rejectReason, setRejectReason] = useState("COMPANY_NAME_MISMATCH");
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    const response = await api.admin.listCompanyDocuments({
+      query: deferredQuery, validationStatus, archiveStatus, dateFrom, dateTo, page, limit: 20,
+    });
+    if (response.success && response.data) {
+      setRows(response.data.items);
+      setTotal(response.data.pagination.total);
+      setPageCount(response.data.pagination.totalPages);
+      setError("");
+    } else setError(response.error?.message || "ไม่สามารถโหลดเอกสารนิติบุคคลได้");
+    setLoading(false);
+  };
+
+  useEffect(() => { void load(); }, [deferredQuery, validationStatus, archiveStatus, dateFrom, dateTo, page]);
+  useEffect(() => { setPage(1); }, [deferredQuery, validationStatus, archiveStatus, dateFrom, dateTo]);
+
+  const openDocument = async (row: AdminCompanyDocument) => {
+    setSelected(row);
+    setViewUrl("");
+    setNote("");
+    const [detail, signedUrl] = await Promise.all([
+      api.admin.getCompanyDocument(row.id), api.admin.getCompanyDocumentViewUrl(row.id),
+    ]);
+    if (detail.success && detail.data) setSelected(detail.data);
+    if (signedUrl.success && signedUrl.data) setViewUrl(signedUrl.data.url);
+  };
+
+  const decide = async (decision: "approve" | "reject") => {
+    if (!selected) return;
+    setSaving(true);
+    const response = decision === "approve"
+      ? await api.admin.approveCompanyDocument(selected.id, note)
+      : await api.admin.rejectCompanyDocument(selected.id, rejectReason, note);
+    setSaving(false);
+    if (response.success && response.data) {
+      setSelected(response.data);
+      setRows(current => current.map(row => row.id === response.data!.id ? response.data! : row));
+      setError("");
+    } else setError(response.error?.message || "บันทึกผลการตรวจสอบไม่สำเร็จ");
+  };
+
+  const clearFilters = () => {
+    setQuery(""); setValidationStatus(""); setArchiveStatus(""); setDateFrom(""); setDateTo(""); setPage(1);
+  };
+  const hasFilters = Boolean(query || validationStatus || archiveStatus || dateFrom || dateTo);
+
+  return <>
+    <PageTitle eyebrow="การตรวจสอบนิติบุคคล" title="เอกสารนิติบุคคล" description="ตรวจหนังสือรับรอง ผล OCR และสถานะสำรองเอกสารไปยัง Google Drive" />
+    <div className="mb-4 flex flex-wrap items-center gap-2">
+      <SearchBox value={query} setValue={setQuery} placeholder="ค้นหาบริษัท อีเมล หรือเลขทะเบียน" />
+      <select className="portal-filter h-9" value={validationStatus} onChange={event => setValidationStatus(event.target.value)}>
+        <option value="">ทุกสถานะการตรวจ</option>
+        {Object.entries(companyValidationLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+      </select>
+      <select className="portal-filter h-9" value={archiveStatus} onChange={event => setArchiveStatus(event.target.value)}>
+        <option value="">ทุกสถานะการสำรอง</option>
+        {Object.entries(companyArchiveLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+      </select>
+      <label className="flex items-center gap-2 text-xs text-gray-500">จาก <input className="portal-filter h-9" type="date" value={dateFrom} onChange={event => setDateFrom(event.target.value)} /></label>
+      <label className="flex items-center gap-2 text-xs text-gray-500">ถึง <input className="portal-filter h-9" type="date" value={dateTo} onChange={event => setDateTo(event.target.value)} /></label>
+      {hasFilters ? <button className="portal-button" type="button" onClick={clearFilters}><X className="h-3.5 w-3.5" /> ล้างตัวกรอง</button> : null}
+      <span className="text-xs text-gray-400">ทั้งหมด {total} รายการ</span>
+    </div>
+    {error ? <p className="mb-4 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p> : null}
+    <section className="portal-panel">
+      {loading ? <div className="portal-empty">กำลังโหลดเอกสาร...</div> : rows.length === 0 ? <div className="portal-empty">ไม่พบเอกสารที่ตรงกับตัวกรอง</div> : <>
+        <div className="portal-table-wrap"><table className="portal-table"><thead><tr>
+          <th>นิติบุคคล</th><th>ผู้ประกอบการ</th><th>เอกสาร</th><th>ผลตรวจ</th><th>Google Drive</th><th>วันที่อัปโหลด</th><th>จัดการ</th>
+        </tr></thead><tbody>{rows.map(row => <tr key={row.id}>
+          <td><p className="font-semibold">{row.companyNameEntered}</p><p className="text-xs text-gray-400">{row.companyRegistrationNumber || "ไม่มีเลขทะเบียน"}</p></td>
+          <td><p className="font-semibold">{row.merchant.name}</p><p className="text-xs text-gray-400">{row.merchant.email}</p></td>
+          <td><p className="max-w-64 truncate" title={row.storedFileName}>{row.storedFileName}</p><p className="text-xs text-gray-400">{(row.fileSize / 1024 / 1024).toFixed(2)} MB</p></td>
+          <td><Badge value={row.validationStatus.toLowerCase()} /><p className="mt-1 text-[11px] text-gray-400">{companyValidationLabels[row.validationStatus]}</p></td>
+          <td><Badge value={row.archiveStatus.toLowerCase()} /><p className="mt-1 text-[11px] text-gray-400">{companyArchiveLabels[row.archiveStatus]}</p></td>
+          <td>{formatDate(row.createdAt)}</td>
+          <td><button className="portal-button" type="button" onClick={() => void openDocument(row)}><Eye className="h-3.5 w-3.5" /> ดูรายละเอียด</button></td>
+        </tr>)}</tbody></table></div>
+        <footer className="portal-pagination"><p className="text-xs text-gray-500">หน้า {page} จาก {pageCount}</p><div className="portal-pagination-pages">
+          <button className="portal-page-button" disabled={page <= 1} onClick={() => setPage(value => value - 1)}><ChevronLeft className="h-4 w-4" /></button>
+          <button className="portal-page-button" data-active>{page}</button>
+          <button className="portal-page-button" disabled={page >= pageCount} onClick={() => setPage(value => value + 1)}><ChevronRight className="h-4 w-4" /></button>
+        </div></footer>
+      </>}
+    </section>
+    {selected ? <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4" role="dialog" aria-modal="true" onMouseDown={event => { if (event.target === event.currentTarget) setSelected(null); }}>
+      <section className="portal-panel flex max-h-[94vh] w-full max-w-6xl flex-col">
+        <div className="portal-panel-head shrink-0"><div><h2 className="font-semibold">{selected.companyNameEntered}</h2><p className="mt-1 text-xs text-gray-400">{selected.merchant.name} · {selected.merchant.email}</p></div><button className="portal-button px-2" onClick={() => setSelected(null)}><X className="h-4 w-4" /></button></div>
+        <div className="grid min-h-0 overflow-y-auto lg:grid-cols-2">
+          <div className="min-h-[420px] border-b bg-gray-100 p-3 lg:border-b-0 lg:border-r">
+            {viewUrl ? selected.contentType === "application/pdf" ? <iframe className="h-[70vh] w-full bg-white" src={viewUrl} title="หนังสือรับรองนิติบุคคล" /> : <img className="mx-auto max-h-[70vh] object-contain" src={viewUrl} alt="หนังสือรับรองนิติบุคคล" /> : <div className="portal-empty"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />กำลังเปิดเอกสาร...</div>}
+          </div>
+          <div className="space-y-4 p-5">
+            <dl className="grid gap-3 sm:grid-cols-2">{[
+              ["ชื่อที่กรอก", selected.companyNameEntered], ["ชื่อที่ OCR อ่าน", selected.companyNameExtracted || "-"],
+              ["Confidence", selected.confidenceScore == null ? "-" : `${Math.round(selected.confidenceScore * 100)}%`],
+              ["สถานะตรวจ", companyValidationLabels[selected.validationStatus]], ["สถานะ Drive", companyArchiveLabels[selected.archiveStatus]],
+              ["Merchant ID", selected.merchantId], ["SHA-256", selected.fileSha256 || "-"], ["เวลาตรวจ", formatDate(selected.processedAt)],
+            ].map(([label, value]) => <div key={label} className="border-b border-gray-100 pb-2"><dt className="text-[11px] text-gray-400">{label}</dt><dd className="mt-1 break-all text-sm">{value}</dd></div>)}</dl>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <p className="text-xs font-semibold text-gray-700">ผลข้อความจาก OCR</p>
+              <p className="mt-1 text-[11px] text-gray-400">
+                วิธีตรวจ: {selected.matchMethod || "-"}{selected.matchReason ? ` · ${selected.matchReason}` : ""}
+              </p>
+              <pre className="mt-3 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded border border-gray-200 bg-white p-3 text-xs text-gray-700">
+                {selected.ocrText || "ไม่พบข้อความจาก OCR"}
+              </pre>
+            </div>
+            <textarea className="portal-input min-h-20 w-full" value={note} onChange={event => setNote(event.target.value)} placeholder="หมายเหตุการตรวจสอบ" />
+            <select className="portal-filter h-9 w-full" value={rejectReason} onChange={event => setRejectReason(event.target.value)}>
+              <option value="COMPANY_NAME_MISMATCH">ชื่อบริษัทไม่ตรงกัน</option><option value="UNREADABLE_DOCUMENT">เอกสารอ่านไม่ชัด</option><option value="INVALID_DOCUMENT">เอกสารไม่ถูกต้อง</option><option value="INCOMPLETE_DOCUMENT">เอกสารไม่ครบ</option><option value="OTHER">อื่น ๆ</option>
+            </select>
+            <div className="flex flex-wrap gap-2"><button className="portal-button portal-button-primary" disabled={saving} onClick={() => void decide("approve")}>อนุมัติเอกสาร</button><button className="portal-button text-red-700" disabled={saving} onClick={() => void decide("reject")}>ไม่อนุมัติ</button>
+              {selected.driveWebViewLink ? <a className="portal-button" href={selected.driveWebViewLink} target="_blank" rel="noreferrer"><ExternalLink className="h-3.5 w-3.5" /> เปิด Google Drive</a> : null}
+              {selected.validationStatus === "PASSED" && selected.archiveStatus === "FAILED" ? <button className="portal-button" onClick={async () => {
+                const response = await api.admin.retryCompanyDocumentArchive(selected.id);
+                if (response.success) {
+                  setSelected(current => current ? { ...current, archiveStatus: "QUEUED" } : current);
+                  setRows(current => current.map(row => row.id === selected.id ? { ...row, archiveStatus: "QUEUED" } : row));
+                } else setError(response.error?.message || "ส่งงานสำรองใหม่ไม่สำเร็จ");
+              }}>ลองสำรองใหม่</button> : null}
+            </div>
+          </div>
+        </div>
+      </section>
+    </div> : null}
+  </>;
+}
+
+const merchantActivityLabels: Record<string, string> = {
+  document_acknowledged: "รับทราบเอกสารแล้ว",
+  document_acknowledgement_dismissed: "ปิดข้อความโดยไม่รับทราบ",
+  merchant_submitted_to_legal: "ลูกค้าส่งให้ Legal",
+  legal_submitted_to_admin: "Legal ส่งให้ Admin",
+  admin_changes_requested: "Admin ส่งกลับ Legal",
+  admin_approved: "Admin อนุมัติและส่งลูกค้า",
+  customer_consent: "ลูกค้าให้ความยินยอม",
+  merchant_change_requested: "คำขอแก้ไขจากผู้ประกอบการ",
+  legal_document_updated: "ฝ่ายกฎหมายแก้ไขเอกสาร",
+  consent_granted: "ให้ความยินยอม",
+  consent_rejected: "ปฏิเสธความยินยอม",
+  consent_withdrawn: "ถอนความยินยอม",
+};
+
+function MerchantActivityView() {
+  const [rows, setRows] = useState<AdminMerchantActivity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const [type, setType] = useState("all");
+  const [merchantId, setMerchantId] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [selected, setSelected] = useState<AdminMerchantActivity | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void api.admin.listMerchantActivity({ limit: 500 }).then((response) => {
+      if (!active) return;
+      if (response.success && response.data) setRows(response.data.logs);
+      else setError(response.error?.message || "ไม่สามารถโหลดกิจกรรมผู้ประกอบการได้");
+      setLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const merchants = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          rows.map((row) => [
+            row.merchantId,
+            { id: row.merchantId, name: row.merchantName, email: row.merchantEmail },
+          ]),
+        ).values(),
+      ).sort((left, right) => left.name.localeCompare(right.name, "th")),
+    [rows],
+  );
+  const visible = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase();
+    return rows.filter((row) => {
+      if (type !== "all" && row.type !== type) return false;
+      if (merchantId !== "all" && row.merchantId !== merchantId) return false;
+      const createdDate = row.createdAt?.slice(0, 10);
+      if ((dateFrom || dateTo) && !createdDate) return false;
+      if (dateFrom && createdDate && createdDate < dateFrom) return false;
+      if (dateTo && createdDate && createdDate > dateTo) return false;
+      if (!normalized) return true;
+      return [
+        row.merchantName,
+        row.merchantEmail,
+        row.policyName,
+        row.policySlug,
+        row.relatedField,
+        row.description,
+      ].some((value) => value?.toLocaleLowerCase().includes(normalized));
+    });
+  }, [rows, query, type, merchantId, dateFrom, dateTo]);
+  const hasFilters = Boolean(query || type !== "all" || merchantId !== "all" || dateFrom || dateTo);
+  const clearFilters = () => {
+    setQuery("");
+    setType("all");
+    setMerchantId("all");
+    setDateFrom("");
+    setDateTo("");
+  };
+  const pagination = usePagination(visible);
+
+  return (
+    <>
+      <PageTitle
+        eyebrow="ประวัติทางธุรกิจ"
+        title="กิจกรรมผู้ประกอบการ"
+        description="รายการรับทราบเอกสาร ความยินยอม และการดำเนินการเอกสารที่ผู้ประกอบการแต่ละรายมองเห็น"
+      />
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <SearchBox
+          value={query}
+          setValue={setQuery}
+          placeholder="ค้นหาผู้ประกอบการ อีเมล หรือนโยบาย"
+        />
+        <select
+          className="portal-filter h-9"
+          value={type}
+          onChange={(event) => setType(event.target.value)}
+        >
+          <option value="all">กิจกรรมทุกประเภท</option>
+          {Object.entries(merchantActivityLabels).map(([value, label]) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+        </select>
+        <select
+          className="portal-filter h-9"
+          value={merchantId}
+          onChange={(event) => setMerchantId(event.target.value)}
+        >
+          <option value="all">ผู้ประกอบการทั้งหมด</option>
+          {merchants.map((merchant) => (
+            <option key={merchant.id} value={merchant.id}>
+              {merchant.name} · {merchant.email}
+            </option>
+          ))}
+        </select>
+        <label className="flex items-center gap-2 text-xs text-gray-500">
+          จาก
+          <input className="portal-filter h-9" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+        </label>
+        <label className="flex items-center gap-2 text-xs text-gray-500">
+          ถึง
+          <input className="portal-filter h-9" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+        </label>
+        {hasFilters ? (
+          <button type="button" className="portal-button" onClick={clearFilters}>
+            <X className="h-3.5 w-3.5" /> ล้างตัวกรอง
+          </button>
+        ) : null}
+        <span className="text-xs text-gray-400">
+          แสดง {visible.length} จาก {rows.length} รายการ
+        </span>
+      </div>
+      {error ? (
+        <p className="mb-4 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>
+      ) : null}
+      <section className="portal-panel">
+        {loading ? (
+          <div className="portal-empty">กำลังโหลดกิจกรรมผู้ประกอบการ...</div>
+        ) : visible.length === 0 ? (
+          <div className="portal-empty">ไม่พบกิจกรรมที่ตรงกับตัวกรอง</div>
+        ) : (
+          <>
+            <div className="portal-table-wrap">
+              <table className="portal-table">
+                <thead>
+                  <tr>
+                    <th>ผู้ประกอบการ</th>
+                    <th>ประเภท</th>
+                    <th>นโยบาย</th>
+                    <th>ข้อมูลที่เกี่ยวข้อง</th>
+                    <th>รายละเอียด</th>
+                    <th>วันที่บันทึก</th>
+                    <th>หลักฐาน</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagination.pageRows.map((row) => (
+                    <tr key={`${row.kind}-${row.id}`}>
+                      <td>
+                        <p className="font-semibold">{row.merchantName}</p>
+                        <p className="text-xs text-gray-400">{row.merchantEmail}</p>
+                      </td>
+                      <td className="font-semibold text-emerald-700">
+                        {merchantActivityLabels[row.type] || row.type.replaceAll("_", " ")}
+                      </td>
+                      <td>
+                        <p className="font-semibold">{row.policyName}</p>
+                        <p className="text-xs text-gray-400">{row.policySlug}</p>
+                      </td>
+                      <td>{row.relatedField === "document" ? "เอกสารสาธารณะ" : row.relatedField || row.relatedType}</td>
+                      <td className="min-w-64">{row.description}</td>
+                      <td>{formatDate(row.createdAt)}</td>
+                      <td>
+                        <button type="button" className="portal-button" onClick={() => setSelected(row)}>
+                          <Eye className="h-3.5 w-3.5" />
+                          รายละเอียด
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination {...pagination} total={visible.length} />
+          </>
+        )}
+      </section>
+      {selected ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSelected(null);
+          }}
+        >
+          <section className="portal-panel flex max-h-[92vh] w-full max-w-3xl flex-col">
+            <div className="portal-panel-head shrink-0">
+              <div>
+                <h2 className="text-sm font-semibold">หลักฐานกิจกรรมผู้ประกอบการ</h2>
+                <p className="mt-1 font-mono text-[11px] text-gray-400">{selected.id}</p>
+              </div>
+              <button type="button" className="portal-button px-2" onClick={() => setSelected(null)} aria-label="ปิด">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="min-h-0 overflow-y-auto p-5">
+              <dl className="grid gap-4 sm:grid-cols-2">
+                {[
+                  ["ผู้ประกอบการ", `${selected.merchantName} · ${selected.merchantEmail}`],
+                  ["ประเภท", merchantActivityLabels[selected.type] || selected.type],
+                  ["นโยบาย", `${selected.policyName} · ${selected.policySlug}`],
+                  ["วันที่และเวลา", formatDate(selected.createdAt)],
+                  ["ข้อมูลที่เกี่ยวข้อง", selected.relatedField || selected.relatedType],
+                  ["รายละเอียด", selected.description],
+                ].map(([label, value]) => (
+                  <div key={label} className="border-b border-gray-100 pb-3">
+                    <dt className="text-[11px] font-semibold text-gray-400">{label}</dt>
+                    <dd className="mt-1 break-all text-sm text-gray-800">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              <pre className="mt-5 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded bg-slate-900 p-4 text-xs text-slate-100">
+                {JSON.stringify(selected.evidence || {}, null, 2)}
+              </pre>
+            </div>
+          </section>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function AuditLogsView() {
+  const [rows, setRows] = useState<AdminAuditLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
+  const [action, setAction] = useState("all");
+  const [role, setRole] = useState("all");
+  const [result, setResult] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [error, setError] = useState("");
+  const [selected, setSelected] = useState<AdminAuditLog | null>(null);
+  useEffect(() => {
+    void api.admin.listActivityLogs({ limit: 500 }).then((response) => {
+      if (response.success && response.data) setRows(response.data.logs);
+      else setError(response.error?.message || "ไม่สามารถโหลดบันทึกกิจกรรมได้");
+      setLoading(false);
+    });
+  }, []);
+  const roles = useMemo(
+    () => Array.from(new Set(rows.flatMap((row) => (row.actorRole ? [row.actorRole] : [])))).sort(),
+    [rows],
+  );
+  const visible = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return rows.filter((row) => {
+      if (action !== "all" && row.action !== action) return false;
+      if (role !== "all" && row.actorRole !== role) return false;
+      if (result === "success" && row.statusCode >= 400) return false;
+      if (result === "failed" && row.statusCode < 400) return false;
+      const createdDate = row.createdAt?.slice(0, 10);
+      if ((dateFrom || dateTo) && !createdDate) return false;
+      if (dateFrom && createdDate && createdDate < dateFrom) return false;
+      if (dateTo && createdDate && createdDate > dateTo) return false;
+      if (!normalized) return true;
+      return `${row.actorEmail || "public"} ${row.actorRole || ""} ${row.method} ${row.path} ${row.statusCode} ${row.ipAddress || ""}`
+        .toLowerCase()
+        .includes(normalized);
+    });
+  }, [rows, query, action, role, result, dateFrom, dateTo]);
+  const hasFilters = Boolean(query || action !== "all" || role !== "all" || result !== "all" || dateFrom || dateTo);
+  const clearFilters = () => {
+    setQuery("");
+    setAction("all");
+    setRole("all");
+    setResult("all");
+    setDateFrom("");
+    setDateTo("");
+  };
+  const pagination = usePagination(visible);
+  return (
+    <>
+      <PageTitle
+        eyebrow="หลักฐานการตรวจสอบย้อนหลัง"
+        title="บันทึกกิจกรรม"
+        description="ประวัติการดำเนินการที่ระบุผู้กระทำ รายการที่ทำ และผลลัพธ์ โดยระบบไม่จัดเก็บเนื้อหาคำขอ รหัสผ่าน โทเคน หรือคุกกี้"
+      />
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <SearchBox
+          value={query}
+          setValue={setQuery}
+          placeholder="ค้นหาผู้ดำเนินการ เส้นทาง หรือ IP"
+        />
+        <select
+          className="portal-filter h-9"
+          value={action}
+          onChange={(event) => setAction(event.target.value)}
+        >
+          <option value="all">การดำเนินการทั้งหมด</option>
+          {Object.entries(auditActionLabels).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <select className="portal-filter h-9" value={role} onChange={(event) => setRole(event.target.value)}>
+          <option value="all">ทุกบทบาท</option>
+          {roles.map((actorRole) => (
+            <option key={actorRole} value={actorRole}>{actorRole}</option>
+          ))}
+        </select>
+        <select className="portal-filter h-9" value={result} onChange={(event) => setResult(event.target.value)}>
+          <option value="all">ทุกผลลัพธ์</option>
+          <option value="success">สำเร็จ</option>
+          <option value="failed">ไม่สำเร็จ</option>
+        </select>
+        <label className="flex items-center gap-2 text-xs text-gray-500">
+          จาก
+          <input className="portal-filter h-9" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+        </label>
+        <label className="flex items-center gap-2 text-xs text-gray-500">
+          ถึง
+          <input className="portal-filter h-9" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+        </label>
+        {hasFilters ? (
+          <button type="button" className="portal-button" onClick={clearFilters}>
+            <X className="h-3.5 w-3.5" /> ล้างตัวกรอง
+          </button>
+        ) : null}
+        <span className="text-xs text-gray-400">
+          แสดง {visible.length} จาก {rows.length} รายการ
+        </span>
+      </div>
+      {error && (
+        <p className="mb-4 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {error}
+        </p>
+      )}
+      <section className="portal-panel">
+        {loading ? (
+          <div className="portal-empty">กำลังโหลดบันทึกกิจกรรม...</div>
+        ) : visible.length === 0 ? (
+          <div className="portal-empty">ไม่พบกิจกรรมที่ตรงกับตัวกรอง</div>
+        ) : (
+          <>
+            <div className="portal-table-wrap">
+              <table className="portal-table">
+                <thead>
+                  <tr>
+                    <th>ผู้ดำเนินการ</th>
+                    <th>การดำเนินการ</th>
+                    <th>คำขอ</th>
+                    <th>ผลลัพธ์</th>
+                    <th>IP / เบราว์เซอร์</th>
+                    <th>เวลา</th>
+                    <th>รายละเอียด</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagination.pageRows.map((row) => (
+                    <tr key={row.id}>
+                      <td>
+                        <p className="font-semibold">
+                          {row.actorEmail || "ผู้เข้าชมทั่วไป"}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          {row.actorRole || "anonymous"}
+                        </p>
+                      </td>
+                      <td>
+                        <Badge value={row.action} />
+                      </td>
+                      <td>
+                        <p className="font-mono text-xs">
+                          {row.method} {row.path}
+                        </p>
+                        <p className="mt-1 text-[11px] text-gray-400">
+                          {row.durationMs ?? "-"} ms
+                        </p>
+                      </td>
+                      <td>
+                        <Badge
+                          value={
+                            row.statusCode < 400
+                              ? `Success ${row.statusCode}`
+                              : `Failed ${row.statusCode}`
+                          }
+                        />
+                      </td>
+                      <td>
+                        <p className="font-mono text-xs">
+                          {row.ipAddress || "-"}
+                        </p>
+                        <p
+                          className="mt-1 max-w-xs truncate text-[11px] text-gray-400"
+                          title={row.userAgent || ""}
+                        >
+                          {row.userAgent || "-"}
+                        </p>
+                      </td>
+                      <td>{formatDate(row.createdAt)}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="portal-button"
+                          onClick={() => setSelected(row)}
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          ดูรายละเอียด
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination {...pagination} total={visible.length} />
+          </>
+        )}
+      </section>
+      {selected && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSelected(null);
+          }}
+        >
+          <section className="portal-panel flex max-h-[92vh] w-full max-w-2xl flex-col">
+            <div className="portal-panel-head shrink-0">
+              <div>
+                <h2 className="text-sm font-semibold">รายละเอียดกิจกรรม</h2>
+                <p className="mt-1 font-mono text-[11px] text-gray-400">
+                  {selected.id}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="portal-button px-2"
+                onClick={() => setSelected(null)}
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="min-h-0 overflow-y-auto p-5">
+              <dl className="grid gap-4 sm:grid-cols-2">
+                {[
+                  ["ผู้ดำเนินการ", selected.actorEmail || "ผู้เข้าชมทั่วไป"],
+                  ["Role", selected.actorRole || "anonymous"],
+                  ["Action", selected.action],
+                  ["Timestamp", formatDate(selected.createdAt)],
+                  ["Request", `${selected.method} ${selected.path}`],
+                  [
+                    "Result",
+                    `${selected.statusCode < 400 ? "Success" : "Failed"} ${selected.statusCode}`,
+                  ],
+                  ["IP address", selected.ipAddress || "-"],
+                  ["Duration", `${selected.durationMs ?? "-"} ms`],
+                ].map(([label, value]) => (
+                  <div key={label} className="border-b border-gray-100 pb-3">
+                    <dt className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                      {label}
+                    </dt>
+                    <dd className="mt-1 break-all text-sm text-gray-800">
+                      {value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <div className="mt-5">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                  เบราว์เซอร์ / User Agent
+                </p>
+                <p className="mt-2 break-all rounded bg-gray-50 p-3 text-xs text-gray-700">
+                  {selected.userAgent || "-"}
+                </p>
+              </div>
+              <div className="mt-5">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                  ข้อมูลประกอบที่ปลอดภัย
+                </p>
+                <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all rounded bg-slate-900 p-4 text-xs text-slate-100">
+                  {JSON.stringify(selected.metadata || {}, null, 2)}
+                </pre>
+              </div>
+              <p className="mt-4 border-l-2 border-emerald-600 pl-3 text-xs text-gray-500">
+                ระบบตั้งใจไม่จัดเก็บเนื้อหาคำขอ รหัสผ่าน โทเคน คุกกี้ และส่วนหัว
+                Authorization
+              </p>
+            </div>
+          </section>
+        </div>
+      )}
+    </>
+  );
+}
+
+function AnalyticsView({ analytics }: { analytics: AdminAnalytics }) {
+  const metrics = [
+    {
+      label: "รายรับเดือนนี้",
+      value: money(analytics.revenue.currentMonth),
+      hint: analytics.revenue.currencyUnit,
+    },
+    {
+      label: "การเติบโตของผู้ประกอบการ",
+      value: `${analytics.merchantGrowth.monthOverMonthPercent}%`,
+      hint: "เทียบกับเดือนก่อน",
+    },
+    {
+      label: "ผู้ประกอบการใหม่",
+      value: analytics.merchantGrowth.newThisMonth,
+      hint: "เดือนปัจจุบัน",
+    },
+    {
+      label: "อัตราการยกเลิกสมาชิก",
+      value: analytics.merchantGrowth.churnedSubscriptionsThisMonth,
+      hint: "เดือนปัจจุบัน",
+    },
+  ];
+  return (
+    <>
+      <PageTitle
+        eyebrow="ข้อมูลเชิงลึกของแพลตฟอร์ม"
+        title="การวิเคราะห์"
+        description="ตัวชี้วัดด้านรายรับ การเติบโต นโยบาย และความเสี่ยงในการดำเนินงาน"
+      />
+      <section className="portal-kpis">
+        {metrics.map((row) => (
+          <div className="portal-kpi" key={row.label}>
+            <Activity className="w-4 h-4 text-blue-700 mb-4" />
+            <p className="text-2xl font-semibold">{row.value}</p>
+            <p className="text-xs text-gray-600 mt-1">{row.label}</p>
+            <p className="text-[11px] text-gray-400 mt-1">{row.hint}</p>
+          </div>
+        ))}
+      </section>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <section className="portal-panel p-5">
+          <h2 className="text-sm font-semibold mb-5">รายรับตามประเภทนโยบาย</h2>
+          {Object.entries(analytics.revenue.byPolicyType).map(
+            ([type, value]) => (
+              <MetricBar
+                key={type}
+                label={type}
+                value={value}
+                max={analytics.revenue.total}
+              />
+            ),
+          )}
+        </section>
+        <section className="portal-panel p-5">
+          <h2 className="text-sm font-semibold mb-5">สถานะนโยบาย</h2>
+          {Object.entries(analytics.policies.byStatus).map(
+            ([status, count]) => (
+              <MetricBar
+                key={status}
+                label={status.replaceAll("_", " ")}
+                value={count}
+                max={Object.values(analytics.policies.byStatus).reduce(
+                  (sum, value) => sum + value,
+                  0,
+                )}
+              />
+            ),
+          )}
+        </section>
+      </div>
+    </>
+  );
+}
+
+const emptyTemplate: DocumentTemplateInput = {
+  title: "",
+  category: "consent-form",
+  purpose: "",
+  content: "",
+  disclaimer:
+    "เอกสารนี้เป็นเทมเพลตเริ่มต้นสำหรับนำไปปรับใช้ ไม่ใช่คำแนะนำทางกฎหมาย และไม่รับรองความถูกต้องตามกฎหมาย 100%",
+  fields: [],
+  status: "active",
+};
+
+function TemplateManagement() {
+  const [rows, setRows] = useState<DocumentTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [editing, setEditing] = useState<DocumentTemplate | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [draft, setDraft] = useState<DocumentTemplateInput>(emptyTemplate);
+  const [deleting, setDeleting] = useState<DocumentTemplate | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    const response = await api.templates.adminList();
+    if (response.success && response.data) setRows(response.data);
+    else setError(response.error?.message || "ไม่สามารถโหลดเทมเพลตได้");
+    setLoading(false);
+  };
+  useEffect(() => {
+    void load();
+  }, []);
+  const openCreate = () => {
+    setEditing(null);
+    setDraft(emptyTemplate);
+    setFormOpen(true);
+    setError("");
+  };
+  const openEdit = (row: DocumentTemplate) => {
+    setEditing(row);
+    setDraft({
+      title: row.title,
+      category: row.category,
+      purpose: row.purpose,
+      content: row.content,
+      disclaimer: row.disclaimer,
+      fields: row.fields || [],
+      status: row.status,
+    });
+    setFormOpen(true);
+    setError("");
+  };
+  const save = async () => {
+    if (
+      !draft.title.trim() ||
+      !draft.category.trim() ||
+      !draft.purpose.trim() ||
+      !draft.content.trim() ||
+      !draft.disclaimer.trim()
+    ) {
+      setError("กรุณากรอกข้อมูลเทมเพลตให้ครบถ้วน");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    const response = editing
+      ? await api.templates.update(editing.id, draft)
+      : await api.templates.create(draft);
+    setSaving(false);
+    if (!response.success) {
+      setError(response.error?.message || "ไม่สามารถบันทึกเทมเพลตได้");
+      return;
+    }
+    setEditing(null);
+    setDraft(emptyTemplate);
+    setFormOpen(false);
+    await load();
+  };
+  const remove = async () => {
+    if (!deleting) return;
+    const response = await api.templates.delete(deleting.id);
+    if (!response.success) {
+      setError(response.error?.message || "ไม่สามารถลบเทมเพลตได้");
+      return;
+    }
+    setRows((current) => current.filter((row) => row.id !== deleting.id));
+    setDeleting(null);
+  };
+  return (
+    <>
+      <PageTitle
+        eyebrow="การกำกับดูแลเนื้อหา"
+        title="เทมเพลตเอกสาร"
+        description="จัดการเอกสารเริ่มต้นที่ผู้ประกอบการสามารถนำไปใช้งานได้"
+        action={
+          <button className="portal-button primary" onClick={openCreate}>
+            <Plus className="h-4 w-4" />
+            สร้างเทมเพลต
+          </button>
+        }
+      />
+      {error && (
+        <p className="mb-4 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {error}
+        </p>
+      )}
+      <section className="portal-panel">
+        {loading ? (
+          <div className="portal-empty">กำลังโหลดเทมเพลต...</div>
+        ) : rows.length === 0 ? (
+          <div className="portal-empty">
+            ยังไม่มีเทมเพลตที่จัดการโดยผู้ดูแล กรุณาสร้างเทมเพลตแรกเพื่อใช้แทน
+            ตัวอย่างเริ่มต้นของระบบ
+          </div>
+        ) : (
+          <div className="portal-table-wrap">
+            <table className="portal-table">
+              <thead>
+                <tr>
+                  <th>เทมเพลต</th>
+                  <th>หมวดหมู่</th>
+                  <th>สถานะ</th>
+                  <th>แก้ไขล่าสุด</th>
+                  <th>จัดการ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.id}>
+                    <td>
+                      <p className="font-semibold">{row.title}</p>
+                      <p className="mt-1 max-w-xl truncate text-xs text-gray-400">
+                        {row.purpose}
+                      </p>
+                    </td>
+                    <td>{row.category}</td>
+                    <td>
+                      <Badge value={row.status} />
+                    </td>
+                    <td>{formatDate(row.updatedAt)}</td>
+                    <td>
+                      <div className="flex gap-2">
+                        <button
+                          className="portal-button"
+                          onClick={() => openEdit(row)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Edit
+                        </button>
+                        <button
+                          className="portal-button text-red-700"
+                          onClick={() => setDeleting(row)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+      {formOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/40 p-4">
+          <section className="portal-panel flex h-[calc(100dvh-2rem)] max-h-[92vh] w-full max-w-3xl flex-col">
+            <div className="portal-panel-head shrink-0">
+              <div>
+                <h2 className="text-sm font-semibold">
+                  {editing ? "แก้ไขเทมเพลต" : "สร้างเทมเพลต"}
+                </h2>
+                <p className="mt-1 text-xs text-gray-400">
+                  เอกสารที่ผู้ประกอบการส่งออกจะแนบข้อความสงวนสิทธิ์โดยอัตโนมัติ
+                </p>
+              </div>
+              <button
+                className="portal-button px-2"
+                onClick={() => {
+                  setEditing(null);
+                  setDraft(emptyTemplate);
+                  setFormOpen(false);
+                }}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto overscroll-contain p-5 sm:grid-cols-2">
+              <label className="text-xs font-semibold text-gray-600">
+                Title
+                <input
+                  className="mt-2 h-10 w-full rounded border px-3 font-normal"
+                  value={draft.title}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      title: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="text-xs font-semibold text-gray-600">
+                Category
+                <input
+                  className="mt-2 h-10 w-full rounded border px-3 font-normal"
+                  value={draft.category}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      category: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="text-xs font-semibold text-gray-600 sm:col-span-2">
+                Purpose
+                <textarea
+                  className="mt-2 min-h-20 w-full rounded border p-3 font-normal"
+                  value={draft.purpose}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      purpose: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="text-xs font-semibold text-gray-600 sm:col-span-2">
+                เนื้อหาเทมเพลต
+                <textarea
+                  className="mt-2 min-h-72 w-full rounded border p-3 font-mono text-xs font-normal"
+                  value={draft.content}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      content: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="text-xs font-semibold text-gray-600 sm:col-span-2">
+                ข้อความสงวนสิทธิ์ทางกฎหมาย
+                <textarea
+                  className="mt-2 min-h-24 w-full rounded border p-3 font-normal"
+                  value={draft.disclaimer}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      disclaimer: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <div className="sm:col-span-2">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-600">
+                      ช่องข้อมูลในแบบฟอร์ม
+                    </p>
+                    <p className="mt-1 text-[11px] text-gray-400">
+                      แสดงเมื่อผู้ประกอบการใช้เทมเพลตนี้สร้างแบบฟอร์มความยินยอม
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="portal-button"
+                    onClick={() =>
+                      setDraft((current) => ({
+                        ...current,
+                        fields: [
+                          ...current.fields,
+                          {
+                            id: `field-${Date.now()}`,
+                            type: "text",
+                            label: "ช่องข้อมูลใหม่",
+                            placeholder: "",
+                            required: false,
+                            options: [],
+                          },
+                        ],
+                      }))
+                    }
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    เพิ่มช่องข้อมูล
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {draft.fields.map((field, index) => (
+                    <div
+                      key={field.id}
+                      className="grid gap-2 border border-gray-200 bg-gray-50 p-3 sm:grid-cols-12"
+                    >
+                      <input
+                        aria-label="ชื่อช่องข้อมูล"
+                        className="h-9 rounded border px-2 text-xs sm:col-span-4"
+                        value={field.label}
+                        onChange={(event) =>
+                          setDraft((current) => ({
+                            ...current,
+                            fields: current.fields.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? { ...item, label: event.target.value }
+                                : item,
+                            ),
+                          }))
+                        }
+                      />
+                      <select
+                        aria-label="ประเภทช่องข้อมูล"
+                        className="h-9 rounded border px-2 text-xs sm:col-span-2"
+                        value={field.type}
+                        onChange={(event) =>
+                          setDraft((current) => ({
+                            ...current,
+                            fields: current.fields.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? {
+                                    ...item,
+                                    type: event.target
+                                      .value as typeof item.type,
+                                  }
+                                : item,
+                            ),
+                          }))
+                        }
+                      >
+                        {[
+                          "text",
+                          "email",
+                          "textarea",
+                          "checkbox",
+                          "select",
+                        ].map((value) => (
+                          <option key={value}>{value}</option>
+                        ))}
+                      </select>
+                      <input
+                        aria-label={
+                          field.type === "select"
+                            ? "ตัวเลือกคั่นด้วยเครื่องหมายจุลภาค"
+                            : "Placeholder"
+                        }
+                        className="h-9 rounded border px-2 text-xs sm:col-span-3"
+                        placeholder={
+                          field.type === "select"
+                            ? "Option A, Option B"
+                            : "Placeholder"
+                        }
+                        value={
+                          field.type === "select"
+                            ? field.options.join(", ")
+                            : field.placeholder || ""
+                        }
+                        onChange={(event) =>
+                          setDraft((current) => ({
+                            ...current,
+                            fields: current.fields.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? field.type === "select"
+                                  ? {
+                                      ...item,
+                                      options: event.target.value
+                                        .split(",")
+                                        .map((value) => value.trim())
+                                        .filter(Boolean),
+                                    }
+                                  : { ...item, placeholder: event.target.value }
+                                : item,
+                            ),
+                          }))
+                        }
+                      />
+                      <label className="flex h-9 items-center gap-1 text-[11px] sm:col-span-2">
+                        <input
+                          type="checkbox"
+                          checked={field.required}
+                          onChange={(event) =>
+                            setDraft((current) => ({
+                              ...current,
+                              fields: current.fields.map((item, itemIndex) =>
+                                itemIndex === index
+                                  ? { ...item, required: event.target.checked }
+                                  : item,
+                              ),
+                            }))
+                          }
+                        />
+                        Required
+                      </label>
+                      <button
+                        type="button"
+                        aria-label="ลบช่องข้อมูล"
+                        className="grid h-9 place-items-center text-red-600"
+                        onClick={() =>
+                          setDraft((current) => ({
+                            ...current,
+                            fields: current.fields.filter(
+                              (_, itemIndex) => itemIndex !== index,
+                            ),
+                          }))
+                        }
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <label className="text-xs font-semibold text-gray-600">
+                Status
+                <select
+                  className="mt-2 h-10 w-full rounded border px-3 font-normal"
+                  value={draft.status}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      status: event.target
+                        .value as DocumentTemplateInput["status"],
+                    }))
+                  }
+                >
+                  <option value="active">ใช้งานอยู่</option>
+                  <option value="inactive">ไม่ใช้งาน</option>
+                </select>
+              </label>
+              <div className="flex items-end justify-end">
+                <button
+                  className="portal-button primary"
+                  disabled={saving}
+                  onClick={() => void save()}
+                >
+                  {saving ? "กำลังบันทึก..." : "บันทึกเทมเพลต"}
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
+      <ConfirmDialog
+        open={Boolean(deleting)}
+        title="ลบเทมเพลตหรือไม่"
+        description={`${deleting?.title || "เทมเพลตนี้"} จะหายออกจากคลังเทมเพลตของผู้ประกอบการทันที`}
+        confirmLabel="ลบเทมเพลต"
+        tone="destructive"
+        onConfirm={() => void remove()}
+        onCancel={() => setDeleting(null)}
+      />
+    </>
+  );
+}
+
+function MetricBar({
+  label,
+  value,
+  max,
+}: {
+  label: string;
+  value: number;
+  max: number;
+}) {
+  const width = max > 0 && value > 0 ? Math.max(5, (value / max) * 100) : 0;
+  return (
+    <div className="mb-4 last:mb-0">
+      <div className="flex justify-between text-xs mb-2">
+        <span className="capitalize">{label}</span>
+        <strong>{value}</strong>
+      </div>
+      <div className="h-2 bg-gray-100">
+        <div className="h-full bg-blue-700" style={{ width: width + "%" }} />
+      </div>
+    </div>
+  );
+}
+
+type MerchantFilterOption = {
+  id: string;
+  name: string;
+  email: string;
+};
+
+function MerchantFilterPicker({
+  options,
+  selected,
+  onChange,
+}: {
+  options: MerchantFilterOption[];
+  selected: { id: string; name: string } | null;
+  onChange: (merchant: { id: string; name: string } | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState(selected?.name || "");
+  const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase("th"));
+
+  useEffect(() => {
+    setQuery(selected?.name || "");
+  }, [selected?.id, selected?.name]);
+
+  const matches = useMemo(() => {
+    const filtered = deferredQuery
+      ? options.filter((option) =>
+          `${option.name} ${option.email}`
+            .toLocaleLowerCase("th")
+            .includes(deferredQuery),
+        )
+      : options;
+    return filtered.slice(0, 20);
+  }, [deferredQuery, options]);
+
+  const choose = (option: MerchantFilterOption) => {
+    onChange({ id: option.id, name: option.name });
+    setQuery(option.name);
+    setOpen(false);
+  };
+
+  const clear = () => {
+    onChange(null);
+    setQuery("");
+    setOpen(false);
+  };
+
+  return (
+    <div
+      className="relative min-w-0"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+      }}
+    >
+      <Search className="pointer-events-none absolute left-3 top-2.5 z-10 h-4 w-4 text-gray-400" />
+      <input
+        className="portal-search w-full pr-9"
+        value={query}
+        onFocus={() => setOpen(true)}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setOpen(true);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") setOpen(false);
+          if (event.key === "Enter" && open && matches[0]) {
+            event.preventDefault();
+            choose(matches[0]);
+          }
+        }}
+        placeholder="ค้นหาผู้ประกอบการหรืออีเมล"
+        role="combobox"
+        aria-label="กรองตามผู้ประกอบการ"
+        aria-expanded={open}
+        aria-controls="policy-merchant-filter-results"
+        autoComplete="off"
+      />
+      {query ? (
+        <button
+          type="button"
+          className="absolute right-2 top-1.5 z-10 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+          onClick={clear}
+          aria-label="ล้างตัวกรองผู้ประกอบการ"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      ) : null}
+      {open ? (
+        <div
+          id="policy-merchant-filter-results"
+          role="listbox"
+          className="absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-md border border-gray-200 bg-white py-1 shadow-lg"
+        >
+          <button
+            type="button"
+            role="option"
+            aria-selected={!selected}
+            className="block w-full px-3 py-2 text-left text-sm hover:bg-emerald-50"
+            onClick={clear}
+          >
+            ผู้ประกอบการทั้งหมด
+          </button>
+          {matches.map((option) => (
+            <button
+              type="button"
+              role="option"
+              aria-selected={selected?.id === option.id}
+              key={option.id}
+              className="block w-full border-t border-gray-100 px-3 py-2 text-left hover:bg-emerald-50"
+              onClick={() => choose(option)}
+            >
+              <span className="block truncate text-sm font-medium text-gray-900">
+                {option.name}
+              </span>
+              {option.email ? (
+                <span className="block truncate text-xs text-gray-500">
+                  {option.email}
+                </span>
+              ) : null}
+            </button>
+          ))}
+          {matches.length === 0 ? (
+            <p className="px-3 py-3 text-sm text-gray-500">
+              ไม่พบผู้ประกอบการที่ตรงกับคำค้นหา
+            </p>
+          ) : null}
+          {matches.length === 20 ? (
+            <p className="border-t border-gray-100 px-3 py-2 text-xs text-gray-500">
+              แสดง 20 รายการแรก พิมพ์เพิ่มเพื่อค้นหาให้แคบลง
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function SearchBox({
+  value,
+  setValue,
+  placeholder,
+}: {
+  value: string;
+  setValue: (value: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <div className="relative">
+      <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+      <input
+        className="portal-search"
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+        placeholder={placeholder}
+      />
+    </div>
+  );
+}
+
+export default function Admin() {
+  const navigate = useNavigate();
+  const [view, setView] = useState<AdminView>("overview");
+  const [policyMerchantFilter, setPolicyMerchantFilter] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
+  const [merchants, setMerchants] = useState<Merchant[]>([]);
+  const [policies, setPolicies] = useState<Policy[]>([]);
+  const [legalUsers, setLegalUsers] = useState<LegalUser[]>([]);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [logs, setLogs] = useState<ErrorLog[]>([]);
+  const [workload, setWorkload] = useState<AdminLegalWorkload[]>([]);
+  const [reviews, setReviews] = useState<AdminLegalReview[]>([]);
+  const [overview, setOverview] = useState<AdminOverview | null>(null);
+  const [analytics, setAnalytics] = useState<AdminAnalytics | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  useEffect(() => {
+    let active = true;
+    void api.admin.overview().then((response) => {
+      if (!active) return;
+      if (response.success && response.data) setOverview(response.data);
+      else setLoadError(response.error?.message || "Unable to load admin overview.");
+      setLoading(false);
+    });
+    void Promise.all([
+      api.admin.listMerchants({ limit: 200 }),
+      api.admin.listPolicies({ limit: 200 }),
+      api.admin.listLegalUsers(),
+      api.admin.listSubscriptions({ limit: 200 }),
+      api.admin.listPayments({ limit: 200 }),
+      api.admin.listLogs({ limit: 200 }),
+      api.admin.analytics(),
+      api.admin.legalWorkload(),
+      api.admin.legalReviews({ limit: 200 }),
+    ]).then(
+      ([
+        merchantsResponse,
+        policiesResponse,
+        legalUsersResponse,
+        subscriptionsResponse,
+        paymentsResponse,
+        logsResponse,
+        analyticsResponse,
+        workloadResponse,
+        reviewsResponse,
+      ]) => {
+        if (!active) return;
+        if (merchantsResponse.success && merchantsResponse.data)
+          setMerchants(merchantsResponse.data.merchants);
+        if (policiesResponse.success && policiesResponse.data)
+          setPolicies(policiesResponse.data.policies);
+        if (legalUsersResponse.success && legalUsersResponse.data)
+          setLegalUsers(legalUsersResponse.data.legalUsers);
+        if (subscriptionsResponse.success && subscriptionsResponse.data)
+          setSubscriptions(subscriptionsResponse.data.subscriptions);
+        if (paymentsResponse.success && paymentsResponse.data)
+          setPayments(paymentsResponse.data.payments);
+        if (logsResponse.success && logsResponse.data)
+          setLogs(logsResponse.data.logs);
+        if (analyticsResponse.success && analyticsResponse.data)
+          setAnalytics(analyticsResponse.data);
+        if (workloadResponse.success && workloadResponse.data)
+          setWorkload(workloadResponse.data.workload);
+        if (reviewsResponse.success && reviewsResponse.data)
+          setReviews(reviewsResponse.data.reviews);
+        const failed = [
+          merchantsResponse,
+          policiesResponse,
+          legalUsersResponse,
+          subscriptionsResponse,
+          paymentsResponse,
+          logsResponse,
+          analyticsResponse,
+          workloadResponse,
+          reviewsResponse,
+        ].find((response) => !response.success);
+        setLoadError(failed?.error?.message || "");
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, []);
+  const activeTitle = useMemo(
+    () => view.charAt(0).toUpperCase() + view.slice(1),
+    [view],
+  );
+  const logout = () => setConfirmLogout(true);
+  const confirmSignOut = () => {
+    session.logout();
+    navigate("/login", { replace: true });
+  };
+  let content: React.ReactNode;
+  if (loading)
+    content = <div className="portal-empty">กำลังโหลดระบบผู้ดูแล...</div>;
+  else if (view === "overview" && overview)
+    content = (
+      <Overview overview={overview} legalUsers={legalUsers} change={setView} />
+    );
+  else if (view === "merchants")
+    content = (
+      <MerchantView
+        rows={merchants}
+        setRows={setMerchants}
+        viewPolicies={(merchant) => {
+          setPolicyMerchantFilter({ id: merchant.id, name: merchant.name });
+          setView("policies");
+        }}
+      />
+    );
+  else if (view === "policies")
+    content = (
+      <PolicyView
+        rows={policies}
+        legalUsers={legalUsers}
+        setRows={setPolicies}
+        merchantFilter={policyMerchantFilter}
+        setMerchantFilter={setPolicyMerchantFilter}
+        clearMerchantFilter={() => setPolicyMerchantFilter(null)}
+      />
+    );
+  else if (view === "templates") content = <TemplateManagement />;
+  else if (view === "company_documents") content = <CompanyDocumentsView />;
+  else if (view === "subscriptions" || view === "payments")
+    content = (
+      <BillingView
+        mode={view}
+        subscriptions={subscriptions}
+        payments={payments}
+      />
+    );
+  else if (view === "assignments")
+    content = <LegalAssignments users={legalUsers} policies={policies} />;
+  else if (view === "admin_reviews") content = <AdminReviewQueue />;
+  else if (view === "legal")
+    content = (
+      <LegalManagement
+        users={legalUsers}
+        setUsers={setLegalUsers}
+        workload={workload}
+        reviews={reviews}
+      />
+    );
+  else if (view === "logs") content = <LogsView logs={logs} />;
+  else if (view === "merchant_activity") content = <MerchantActivityView />;
+  else if (view === "audit") content = <AuditLogsView />;
+  else if (view === "analytics" && analytics)
+    content = <AnalyticsView analytics={analytics} />;
+  else
+    content = (
+      <div className="portal-empty">ไม่สามารถโหลดหน้าผู้ดูแลนี้ได้</div>
+    );
+  return (
+    <div className="portal-shell">
+      <ConfirmDialog
+        open={confirmLogout}
+        title="ออกจากระบบผู้ดูแลหรือไม่"
+        description="คุณต้องเข้าสู่ระบบอีกครั้งเพื่อเข้าถึงการจัดการแพลตฟอร์ม"
+        confirmLabel="ออกจากระบบ"
+        onConfirm={confirmSignOut}
+        onCancel={() => setConfirmLogout(false)}
+      />
+      <Sidebar
+        view={view}
+        change={setView}
+        adminReviewCount={overview?.kpi.pendingAdminReviews ?? 0}
+        open={menuOpen}
+        close={() => setMenuOpen(false)}
+        logout={logout}
+      />
+      <div className="portal-main">
+        <header className="portal-topbar">
+          <div className="flex items-center gap-3">
+            <button
+              className="portal-button portal-mobile-menu px-2"
+              onClick={() => setMenuOpen(true)}
+              aria-label="เปิดเมนูนำทาง"
+            >
+              <Menu className="w-4 h-4" />
+            </button>
+            <div>
+              <p className="text-sm font-semibold">{activeTitle}</p>
+              <p className="text-[11px] text-gray-400">การจัดการแพลตฟอร์ม</p>
+            </div>
+          </div>
+          <span className="inline-flex items-center gap-2 text-xs text-gray-500">
+            <Landmark className="w-4 h-4 text-green-700" />
+            Administrator
+          </span>
+        </header>
+        <main className="portal-content portal-content-admin">
+          {loadError && (
+            <p className="mb-4 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {loadError}
+            </p>
+          )}
+          {content}
         </main>
       </div>
     </div>
-  )
+  );
 }

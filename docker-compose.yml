@@ -3,5 +3,7 @@ services:
     build: .
     container_name: flowpdpa
     ports:
-      - "8808:80"
+      - "8808:8808"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
