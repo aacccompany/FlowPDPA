@@ -1,4 +1,5 @@
 import { useEscapeKey } from "@/hooks/useEscapeKey";
+import { useTheme } from "@/hooks/useTheme";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -7,6 +8,8 @@ import {
   Plus,
   Settings,
   LogOut,
+  Moon,
+  Sun,
   Menu,
   ArrowRight,
   AlertTriangle,
@@ -2924,6 +2927,7 @@ function AccountSettings({ user }: { user: AuthUser }) {
 
 // ── Main Dashboard ────────────────────────────────────────────
 export default function Dashboard() {
+  const [theme, toggleTheme] = useTheme("flowpdpa-merchant-theme");
   const navigate = useNavigate();
   const { user: sessionUser, logout } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -2999,7 +3003,7 @@ export default function Dashboard() {
       .toUpperCase() || "FP";
 
   return (
-    <div className="merchant-shell min-h-screen flex">
+    <div className="merchant-shell min-h-screen flex" data-theme={theme}>
       <ConfirmDialog
         open={confirmLogout}
         title="ออกจากระบบหรือไม่?"
@@ -3057,6 +3061,15 @@ export default function Dashboard() {
                     <b>{user.name}</b>
                     <i>{user.plan}</i>
                   </span>
+                </button>
+                <button
+                  className="merchant-icon-button"
+                  onClick={toggleTheme}
+                  aria-pressed={theme === "dark"}
+                  aria-label={theme === "dark" ? "สลับเป็นโหมดสว่าง" : "สลับเป็นโหมดมืด"}
+                  title={theme === "dark" ? "โหมดสว่าง" : "โหมดมืด"}
+                >
+                  {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
                 </button>
                 <button
                   className="merchant-icon-button merchant-logout"

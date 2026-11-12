@@ -1,4 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import { useTheme } from "@/hooks/useTheme";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Check,
@@ -2099,6 +2101,7 @@ function initialDataFromSession(): FormData {
 }
 
 export default function CreatePolicy() {
+  const [theme, toggleTheme] = useTheme("flowpdpa-merchant-theme");
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [done, setDone] = useState(false);
@@ -2253,6 +2256,7 @@ export default function CreatePolicy() {
   return (
     <div
       className="merchant-flow min-h-screen flex flex-col"
+      data-theme={theme}
       style={{ backgroundColor: "#f8fafc" }}
     >
       {/* Header */}
@@ -2277,12 +2281,16 @@ export default function CreatePolicy() {
               ขั้นตอนที่ {step} จาก {steps.length}
             </span>
           )}
-          <Link
-            to="/dashboard"
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </Link>
+          <span className="flex items-center gap-1">
+            <ThemeToggle theme={theme} onToggle={toggleTheme} />
+            <Link
+              to="/dashboard"
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+              aria-label="ปิดและกลับไปแดชบอร์ด"
+            >
+              <X className="w-5 h-5" />
+            </Link>
+          </span>
         </div>
 
         {/* Progress bar */}

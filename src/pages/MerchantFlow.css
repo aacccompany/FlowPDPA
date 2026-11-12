@@ -5,21 +5,18 @@
   --radius-control: 10px;
   --radius-nav: 10px;
   --radius-panel: 16px;
-  --glass-bg: rgba(255, 255, 255, 0.74);
-  --glass-bg-strong: rgba(255, 255, 255, 0.86);
+  --glass-bg: rgba(255, 255, 255, 0.94);
+  --glass-bg-strong: rgba(255, 255, 255, 0.97);
   --glass-border: rgba(255, 255, 255, 0.85);
   --glass-edge: rgba(23, 35, 59, 0.10);
-  --glass-blur: blur(16px) saturate(1.3);
+  --glass-blur: blur(6px);
   --glass-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.85),
     0 14px 36px -24px rgba(23, 35, 59, 0.24);
 }
 .merchant-flow.merchant-flow {
   background:
-    radial-gradient(640px 480px at 22% 10%, rgba(16, 185, 129, 0.20), transparent 70%),
-    radial-gradient(600px 460px at 78% 6%, rgba(59, 130, 246, 0.16), transparent 70%),
-    radial-gradient(720px 520px at 50% 70%, rgba(20, 184, 166, 0.12), transparent 70%),
-    #e8eef6 !important;
+    #eceef1 !important;
   background-attachment: scroll;
 }
 
@@ -136,10 +133,7 @@
 }
 .merchant-flow.merchant-flow {
   background:
-    radial-gradient(900px 520px at 18% 6%, rgba(16, 185, 129, 0.20), transparent 70%),
-    radial-gradient(820px 480px at 84% 4%, rgba(59, 130, 246, 0.16), transparent 70%),
-    radial-gradient(900px 560px at 52% 78%, rgba(20, 184, 166, 0.12), transparent 70%),
-    #e8eef6 !important;
+    #eceef1 !important;
   background-attachment: scroll;
 }
 .merchant-flow > header {
@@ -166,3 +160,109 @@
 /* Policy page: content and floating header share one width and edge */
 .merchant-flow > main.grid.grid { max-width: 1312px; width: 100%; margin-inline: auto; padding-inline: 16px; }
 .merchant-flow:has(> main.grid) > header { max-width: 1280px; }
+
+/* ═══ Create / edit policy: dark mode ═══════════
+   Same palette and preference key as the Merchant dashboard (Dashboard.css). */
+.merchant-flow[data-theme='dark'] {
+  color-scheme: dark;
+  --glass-bg: #1b2028;
+  --glass-bg-strong: #1b2028;
+  --glass-border: #2b323c;
+  --glass-edge: #313843;
+  --glass-blur: none;
+  --glass-shadow: 0 14px 36px -24px rgba(0, 0, 0, 0.6);
+  color: #e6e9ee;
+
+  --color-white: #1b2028;
+  --color-gray-50: #202630;
+  --color-gray-100: #272e39;
+  --color-gray-200: #313843;
+  --color-gray-300: #414a57;
+  --color-gray-400: #8b95a3;
+  --color-gray-500: #a3acb9;
+  --color-gray-600: #b6bec9;
+  --color-gray-700: #cdd3dc;
+  --color-gray-800: #dde1e8;
+  --color-gray-900: #eef0f4;
+  --color-gray-950: #f5f6f8;
+  --color-red-50: #35191b;
+  --color-red-100: #4a2023;
+  --color-red-200: #6b2a2d;
+  --color-red-400: #f87171;
+  --color-red-500: #f87171;
+  --color-red-600: #fca5a5;
+  --color-red-700: #fca5a5;
+  --color-red-800: #fecaca;
+  --color-amber-50: #33270f;
+  --color-amber-100: #4a3811;
+  --color-amber-200: #6b4f12;
+  --color-amber-800: #fcd34d;
+  --color-amber-900: #fde68a;
+  --color-emerald-50: #12302a;
+  --color-emerald-100: #174a3d;
+  --color-emerald-200: #1f5a49;
+  --color-emerald-900: #a7f3d0;
+  --color-emerald-950: #a7f3d0;
+  --color-green-50: #12302a;
+  --color-green-200: #1f5a49;
+  --color-blue-50: #14233d;
+  --color-blue-200: #234777;
+  --color-slate-50: #202630;
+  --color-slate-100: #272e39;
+  --color-slate-200: #313843;
+  --color-slate-300: #414a57;
+  --color-slate-400: #8b95a3;
+  --color-slate-500: #a3acb9;
+  --color-slate-600: #b6bec9;
+  --color-slate-700: #cdd3dc;
+  --color-slate-900: #eef0f4;
+}
+.merchant-flow.merchant-flow[data-theme='dark'] { background: #12161c !important; }
+.merchant-flow[data-theme='dark'] .text-white { color: #ffffff; }
+.merchant-flow[data-theme='dark'] :is(.text-gray-400, .text-gray-500) { color: #a3acb9; }
+.merchant-flow[data-theme='dark'] :is(.text-emerald-700, .text-emerald-800, .text-green-700, .text-green-600) { color: #6ee7b7; }
+.merchant-flow[data-theme='dark'] :is(.text-amber-700, .text-yellow-700, .text-orange-700) { color: #fbbf24; }
+.merchant-flow[data-theme='dark'] .text-blue-700 { color: #93c5fd; }
+.merchant-flow[data-theme='dark'] .text-gray-300 { color: #8b95a3; }
+.merchant-flow[data-theme='dark'] .text-slate-200 { color: #e2e8f0; }
+.merchant-flow[data-theme='dark'] :is(h1, h2, h3, h4) { color: #eef0f4; }
+.merchant-flow[data-theme='dark'] :is(input, select, textarea) { background: #12161c !important; border-color: #3a4350 !important; color: #e6e9ee !important; }
+.merchant-flow[data-theme='dark'] ::placeholder { color: #7d8794; }
+.merchant-flow[data-theme='dark'] [style*='color: var(--green)']:not([style*='background-color: var(--green)']):not([style*='background: var(--green)']) { color: #34d399 !important; }
+.merchant-flow[data-theme='dark'] [style*='color: var(--blue)'] { color: #93c5fd !important; }
+.merchant-flow[data-theme='dark'] [style*='background-color: rgb(248, 250, 252)'] { background-color: #12161c !important; }
+.merchant-flow[data-theme='dark'] :is(.hover\:bg-gray-50:hover, .hover\:bg-gray-100:hover) { background-color: #2b3340; }
+.merchant-flow[data-theme='dark'] button:disabled { opacity: 0.55; }
+
+html[data-theme-switching] .merchant-flow,
+html[data-theme-switching] .merchant-flow *,
+html[data-theme-switching] .merchant-flow *::before,
+html[data-theme-switching] .merchant-flow *::after {
+  transition: background-color 0.22s var(--ease-out, ease), border-color 0.22s var(--ease-out, ease), color 0.22s var(--ease-out, ease), box-shadow 0.22s var(--ease-out, ease) !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme-switching] .merchant-flow,
+  html[data-theme-switching] .merchant-flow * { transition: none !important; }
+}
+
+/* Dark: CreatePolicy sets many colours inline for white cards; remap them by value */
+.merchant-flow[data-theme='dark'] :is([style*='background-color: white'], [style*='background-color: rgb(255, 255, 255)'], [style*='background-color: #fff']) { background-color: #1b2028 !important; }
+.merchant-flow[data-theme='dark'] [style*='border-color: rgb(229, 231, 235)'] { border-color: #313843 !important; }
+.merchant-flow[data-theme='dark'] [style*='1px solid rgb(229, 231, 235)'] { border-color: #313843 !important; }
+.merchant-flow[data-theme='dark'] [style*='1.5px solid rgb(209, 213, 219)'] { border-color: #5a6575 !important; }
+.merchant-flow[data-theme='dark'] [style*='background-color: rgb(229, 231, 235)'] { background-color: #313843 !important; }
+.merchant-flow[data-theme='dark'] :is([style*='color: rgb(55, 65, 81)'], [style*='color: var(--navy)']) { color: #cdd3dc !important; }
+.merchant-flow[data-theme='dark'] [style*='color: rgb(17, 24, 39)'] { color: #eef0f4 !important; }
+.merchant-flow[data-theme='dark'] :is([style*='color: rgb(107, 114, 128)'], [style*='color: rgb(100, 116, 139)']) { color: #a3acb9 !important; }
+.merchant-flow[data-theme='dark'] [style*='color: rgb(146, 64, 14)'] { color: #fbbf24 !important; }
+.merchant-flow[data-theme='dark'] [style*='color: rgb(156, 163, 175)'] { color: #a9b2be !important; }
+.merchant-flow[data-theme='dark'] :is([style*='background-color: rgb(250, 250, 250)'], [style*='background-color: rgb(249, 250, 251)'], [style*='background-color: rgb(241, 245, 249)']) { background-color: #272e39 !important; }
+.merchant-flow[data-theme='dark'] [style*='background-color: rgb(237, 245, 242)'] { background-color: #12302a !important; }
+.merchant-flow[data-theme='dark'] :is([style*='border-color: rgb(228, 231, 236)'], [style*='border-color: rgb(208, 213, 221)']) { border-color: #3a4350 !important; }
+.merchant-flow[data-theme='dark'] [style*='border-color: rgb(169, 213, 200)'] { border-color: #1f8f6e !important; }
+.merchant-flow[data-theme='dark'] [style*='color: rgb(152, 162, 179)'] { color: #a9b2be !important; }
+.merchant-flow[data-theme='dark'] [style*='color: rgb(71, 84, 103)'] { color: #cdd3dc !important; }
+.merchant-flow[data-theme='dark'] [style*='background-color: rgb(254, 249, 195)'] { background-color: #33270f !important; }
+.merchant-flow[data-theme='dark'] .merchant-help { background: #202630; color: #cdd3dc; }
+.merchant-flow[data-theme='dark'] .merchant-help summary { color: #6ee7b7; }
+.merchant-flow[data-theme='dark'] .merchant-timeline-mark { border-color: #3a4350; }
