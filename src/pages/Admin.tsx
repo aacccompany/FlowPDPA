@@ -29,7 +29,6 @@ import {
   WalletCards,
   X,
 } from "lucide-react";
-import { session } from "@/utils/storage";
 import { api } from "@/services/api";
 import type {
   AdminAnalytics,
@@ -56,6 +55,9 @@ import type {
   AdminCompanyDocument,
 } from "@/services/api";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { AuditExplorer } from "@/components/admin/AuditExplorer";
+import { MerchantActivityExplorer } from "@/components/admin/MerchantActivityExplorer";
+import { ExportRowsMenu, loadPagedRows } from "@/components/admin/ExportRowsMenu";
 import { marked } from "marked";
 import { normalizePolicyMarkdown } from "@/utils/policyMarkdown";
 import "./Portal.css";
@@ -124,6 +126,17 @@ const badgeMeta: Record<string, { color: string; bg: string }> = {
 };
 
 const auditActionLabels: Record<string, string> = {
+  "auth.logout": "ออกจากระบบ",
+  "merchant.created": "สร้างผู้ประกอบการ",
+  "merchant.updated": "แก้ไขผู้ประกอบการ",
+  "merchant.status_changed": "เปลี่ยนสถานะผู้ประกอบการ",
+  "merchant.deleted": "ลบผู้ประกอบการ",
+  "consent.form_created": "สร้างแบบฟอร์มความยินยอม",
+  "consent.form_updated": "แก้ไขแบบฟอร์มความยินยอม",
+  "consent.exported": "ส่งออกหลักฐานความยินยอม",
+  "billing.subscription_changed": "เปลี่ยนแปลงการสมัครสมาชิก",
+  "billing.payment_succeeded": "ชำระเงินสำเร็จ",
+  "billing.payment_failed": "ชำระเงินไม่สำเร็จ",
   login_success: "เข้าสู่ระบบสำเร็จ",
   login_failed: "เข้าสู่ระบบไม่สำเร็จ",
   password_reset: "ตั้งรหัสผ่านใหม่",
@@ -492,6 +505,7 @@ function Overview({
         eyebrow="การดำเนินงานแพลตฟอร์ม"
         title="ภาพรวมผู้ดูแลระบบ"
         description="ติดตามบัญชี นโยบาย การชำระเงิน และกระบวนการตรวจสอบด้านกฎหมาย"
+        action={<ExportRowsMenu filename="flowpdpa-admin-overview" total={stats.length} loadRows={async (count) => stats.slice(0, count === "all" ? stats.length : count).map((item) => ({ label: item.label, value: item.value }))} columns={[{ header: "รายการ", value: (row) => row.label }, { header: "ค่า", value: (row) => row.value }]} />}
       />
       <section className="portal-kpis">
         {stats.map(({ label, value, Icon, color }) => (
@@ -852,21 +866,28 @@ function MerchantView({
     setRows((current) => current.filter((row) => row.id !== deleting.id));
     setDeleting(null);
   };
+  const exportRows = (count: 10 | 50 | 100 | "all") => loadPagedRows(count, async (page, limit) => {
+    const response = await api.admin.listMerchants({ status: statusFilter === "all" ? undefined : statusFilter, search: query || undefined, page, limit });
+    if (!response.success || !response.data) throw new Error(response.error?.message || "ไม่สามารถส่งออกผู้ประกอบการได้");
+    return { rows: response.data.merchants, total: response.data.pagination.total };
+  });
   return (
     <>
       <PageTitle
         eyebrow="การจัดการบัญชี"
         title="ผู้ประกอบการ"
         description="ค้นหาบัญชีและควบคุมสิทธิ์การเข้าใช้แพลตฟอร์ม"
-        action={
-          <button
+        action={<div className="flex flex-wrap gap-2"><ExportRowsMenu filename="flowpdpa-merchants" total={visible.length} loadRows={exportRows} columns={[
+          { header: "ชื่อ", value: (row) => row.name }, { header: "อีเมล", value: (row) => row.email }, { header: "บริษัท", value: (row) => row.companyName },
+          { header: "โทรศัพท์", value: (row) => row.phone }, { header: "จำนวนนโยบาย", value: (row) => row.policyCount }, { header: "สมาชิกที่ใช้งาน", value: (row) => row.activeSubscriptions },
+          { header: "สถานะ", value: (row) => row.status }, { header: "วันที่สมัคร", value: (row) => row.createdAt }, { header: "เข้าสู่ระบบล่าสุด", value: (row) => row.lastLoginAt },
+        ]} /><button
             className="portal-button primary"
             onClick={() => setCreating(true)}
           >
             <Plus className="w-4 h-4" />
             Create merchant
-          </button>
-        }
+          </button></div>}
       />
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <SearchBox
@@ -1226,12 +1247,22 @@ function PolicyView({
     }
     setHistoryEvents(response.data.events);
   };
+  const exportRows = (count: 10 | 50 | 100 | "all") => loadPagedRows(count, async (page, limit) => {
+    const response = await api.admin.listPolicies({ status: filter === "all" ? undefined : filter, policyType: typeFilter === "all" ? undefined : typeFilter, merchantId: merchantFilter?.id, search: query || undefined, page, limit });
+    if (!response.success || !response.data) throw new Error(response.error?.message || "ไม่สามารถส่งออกนโยบายได้");
+    return { rows: response.data.policies, total: response.data.pagination.total };
+  });
   return (
     <>
       <PageTitle
         eyebrow="การดำเนินงานด้านนโยบาย"
         title={merchantFilter ? `เอกสารของ ${merchantFilter.name}` : "นโยบายทั้งหมด"}
         description="ตรวจสอบสถานะกระบวนการและปรับการมอบหมายฝ่ายกฎหมายได้"
+        action={<ExportRowsMenu filename="flowpdpa-policies" total={visible.length} loadRows={exportRows} columns={[
+          { header: "เว็บไซต์ / นโยบาย", value: (row) => row.websiteName }, { header: "Slug", value: (row) => row.slug }, { header: "ผู้ประกอบการ", value: (row) => row.merchantName },
+          { header: "อีเมล", value: (row) => row.merchantEmail }, { header: "ประเภท", value: (row) => row.type }, { header: "ภาษา", value: (row) => row.language },
+          { header: "สถานะ", value: (row) => row.status }, { header: "เวอร์ชัน", value: (row) => row.version }, { header: "ผู้ตรวจสอบ", value: (row) => row.assignedLegalUserId }, { header: "แก้ไขล่าสุด", value: (row) => row.updatedAt },
+        ]} />}
       />
       {merchantFilter ? (
         <div className="mb-4 flex items-center justify-between gap-3 rounded border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
@@ -1447,12 +1478,30 @@ function BillingView({
         .filter((value): value is string => Boolean(value)),
     ),
   );
+  const exportRows = (count: 10 | 50 | 100 | "all") => loadPagedRows(count, async (page, limit) => {
+    const response = mode === "subscriptions"
+      ? await api.admin.listSubscriptions({ status: statusFilter === "all" ? undefined : statusFilter, policyType: typeFilter === "all" ? undefined : typeFilter, page, limit })
+      : await api.admin.listPayments({ status: statusFilter === "all" ? undefined : statusFilter, page, limit });
+    if (!response.success || !response.data) throw new Error(response.error?.message || "ไม่สามารถส่งออกข้อมูล Stripe ได้");
+    const sourceRows = "subscriptions" in response.data ? response.data.subscriptions : response.data.payments;
+    const filtered = sourceRows.filter((row) => `${row.id} ${"stripeInvoiceId" in row ? row.stripeInvoiceId || "" : ""} ${row.merchantName || ""} ${row.merchantEmail || ""}`.toLowerCase().includes(query.toLowerCase()) && (typeFilter === "all" || row.plan === typeFilter));
+    return { rows: filtered, total: response.data.pagination.total };
+  });
   return (
     <>
       <PageTitle
         eyebrow="การติดตาม Stripe"
         title={mode === "subscriptions" ? "การสมัครสมาชิก" : "การชำระเงิน"}
         description="ข้อมูลการเรียกเก็บเงินแบบอ่านอย่างเดียวที่ซิงก์จาก Stripe"
+        action={mode === "subscriptions" ? <ExportRowsMenu filename="flowpdpa-subscriptions" total={visibleSubscriptions.length} loadRows={exportRows as (count: 10 | 50 | 100 | "all") => Promise<Subscription[]>} columns={[
+          { header: "Subscription ID", value: (row) => row.stripeSubscriptionId || row.id }, { header: "ผู้ประกอบการ", value: (row) => row.merchantName }, { header: "อีเมล", value: (row) => row.merchantEmail },
+          { header: "แพ็กเกจ", value: (row) => row.plan }, { header: "รอบบิล", value: (row) => row.billingCycle }, { header: "เริ่มรอบ", value: (row) => row.currentPeriodStart },
+          { header: "สิ้นสุดรอบ", value: (row) => row.currentPeriodEnd }, { header: "ยกเลิกเมื่อสิ้นรอบ", value: (row) => row.cancelAtPeriodEnd }, { header: "สถานะ", value: (row) => row.status },
+        ]} /> : <ExportRowsMenu filename="flowpdpa-payments" total={visiblePayments.length} loadRows={exportRows as (count: 10 | 50 | 100 | "all") => Promise<Payment[]>} columns={[
+          { header: "Invoice ID", value: (row) => row.stripeInvoiceId || row.id }, { header: "ผู้ประกอบการ", value: (row) => row.merchantName }, { header: "อีเมล", value: (row) => row.merchantEmail },
+          { header: "แพ็กเกจ", value: (row) => row.plan }, { header: "รอบบิล", value: (row) => row.billingCycle }, { header: "ยอดชำระ", value: (row) => row.amountPaid },
+          { header: "สกุลเงิน", value: (row) => row.currency }, { header: "สถานะ", value: (row) => row.status }, { header: "วันที่ชำระ", value: (row) => row.paidAt },
+        ]} />}
       />
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <SearchBox
@@ -2208,15 +2257,24 @@ function LegalManagement({
         eyebrow="การจัดการฝ่ายกฎหมาย"
         title="ทีมกฎหมาย"
         description="จัดการผู้ตรวจสอบ ภาระงาน การมอบหมาย และประวัติการตรวจสอบ"
-        action={
-          <button
+        action={<div className="flex flex-wrap gap-2"><ExportRowsMenu filename={`flowpdpa-legal-${tab}`} total={tab === "users" ? visibleUsers.length : tab === "workload" ? visibleWorkload.length : visibleReviews.length} loadRows={async (count) => {
+          const sourceRows = tab === "users" ? visibleUsers : tab === "workload" ? visibleWorkload : visibleReviews;
+          return sourceRows.slice(0, count === "all" ? sourceRows.length : count);
+        }} columns={tab === "users" ? [
+          { header: "ชื่อ", value: (row: LegalUser | AdminLegalWorkload | AdminLegalReview) => "name" in row ? row.name : "" },
+          { header: "อีเมล", value: (row) => "email" in row ? row.email : "legalUserEmail" in row ? row.legalUserEmail : "" },
+          { header: "สถานะ", value: (row) => "status" in row ? row.status : "" },
+        ] : tab === "workload" ? [
+          { header: "ชื่อ", value: (row) => "name" in row ? row.name : "" }, { header: "รอดำเนินการ", value: (row) => "pending" in row ? row.pending : "" }, { header: "เกินกำหนด", value: (row) => "overdue" in row ? row.overdue : "" },
+        ] : [
+          { header: "ผู้ตรวจสอบ", value: (row) => "legalUserEmail" in row ? row.legalUserEmail : "" }, { header: "นโยบาย", value: (row) => "websiteName" in row ? row.websiteName : "" }, { header: "สถานะ", value: (row) => "status" in row ? row.status : "" }, { header: "วันที่ตรวจ", value: (row) => "reviewedAt" in row ? row.reviewedAt : "" },
+        ]} /><button
             className="portal-button primary"
             onClick={() => setCreating(true)}
           >
             <Plus className="w-4 h-4" />
             Create legal user
-          </button>
-        }
+          </button></div>}
       />
       <div className="flex flex-wrap items-center gap-2 mb-4">
         {(["users", "workload", "history"] as const).map((value) => (
@@ -3335,7 +3393,20 @@ function AuditLogsView() {
                   ข้อมูลประกอบที่ปลอดภัย
                 </p>
                 <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all rounded bg-slate-900 p-4 text-xs text-slate-100">
-                  {JSON.stringify(selected.metadata || {}, null, 2)}
+                  {JSON.stringify({
+                    category: selected.category,
+                    targetType: selected.targetType,
+                    targetId: selected.targetId,
+                    merchantId: selected.merchantId,
+                    result: selected.result,
+                    previousValue: selected.previousValue,
+                    newValue: selected.newValue,
+                    reason: selected.reason,
+                    requestId: selected.requestId,
+                    source: selected.source,
+                    integrityHash: selected.integrityHash,
+                    metadata: selected.metadata,
+                  }, null, 2)}
                 </pre>
               </div>
               <p className="mt-4 border-l-2 border-emerald-600 pl-3 text-xs text-gray-500">
@@ -3349,6 +3420,11 @@ function AuditLogsView() {
     </>
   );
 }
+
+// Kept temporarily for compatibility with older Admin snapshots while the
+// dedicated Audit Explorer owns the active route.
+void MerchantActivityView;
+void AuditLogsView;
 
 function AnalyticsView({ analytics }: { analytics: AdminAnalytics }) {
   const metrics = [
@@ -4149,8 +4225,8 @@ export default function Admin() {
     [view],
   );
   const logout = () => setConfirmLogout(true);
-  const confirmSignOut = () => {
-    session.logout();
+  const confirmSignOut = async () => {
+    await api.auth.logout();
     navigate("/login", { replace: true });
   };
   let content: React.ReactNode;
@@ -4205,8 +4281,8 @@ export default function Admin() {
       />
     );
   else if (view === "logs") content = <LogsView logs={logs} />;
-  else if (view === "merchant_activity") content = <MerchantActivityView />;
-  else if (view === "audit") content = <AuditLogsView />;
+  else if (view === "merchant_activity") content = <MerchantActivityExplorer />;
+  else if (view === "audit") content = <AuditExplorer />;
   else if (view === "analytics" && analytics)
     content = <AnalyticsView analytics={analytics} />;
   else

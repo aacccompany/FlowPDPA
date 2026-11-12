@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ExternalLink, Loader2, Mail, ShieldCheck } from 'lucide-react'
+import { ChevronDown, ChevronUp, ExternalLink, Loader2, ShieldCheck } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { api } from '@/services/api'
@@ -14,6 +14,9 @@ export default function PrivacyNoticeGate({ children }: PrivacyNoticeGateProps) 
   const [version, setVersion] = useState(auth?.privacyNoticeVersion ?? '')
   const [checking, setChecking] = useState(true)
   const [accepting, setAccepting] = useState(false)
+  const [showDetails, setShowDetails] = useState(false)
+  const [hasViewedDetails, setHasViewedDetails] = useState(false)
+  const [acknowledged, setAcknowledged] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -22,13 +25,11 @@ export default function PrivacyNoticeGate({ children }: PrivacyNoticeGateProps) 
       if (!active) return
       if (response.success && response.data) {
         setVersion(response.data.currentVersion)
-        if (response.data.accepted) {
-          updateUser({
-            privacyNoticeAccepted: true,
-            privacyNoticeVersion: response.data.acceptedVersion,
-            privacyNoticeAcceptedAt: response.data.acceptedAt,
-          })
-        }
+        updateUser({
+          privacyNoticeAccepted: response.data.accepted,
+          privacyNoticeVersion: response.data.acceptedVersion,
+          privacyNoticeAcceptedAt: response.data.acceptedAt,
+        })
       } else {
         setError(response.error?.message || 'ไม่สามารถตรวจสอบสถานะ Privacy Notice ได้')
       }
@@ -45,7 +46,19 @@ export default function PrivacyNoticeGate({ children }: PrivacyNoticeGateProps) 
   }
 
   const accept = async () => {
-    if (!version || accepting) return
+    if (accepting) return
+    if (!hasViewedDetails) {
+      setError('กรุณากดดูรายละเอียดเพิ่มเติมก่อนยืนยันการรับทราบ')
+      return
+    }
+    if (!acknowledged) {
+      setError('กรุณาติ๊กช่องรับทราบ Privacy Notice ก่อนยืนยันเข้าใช้งาน')
+      return
+    }
+    if (!version) {
+      setError('ไม่พบเวอร์ชัน Privacy Notice กรุณาลองใหม่อีกครั้ง')
+      return
+    }
     setAccepting(true)
     setError('')
     const response = await api.auth.privacyNotice.accept(version)
@@ -59,7 +72,10 @@ export default function PrivacyNoticeGate({ children }: PrivacyNoticeGateProps) 
       setError(response.error?.message || 'บันทึกการรับทราบไม่สำเร็จ กรุณาลองใหม่')
       if (response.error?.code === 'PRIVACY_NOTICE_VERSION_CHANGED') {
         const latest = await api.auth.privacyNotice.status()
-        if (latest.success && latest.data) setVersion(latest.data.currentVersion)
+        if (latest.success && latest.data) {
+          setVersion(latest.data.currentVersion)
+          setAcknowledged(false)
+        }
       }
     }
     setAccepting(false)
@@ -83,31 +99,84 @@ export default function PrivacyNoticeGate({ children }: PrivacyNoticeGateProps) 
           </h1>
         </header>
 
-        <div className="max-h-[55vh] overflow-y-auto px-6 py-5 text-sm leading-7 text-slate-600 sm:px-8">
-          <p className="mb-4">
-            FlowPDPA เก็บและใช้ข้อมูลบัญชีของคุณเพื่อยืนยันตัวตน ให้บริการแพลตฟอร์ม
-            ดูแลความปลอดภัย ติดต่อเกี่ยวกับบริการ และปฏิบัติตามกฎหมายที่เกี่ยวข้อง
+        <div className="max-h-[58vh] overflow-y-auto px-6 py-5 text-sm leading-7 text-slate-600 sm:px-8">
+          <p>
+            FlowPDPA เก็บและใช้ข้อมูลบัญชีของคุณเพื่อยืนยันตัวตน ให้บริการแพลตฟอร์ม ดูแลความปลอดภัย
+            ติดต่อเกี่ยวกับบริการ และปฏิบัติตามกฎหมายที่เกี่ยวข้อง
           </p>
-          <ul className="mb-5 list-disc space-y-2 pl-5">
-            <li>ข้อมูลบัญชีและข้อมูลติดต่อ เช่น ชื่อ อีเมล เบอร์โทรศัพท์ และข้อมูลองค์กร</li>
-            <li>ข้อมูลการใช้งาน ระบบรักษาความปลอดภัย IP address และบันทึกกิจกรรม</li>
-            <li>ข้อมูลจะถูกเก็บเท่าที่จำเป็น และอาจเปิดเผยแก่ผู้ให้บริการที่จำเป็นต่อการให้บริการ</li>
-            <li>คุณสามารถใช้สิทธิเกี่ยวกับข้อมูลส่วนบุคคลได้ตามกฎหมายคุ้มครองข้อมูลส่วนบุคคล</li>
-          </ul>
-          <Link
-            to="/privacy-notice"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 font-semibold text-emerald-700 hover:text-emerald-800"
-          >
-            อ่าน Privacy Notice ฉบับเต็ม <ExternalLink className="h-3.5 w-3.5" />
-          </Link>
-          {version ? <p className="mt-3 text-xs text-slate-400">เวอร์ชัน {version}</p> : null}
 
-          <div className="mt-5 flex gap-3 rounded-xl bg-slate-50 p-4 text-xs leading-5 text-slate-500">
-            <Mail className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" aria-hidden="true" />
-            เมื่อกดยอมรับ ระบบจะส่งอีเมลยืนยันไปยัง {auth?.email}
+          {showDetails ? (
+            <ul id="privacy-notice-summary-details" className="mt-4 list-disc space-y-2 pl-5">
+              <li>ข้อมูลบัญชีและข้อมูลติดต่อ เช่น ชื่อ อีเมล เบอร์โทรศัพท์ และข้อมูลองค์กร</li>
+              <li>ข้อมูลการใช้งาน ระบบรักษาความปลอดภัย IP address และบันทึกกิจกรรม</li>
+              <li>ข้อมูลจะถูกเก็บเท่าที่จำเป็น และอาจเปิดเผยแก่ผู้ให้บริการที่จำเป็นต่อการให้บริการ</li>
+              <li>คุณสามารถใช้สิทธิเกี่ยวกับข้อมูลส่วนบุคคลได้ตามกฎหมายคุ้มครองข้อมูลส่วนบุคคล</li>
+            </ul>
+          ) : null}
+
+          <button
+            type="button"
+            className="mt-3 inline-flex items-center gap-1 font-semibold text-emerald-700 hover:text-emerald-800"
+            aria-expanded={showDetails}
+            aria-controls="privacy-notice-summary-details"
+            onClick={() => {
+              setShowDetails(value => {
+                if (!value) setHasViewedDetails(true)
+                return !value
+              })
+              setError('')
+            }}
+          >
+            {showDetails ? 'ซ่อนรายละเอียด' : 'ดูรายละเอียดเพิ่มเติม'}
+            {showDetails ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1">
+            <Link
+              to="/privacy-notice"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 font-semibold text-emerald-700 hover:text-emerald-800"
+            >
+              อ่าน Privacy Notice ฉบับเต็ม <ExternalLink className="h-3.5 w-3.5" />
+            </Link>
+            {version ? <span className="text-xs text-slate-400">เวอร์ชัน {version}</span> : null}
           </div>
+
+          {hasViewedDetails ? (
+            <>
+              <label
+                className={`mt-5 flex cursor-pointer items-start gap-3 rounded-xl border p-4 text-sm leading-6 transition-colors ${
+                  acknowledged
+                    ? 'border-emerald-500 bg-emerald-50 text-emerald-900'
+                    : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-emerald-300'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  aria-describedby="privacy-notice-acknowledgement-help"
+                  className="mt-1 h-4 w-4 shrink-0 accent-emerald-700"
+                  checked={acknowledged}
+                  onChange={event => {
+                    setAcknowledged(event.target.checked)
+                    setError('')
+                  }}
+                />
+                <span>
+                  ข้าพเจ้าได้อ่านและรับทราบ
+                </span>
+              </label>
+
+              <p id="privacy-notice-acknowledgement-help" className="mt-2 text-xs text-slate-500">
+                ติ๊กช่องด้านบน แล้วกด “ยืนยันการรับทราบและเข้าใช้งาน”
+              </p>
+            </>
+          ) : (
+            <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              กรุณากด “ดูรายละเอียดเพิ่มเติม” ก่อนยืนยันการรับทราบ
+            </p>
+          )}
+
           {error ? <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p> : null}
         </div>
 
@@ -118,16 +187,16 @@ export default function PrivacyNoticeGate({ children }: PrivacyNoticeGateProps) 
             disabled={accepting}
             className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
           >
-            ไม่ยอมรับและออกจากระบบ
+            ไม่รับทราบและออกจากระบบ
           </button>
           <button
             type="button"
             onClick={() => void accept()}
-            disabled={checking || accepting || !version}
+            disabled={checking || accepting || !hasViewedDetails || !acknowledged}
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {checking || accepting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-            {checking ? 'กำลังตรวจสอบ...' : accepting ? 'กำลังบันทึก...' : 'ยอมรับและเข้าใช้งาน'}
+            {checking ? 'กำลังตรวจสอบ...' : accepting ? 'กำลังบันทึก...' : 'ยืนยันการรับทราบและเข้าใช้งาน'}
           </button>
         </footer>
       </section>

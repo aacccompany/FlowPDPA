@@ -1,6 +1,8 @@
 export const API_ENDPOINTS = {
   auth: {
     login: '/auth/login',
+    googleOAuthStart: '/auth/oauth/google/start',
+    googleOAuthExchange: '/auth/oauth/google/exchange',
     register: '/auth/register',
     verifyRegistration: '/auth/register/verify',
     resendRegistrationOtp: '/auth/register/resend-otp',
@@ -10,6 +12,7 @@ export const API_ENDPOINTS = {
     refreshToken: '/auth/refresh',
     requestPasswordReset: '/auth/password-reset/request',
     confirmPasswordReset: '/auth/password-reset/confirm',
+    logout: '/auth/logout',
   },
   profile: {
     root: '/profile',

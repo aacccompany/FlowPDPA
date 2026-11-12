@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { AlertCircle, Eye, EyeOff, Loader2, ShieldCheck } from 'lucide-react'
 import { api } from '@/services/api'
@@ -21,6 +21,11 @@ export default function Login() {
       : '',
   )
   const [loading, setLoading] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
+  const oauthExchangeStarted = useRef(false)
+
+  const oauthCode = new URLSearchParams(location.search).get('oauth_code')
+  const oauthError = new URLSearchParams(location.search).get('oauth_error')
 
   useEffect(() => {
     if (locationState?.switchAccount) {
@@ -28,11 +33,12 @@ export default function Login() {
       navigate('/login', { replace: true })
       return
     }
+    if (oauthCode) return
     const auth = storage.auth.get()
     if (auth?.token) navigate(roleHome(auth.role), { replace: true })
-  }, [locationState?.switchAccount, navigate])
+  }, [locationState?.switchAccount, navigate, oauthCode])
 
-  const destinationFor = (role: UserRole) => {
+  const destinationFor = useCallback((role: UserRole) => {
     const canReturnToRequestedPage = (
       (role === 'admin' && from.startsWith('/admin'))
       || (role === 'legal' && from.startsWith('/legal'))
@@ -40,7 +46,65 @@ export default function Login() {
     )
     if (canReturnToRequestedPage) return from
     return roleHome(role)
-  }
+  }, [from])
+
+  const completeLogin = useCallback((data: {
+    token?: string
+    access_token?: string
+    refresh_token?: string
+    expires_in?: number
+    user?: { id?: string; email?: string; name?: string; role?: string; plan?: string; company?: string; phone?: string; email_verified?: boolean; privacy_notice_accepted?: boolean; privacy_notice_version?: string | null; privacy_notice_accepted_at?: string | null }
+    email?: string
+    name?: string
+    role?: string
+    plan?: string
+  }, fallbackEmail = '') => {
+    const user = data.user ?? data
+    const token = data.token ?? data.access_token
+    if (!token) throw new Error('MISSING_ACCESS_TOKEN')
+    const role = normalizeRole(user.role)
+    storage.auth.set({
+      id: data.user?.id,
+      email: user.email ?? fallbackEmail,
+      name: user.name ?? '',
+      plan: user.plan ?? 'Free',
+      role,
+      token,
+      refreshToken: data.refresh_token,
+      expiresAt: data.expires_in ? Date.now() + data.expires_in * 1000 : undefined,
+      company: data.user?.company,
+      phone: data.user?.phone,
+      emailVerified: data.user?.email_verified ?? true,
+      privacyNoticeAccepted: data.user?.privacy_notice_accepted ?? false,
+      privacyNoticeVersion: data.user?.privacy_notice_version,
+      privacyNoticeAcceptedAt: data.user?.privacy_notice_accepted_at,
+    })
+    navigate(destinationFor(role), { replace: true })
+  }, [destinationFor, navigate])
+
+  useEffect(() => {
+    if (oauthError) {
+      setError('เข้าสู่ระบบด้วย Google ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      navigate('/login', { replace: true, state: locationState })
+      return
+    }
+    if (!oauthCode || oauthExchangeStarted.current) return
+    oauthExchangeStarted.current = true
+    window.history.replaceState({}, '', '/login')
+    setGoogleLoading(true)
+    void api.auth.googleOAuth.exchange(oauthCode).then(response => {
+      if (!response.success || !response.data) {
+        setError(response.error?.message || 'เข้าสู่ระบบด้วย Google ไม่สำเร็จ')
+        return
+      }
+      completeLogin(response.data)
+    }).catch(requestError => {
+      console.error('Google login exchange error:', requestError)
+      setError('เชื่อมต่อ Google ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+    }).finally(() => {
+      setGoogleLoading(false)
+    })
+  }, [completeLogin, locationState, navigate, oauthCode, oauthError])
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -72,31 +136,7 @@ export default function Login() {
         role?: string
         plan?: string
       }
-      const user = data.user ?? data
-      const token = data.token ?? data.access_token
-      if (!token) {
-        setError('ระบบไม่ได้รับ access token จากเซิร์ฟเวอร์')
-        return
-      }
-
-      const role = normalizeRole(user.role)
-      storage.auth.set({
-        id: data.user?.id,
-        email: user.email ?? normalizedEmail,
-        name: user.name ?? '',
-        plan: user.plan ?? 'Free',
-        role,
-        token,
-        refreshToken: data.refresh_token,
-        expiresAt: data.expires_in ? Date.now() + data.expires_in * 1000 : undefined,
-        company: data.user?.company,
-        phone: data.user?.phone,
-        emailVerified: data.user?.email_verified ?? true,
-        privacyNoticeAccepted: data.user?.privacy_notice_accepted ?? false,
-        privacyNoticeVersion: data.user?.privacy_notice_version,
-        privacyNoticeAcceptedAt: data.user?.privacy_notice_accepted_at,
-      })
-      navigate(destinationFor(role), { replace: true })
+      completeLogin(data, normalizedEmail)
     } catch (requestError) {
       console.error('Login error:', requestError)
       setError('เชื่อมต่อระบบไม่ได้ กรุณาลองใหม่อีกครั้ง')
@@ -184,6 +224,34 @@ export default function Login() {
                 {loading ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}
               </button>
             </form>
+
+            <div className="flex items-center gap-3 my-6">
+              <span className="register-divider flex-1 h-px" />
+              <span className="text-xs text-gray-500">หรือ</span>
+              <span className="register-divider flex-1 h-px" />
+            </div>
+
+            <button
+              type="button"
+              disabled={loading || googleLoading}
+              onClick={() => {
+                setGoogleLoading(true)
+                window.location.assign(api.auth.googleOAuth.startUrl(from))
+              }}
+              className="flex w-full items-center justify-center gap-3 rounded-md border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {googleLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+              ) : (
+                <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
+                  <path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.4-.18-2.07H12v3.92h5.38a4.6 4.6 0 0 1-2 3.02v2.55h3.24c1.9-1.75 2.98-4.33 2.98-7.42Z" />
+                  <path fill="#34A853" d="M12 22c2.7 0 4.97-.9 6.62-2.35l-3.24-2.55c-.9.6-2.05.96-3.38.96-2.6 0-4.81-1.76-5.6-4.12H3.05v2.63A10 10 0 0 0 12 22Z" />
+                  <path fill="#FBBC05" d="M6.4 13.94A6 6 0 0 1 6.08 12c0-.67.12-1.32.32-1.94V7.43H3.05A10 10 0 0 0 2 12c0 1.61.38 3.14 1.05 4.57l3.35-2.63Z" />
+                  <path fill="#EA4335" d="M12 5.94c1.47 0 2.79.5 3.83 1.5l2.87-2.88A9.64 9.64 0 0 0 12 2a10 10 0 0 0-8.95 5.43l3.35 2.63c.79-2.36 3-4.12 5.6-4.12Z" />
+                </svg>
+              )}
+              {googleLoading ? 'กำลังเชื่อมต่อ Google...' : 'เข้าสู่ระบบด้วย Google'}
+            </button>
 
             <div className="flex items-center gap-3 my-6">
               <span className="register-divider flex-1 h-px" />

@@ -9,6 +9,8 @@ import type {
   PrivacyNoticeStatus,
 } from './types'
 
+const API_BASE_URL = ((import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api').replace(/\/$/, '')
+
 export interface RegisterRequest {
   name: string
   email: string
@@ -22,6 +24,14 @@ export const authApi = {
     apiRequest<AuthPayload>(API_ENDPOINTS.auth.login, {
       method: 'POST', body: data, authenticated: false,
     }),
+  googleOAuth: {
+    startUrl: (returnTo = '/dashboard') =>
+      `${API_BASE_URL}${API_ENDPOINTS.auth.googleOAuthStart}?returnTo=${encodeURIComponent(returnTo)}`,
+    exchange: (code: string) =>
+      apiRequest<AuthPayload>(API_ENDPOINTS.auth.googleOAuthExchange, {
+        method: 'POST', body: { code }, authenticated: false,
+      }),
+  },
   register: {
     initiate: (data: RegisterRequest) =>
       apiRequest<RegistrationStarted>(API_ENDPOINTS.auth.register, {
@@ -41,7 +51,7 @@ export const authApi = {
   privacyNotice: {
     status: () => apiRequest<PrivacyNoticeStatus>(API_ENDPOINTS.auth.privacyNotice),
     accept: (version: string) => apiRequest<PrivacyNoticeStatus>(API_ENDPOINTS.auth.acceptPrivacyNotice, {
-      method: 'POST', body: { version },
+      method: 'POST', body: { version, acknowledged: true },
     }),
   },
   refreshToken: refreshAccessToken,
@@ -55,5 +65,11 @@ export const authApi = {
         method: 'POST', body: data, authenticated: false,
       }),
   },
-  logout: () => storage.auth.clear(),
+  logout: async () => {
+    try {
+      await apiRequest<{ success: boolean }>(API_ENDPOINTS.auth.logout, { method: 'POST' })
+    } finally {
+      storage.auth.clear()
+    }
+  },
 }

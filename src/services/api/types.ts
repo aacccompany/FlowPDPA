@@ -43,7 +43,6 @@ export interface PrivacyNoticeStatus {
   acceptedVersion: string | null
   acceptedAt: string | null
   noticeUrl: string
-  emailSent?: boolean
 }
 
 export interface AuthPayload {

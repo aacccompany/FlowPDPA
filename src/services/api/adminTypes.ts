@@ -206,9 +206,22 @@ export interface AdminMerchantActivity {
 
 export interface AdminAuditLog {
   id: string;
+  actorId?: string | null;
   actorEmail: string | null;
   actorRole: string | null;
-  action: "read" | "create" | "update" | "delete";
+  actorType?: string | null;
+  action: string;
+  category?: string | null;
+  targetType?: string | null;
+  targetId?: string | null;
+  merchantId?: string | null;
+  result?: string | null;
+  previousValue?: Record<string, unknown> | null;
+  newValue?: Record<string, unknown> | null;
+  reason?: string | null;
+  requestId?: string | null;
+  source?: string | null;
+  integrityHash?: string | null;
   method: string;
   path: string;
   statusCode: number;

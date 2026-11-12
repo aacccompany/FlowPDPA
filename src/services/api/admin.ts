@@ -144,6 +144,17 @@ export const adminApi = {
       action?: string;
       method?: string;
       actor?: string;
+      category?: string;
+      targetType?: string;
+      targetId?: string;
+      result?: string;
+      role?: string;
+      search?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      merchantId?: string;
+      source?: string;
+      requestId?: string;
       page?: number;
       limit?: number;
     } = {},
@@ -155,6 +166,10 @@ export const adminApi = {
     params: {
       type?: string;
       merchantId?: string;
+      policyId?: string;
+      kind?: string;
+      dateFrom?: string;
+      dateTo?: string;
       search?: string;
       page?: number;
       limit?: number;

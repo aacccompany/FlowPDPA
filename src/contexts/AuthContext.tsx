@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { api } from '@/services/api'
 import {
   AUTH_CHANGED_EVENT,
@@ -123,6 +123,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const sessionExpiring = false
 
+  const updateUser = useCallback((userData: Partial<AuthUser>) => {
+    setAuth(current => current ? { ...current, ...userData } : current)
+  }, [])
+
   const value: AuthContextType = {
     isAuthenticated: Boolean(auth?.token),
     user: auth ? {
@@ -145,10 +149,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       storage.auth.set(next)
       setAuth(next)
     },
-    logout: session.logout,
-    updateUser: userData => {
-      setAuth(current => current ? { ...current, ...userData } : current)
-    },
+    logout: () => { void api.auth.logout() },
+    updateUser,
     refreshSession,
   }
 

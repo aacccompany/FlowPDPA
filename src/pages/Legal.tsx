@@ -19,7 +19,6 @@ import {
   ShieldCheck,
   UserRound,
 } from "lucide-react";
-import { session } from "@/utils/storage";
 import { api } from "@/services/api";
 import type {
   LegalDashboard,
@@ -1022,8 +1021,8 @@ export default function Legal() {
     return null;
   };
   const logout = () => setConfirmLogout(true);
-  const confirmSignOut = () => {
-    session.logout();
+  const confirmSignOut = async () => {
+    await api.auth.logout();
     navigate("/login", { replace: true });
   };
   const changeView = (next: LegalView) => {
