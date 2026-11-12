@@ -9,6 +9,7 @@ import CookieBanner from '@/components/layout/CookieBanner'
 import ScrollToTop from '@/components/layout/ScrollToTop'
 import { roleHome, type UserRole } from '@/utils/storage'
 import PrivacyNoticeGate from '@/components/auth/PrivacyNoticeGate'
+import './site-theme.css'
 
 const Home = lazy(() => import('@/pages/Home'))
 const About = lazy(() => import('@/pages/About'))
@@ -132,14 +133,14 @@ export default function App() {
             <Route
               path="*"
               element={
-                <>
+                <div className="site-shell">
                   <Navbar />
                   <main>
                     <AnimatedRoutes />
                   </main>
                   <Footer />
                   <CookieBanner />
-                </>
+                </div>
               }
             />
           </Routes>

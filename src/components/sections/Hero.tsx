@@ -27,14 +27,6 @@ export default function Hero() {
               <Link to="/get-started" className="btn-green" style={{ fontSize: '15px', padding: '12px 32px' }}>
                 สร้าง Policy ฟรี
               </Link>
-              <a href="#check-website"
-                className="inline-flex items-center font-semibold px-8 py-3 transition-all"
-                style={{ border: '1px solid rgba(255,255,255,0.2)', borderRadius: '6px', color: '#ffffff', fontSize: '15px' }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.4)'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)' }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; e.currentTarget.style.backgroundColor = 'transparent' }}
-              >
-                ตรวจสอบเว็บไซต์ฟรี
-              </a>
             </div>
 
             {/* <div className="grid grid-cols-3 pt-8" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>

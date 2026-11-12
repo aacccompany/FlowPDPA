@@ -106,11 +106,11 @@ export default function HelpdeskTrack() {
                   value={query}
                   onChange={e => setQuery(e.target.value)}
                   placeholder="เช่น TKT-A3X7K"
-                  className="flex-1 border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-800 focus:outline-none focus:border-green-400 transition-colors font-mono tracking-widest uppercase"
+                  className="min-w-0 flex-1 border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-800 focus:outline-none focus:border-green-400 transition-colors font-mono tracking-widest uppercase"
                 />
                 <button
                   type="submit" disabled={loading || !query.trim()}
-                  className="btn-green px-6 flex items-center gap-2 text-sm"
+                  className="btn-green px-6 flex shrink-0 items-center gap-2 text-sm"
                   style={{ borderRadius: '8px', opacity: loading ? 0.7 : 1 }}
                 >
                   {loading ? <Loader className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}

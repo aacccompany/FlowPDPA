@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { api, type DocumentTemplate } from "@/services/api";
+import { useEscapeKey } from "@/hooks/useEscapeKey";
 
 const disclaimer =
   "เอกสารนี้เป็นแบบฟอร์มเริ่มต้นสำหรับนำไปปรับใช้ตามบริบทขององค์กร ไม่ใช่คำปรึกษาทางกฎหมาย และไม่รับรองว่าการใช้แบบฟอร์มนี้จะทำให้องค์กรปฏิบัติตามกฎหมายได้อย่างถูกต้อง 100% โดยอัตโนมัติ ควรตรวจสอบฐานกฎหมาย กระบวนการจริง และปรึกษาผู้เชี่ยวชาญก่อนนำไปใช้";
@@ -54,6 +55,7 @@ function fullText(template: DocumentTemplate) {
 
 export default function DocumentTemplates() {
   const [selected, setSelected] = useState<DocumentTemplate | null>(null);
+  useEscapeKey(() => setSelected(null), selected !== null);
   const [copied, setCopied] = useState<string | null>(null);
   const [templates, setTemplates] = useState<DocumentTemplate[]>(
     builtinTemplates.map((template) => ({
@@ -97,9 +99,6 @@ export default function DocumentTemplates() {
   return (
     <div>
       <div className="mb-6">
-        <p className="mb-1 text-xs font-bold uppercase tracking-widest text-emerald-700">
-          PDPA document kit
-        </p>
         <h1 className="text-xl font-black text-gray-900">คลังแบบฟอร์ม PDPA</h1>
         <p className="mt-1 text-sm text-gray-500">
           เลือกแบบฟอร์มเริ่มต้น แล้วปรับข้อความให้ตรงกับกระบวนการจริงขององค์กร
@@ -135,7 +134,7 @@ export default function DocumentTemplates() {
                 onClick={() => setSelected(template)}
                 className="inline-flex items-center gap-1.5 border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
               >
-                <Eye className="h-3.5 w-3.5" />
+                <Eye className="h-4 w-4" />
                 ดูตัวอย่าง
               </button>
               <button
@@ -144,9 +143,9 @@ export default function DocumentTemplates() {
                 className="inline-flex items-center gap-1.5 border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
               >
                 {copied === template.id ? (
-                  <Check className="h-3.5 w-3.5 text-emerald-600" />
+                  <Check className="h-4 w-4 text-emerald-600" />
                 ) : (
-                  <ClipboardCopy className="h-3.5 w-3.5" />
+                  <ClipboardCopy className="h-4 w-4" />
                 )}
                 {copied === template.id ? "คัดลอกแล้ว" : "คัดลอก"}
               </button>
@@ -155,7 +154,7 @@ export default function DocumentTemplates() {
                 onClick={() => downloadTemplate(template)}
                 className="inline-flex items-center gap-1.5 bg-emerald-700 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-800"
               >
-                <Download className="h-3.5 w-3.5" />
+                <Download className="h-4 w-4" />
                 ดาวน์โหลด
               </button>
             </div>

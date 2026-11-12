@@ -1,3 +1,4 @@
+import { useEscapeKey } from "@/hooks/useEscapeKey";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -6,7 +7,9 @@ import {
   Plus,
   Settings,
   LogOut,
-  Bell,
+  Menu,
+  ArrowRight,
+  AlertTriangle,
   ChevronRight,
   Download,
   Copy,
@@ -16,7 +19,6 @@ import {
   Globe,
   Lock,
   X,
-  ShieldCheck,
   ExternalLink,
   Loader,
   MailCheck,
@@ -78,15 +80,34 @@ function useMerchantPolicies() {
   const [loading, setLoading] = useState(
     () => !peekApiCache<SavedPolicy[]>(API_ENDPOINTS.policies.root)?.success,
   );
+  const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    let active = true;
     void api.policies.list().then((response) => {
-      setPolicies(response.success && response.data ? response.data : []);
+      if (!active) return;
+      if (response.success && response.data) {
+        setPolicies(response.data);
+        setError("");
+      } else {
+        // Keep what we already had: a failed load must not look like "no policies".
+        setError(response.error?.message || "โหลดรายการนโยบายไม่สำเร็จ");
+      }
       setLoading(false);
     });
+    return () => {
+      active = false;
+    };
+  }, [attempt]);
+
+  const reload = useCallback(() => {
+    setError("");
+    setLoading(true);
+    setAttempt((value) => value + 1);
   }, []);
 
-  return { policies, setPolicies, loading };
+  return { policies, setPolicies, loading, error, reload };
 }
 
 // ── Sidebar nav items ─────────────────────────────────────────
@@ -123,15 +144,41 @@ const merchantNavGroups = [
 
 const navItems = merchantNavGroups.flatMap((group) => group.items);
 
+// Primary navigation (settings lives behind the account chip, "create" is the always-visible button).
+const topNavItems = [
+  { key: "overview", label: "ภาพรวม", Icon: LayoutDashboard },
+  { key: "policies", label: "นโยบาย", Icon: FileText },
+  { key: "templates", label: "แบบฟอร์ม", Icon: FileType2 },
+  { key: "consents", label: "ความยินยอม", Icon: CheckCircle },
+  { key: "activity", label: "กิจกรรม", Icon: Activity },
+  { key: "billing", label: "แพ็กเกจ", Icon: CreditCard },
+];
+
+const subscriptionStatusLabel: Record<string, string> = {
+  active: "ใช้งานอยู่",
+  trialing: "ช่วงทดลองใช้",
+  past_due: "ค้างชำระ",
+  unpaid: "ยังไม่ได้ชำระ",
+  canceled: "ยกเลิกแล้ว",
+  incomplete: "ยังไม่เสร็จสมบูรณ์",
+};
+
+const consentStatusLabel: Record<string, string> = {
+  active: "ใช้งานอยู่",
+  granted: "ให้ความยินยอม",
+  rejected: "ปฏิเสธ",
+  withdrawn: "ถอนความยินยอมแล้ว",
+};
+
 // ── Helpers ───────────────────────────────────────────────────
 const statusDisplay: Record<
   string,
   { label: string; color: string; bg: string }
 > = {
   pending_review: {
-    label: "Review",
-    color: "#d97706",
-    bg: "rgba(217,119,6,0.1)",
+    label: "รอตรวจสอบ",
+    color: "#8a4f05",
+    bg: "rgba(138,79,5,0.1)",
   },
   pending_admin_review: {
     label: "รอ Admin ตรวจซ้ำ",
@@ -158,8 +205,8 @@ function StatusBadge({ status }: { status: string }) {
   };
   return (
     <span
-      className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded"
-      style={{ backgroundColor: cfg.bg, color: cfg.color }}
+      className="inline-flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap"
+      style={{ color: cfg.color }}
     >
       <span
         className="w-1.5 h-1.5 rounded-full"
@@ -167,6 +214,35 @@ function StatusBadge({ status }: { status: string }) {
       />
       {cfg.label}
     </span>
+  );
+}
+
+function LoadError({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div role="alert" className="merchant-empty-state">
+      <AlertTriangle
+        className="w-6 h-6 mx-auto mb-3"
+        style={{ color: "#b42318" }}
+        aria-hidden="true"
+      />
+      <p className="text-sm font-semibold text-gray-800">
+        โหลดข้อมูลไม่สำเร็จ
+      </p>
+      <p className="text-xs mt-1 mb-4">
+        {/[ก-๙]/.test(message)
+          ? message
+          : "เชื่อมต่อระบบไม่สำเร็จ กรุณาลองอีกครั้งในอีกสักครู่"}
+      </p>
+      <button className="merchant-button primary" onClick={onRetry}>
+        ลองอีกครั้ง
+      </button>
+    </div>
   );
 }
 
@@ -178,171 +254,302 @@ function Overview({
   setView: (v: string) => void;
   user: AuthUser;
 }) {
-  const { policies: userPolicies, loading } = useMerchantPolicies();
-  const activePolicies = userPolicies.filter(
-    (p) => p.status === "approved",
-  ).length;
-
+  const { policies: userPolicies, loading, error, reload } =
+    useMerchantPolicies();
+  const loadFailed = Boolean(error) && userPolicies.length === 0;
+  const countBy = (status: string) =>
+    userPolicies.filter((p) => p.status === status).length;
+  const needsAction = userPolicies.filter((p) => p.status === "rejected");
+  const recent = [...userPolicies]
+    .sort(
+      (a, b) =>
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    )
+    .slice(0, 5);
+  // The hero shows the first item that needs action; the side column only lists the rest.
+  const hasSide =
+    !loadFailed &&
+    (needsAction.length > 1 || (!loading && countBy("approved") === 0));
   const stats = [
-    {
-      label: "นโยบายทั้งหมด",
-      value: loading ? "—" : String(userPolicies.length),
-      Icon: FileText,
-      color: "var(--blue)",
-    },
-    {
-      label: "อนุมัติแล้ว",
-      value: loading ? "—" : String(activePolicies),
-      Icon: CheckCircle,
-      color: "var(--green)",
-    },
-    {
-      label: "PDPA Status",
-      value: "Compliant",
-      Icon: ShieldCheck,
-      color: "var(--green)",
-    },
+    { label: "นโยบายทั้งหมด", value: userPolicies.length, alert: false },
+    { label: "รอตรวจสอบ", value: countBy("pending_review"), alert: false },
+    { label: "อนุมัติแล้ว", value: countBy("approved"), alert: false },
+    { label: "ต้องแก้ไข", value: needsAction.length, alert: true },
   ];
 
   return (
     <div>
-      {/* Welcome */}
       <div className="mb-7 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
-          <p
-            className="text-[11px] font-medium uppercase mb-2"
-            style={{ color: "#087a5b", fontFamily: "IBM Plex Mono, monospace" }}
-          >
-            Merchant workspace
-          </p>
           <h1
             className="text-2xl font-bold text-gray-900 mb-1"
             style={{ fontFamily: "Noto Serif Thai, serif" }}
           >
             ภาพรวมของ {user.name}
           </h1>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-gray-600">
             ติดตามเอกสาร การตรวจสอบ และคำขอจากที่เดียว
           </p>
         </div>
-        <Link
-          to="/create/policy"
-          className="btn-green text-sm px-5 py-2.5 flex items-center gap-2 self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" /> สร้างนโยบาย
-        </Link>
       </div>
 
-      {/* Stats */}
-      <div
-        className="grid grid-cols-1 sm:grid-cols-3 bg-white border border-gray-100 mb-8"
-        style={{ borderRadius: "6px" }}
-      >
-        {stats.map(({ label, value, Icon, color }) => (
-          <div key={label} className="merchant-stat p-5 flex items-start gap-4">
-            <Icon className="w-4 h-4 mt-1 shrink-0" style={{ color }} />
-            <div>
-              <div
-                className="text-xl font-semibold text-gray-900 mb-0.5"
-                style={{ fontFamily: "IBM Plex Mono, monospace" }}
-              >
-                {value}
+      {!loading && !loadFailed && (
+        <section className="merchant-hero" aria-label="งานของคุณ">
+          {needsAction.length > 0 ? (
+            <>
+              <div className="min-w-0">
+                <p className="text-sm text-gray-600">ต้องดำเนินการ</p>
+                <h2 className="mt-1 text-2xl font-semibold" style={{ color: "#b42318" }}>
+                  มี {needsAction.length} นโยบายที่ต้องแก้ไข
+                </h2>
+                <p className="mt-2 text-sm text-gray-700 line-clamp-2">
+                  {needsAction[0].typeName} · {needsAction[0].domain}
+                  {needsAction[0].reviewComment
+                    ? " — เหตุผล: " + needsAction[0].reviewComment
+                    : ""}
+                </p>
               </div>
-              <div className="text-xs text-gray-500">{label}</div>
-            </div>
+              <Link
+                to={`/dashboard/policies/${needsAction[0].id}`}
+                className="merchant-cta merchant-hero-cta"
+              >
+                แก้ไขนโยบาย <ArrowRight className="w-4 h-4" />
+              </Link>
+            </>
+          ) : countBy("pending_review") > 0 ? (
+            <>
+              <div className="min-w-0">
+                <p className="text-sm text-gray-600">สถานะล่าสุด</p>
+                <h2 className="mt-1 text-2xl font-semibold">
+                  ฝ่ายกฎหมายกำลังตรวจสอบ {countBy("pending_review")} นโยบาย
+                </h2>
+                <p className="mt-2 text-sm text-gray-700">
+                  โดยปกติภายใน 1–2 วันทำการ
+                </p>
+              </div>
+              <button
+                onClick={() => setView("policies")}
+                className="merchant-button merchant-hero-cta"
+              >
+                ดูสถานะ <ArrowRight className="w-4 h-4" />
+              </button>
+            </>
+          ) : userPolicies.length > 0 ? (
+            <>
+              <div className="min-w-0">
+                <p className="text-sm text-gray-600">สถานะล่าสุด</p>
+                <h2 className="mt-1 text-2xl font-semibold">
+                  นโยบายของคุณพร้อมใช้งาน
+                </h2>
+                <p className="mt-2 text-sm text-gray-700">
+                  นำลิงก์นโยบายไปติดตั้งบนเว็บไซต์ได้จากหน้านโยบาย
+                </p>
+              </div>
+              <button
+                onClick={() => setView("policies")}
+                className="merchant-button merchant-hero-cta"
+              >
+                ไปที่นโยบายของฉัน <ArrowRight className="w-4 h-4" />
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="min-w-0">
+                <p className="text-sm text-gray-600">เริ่มต้น</p>
+                <h2 className="mt-1 text-2xl font-semibold">
+                  สร้างนโยบายฉบับแรกของคุณ
+                </h2>
+                <p className="mt-2 text-sm text-gray-700">
+                  ใช้เวลาไม่กี่นาที ฝ่ายกฎหมายจะตรวจสอบก่อนเผยแพร่
+                </p>
+              </div>
+              <Link
+                to="/create/policy"
+                className="merchant-cta merchant-hero-cta"
+              >
+                <Plus className="w-4 h-4" /> สร้างนโยบาย
+              </Link>
+            </>
+          )}
+        </section>
+      )}
+
+      <section className="merchant-kpis mb-7" aria-label="สรุปนโยบาย">
+        {stats.map(({ label, value, alert }) => (
+          <div key={label} className="merchant-kpi">
+            <p
+              className="text-3xl font-semibold tabular-nums"
+              style={{ color: alert && value > 0 ? "#b42318" : undefined }}
+            >
+              {loading || loadFailed ? "—" : value}
+            </p>
+            <p className="text-sm text-gray-600 mt-1">{label}</p>
           </div>
         ))}
-      </div>
+      </section>
 
-      {/* Recent policies */}
-      <div className="bg-white rounded-xl border border-gray-100 mb-6">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="font-bold text-gray-900 text-sm">นโยบายล่าสุด</h2>
-          <button
-            onClick={() => setView("policies")}
-            className="text-xs font-semibold flex items-center gap-1 transition-colors"
-            style={{ color: "var(--green)" }}
-          >
-            ดูทั้งหมด <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-        {loading ? (
-          <div className="divide-y divide-gray-50" aria-label="กำลังโหลดนโยบาย">
-            {[0, 1, 2].map((item) => (
-              <div key={item} className="flex items-center gap-3 px-6 py-4 animate-pulse">
-                <div className="h-4 w-4 rounded bg-gray-100" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-3 w-40 rounded bg-gray-100" />
-                  <div className="h-2.5 w-24 rounded bg-gray-100" />
-                </div>
-                <div className="h-6 w-16 rounded bg-gray-100" />
-              </div>
-            ))}
-          </div>
-        ) : userPolicies.length === 0 ? (
-          <div className="px-6 py-8 text-center">
-            <p className="text-xs text-gray-400 mb-3">ยังไม่มีนโยบาย</p>
-            <Link
-              to="/create/policy"
-              className="text-xs font-semibold underline"
-              style={{ color: "var(--green)" }}
+      <div className="merchant-overview-grid" data-single={!hasSide}>
+        <section className="merchant-panel">
+          <div className="merchant-panel-head">
+            <h2 className="text-base font-semibold text-gray-900">
+              นโยบายล่าสุด
+            </h2>
+            <button
+              onClick={() => setView("policies")}
+              className="merchant-button"
             >
-              สร้างนโยบายแรก →
-            </Link>
+              ดูทั้งหมด <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
-        ) : (
-          <div className="divide-y divide-gray-50">
-            {userPolicies.slice(0, 3).map((p) => (
-              <div
-                key={p.id}
-                className="flex items-center justify-between px-6 py-4"
-              >
-                <div className="flex items-center gap-3">
-                  <FileText className="w-4 h-4" style={{ color: "#087a5b" }} />
-                  <div>
-                    <div className="text-sm font-semibold text-gray-900">
-                      {p.typeName}
-                    </div>
-                    <div className="text-xs text-gray-400 flex items-center gap-1">
-                      <Globe className="w-3 h-3" /> {p.domain}
-                    </div>
-                  </div>
+          {loading ? (
+            <div role="status" aria-label="กำลังโหลดนโยบาย">
+              {[0, 1, 2].map((item) => (
+                <div key={item} className="merchant-list-row">
+                  <div className="skeleton h-4 w-40" />
+                  <div className="skeleton mt-2 h-3 w-24" />
                 </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-xs text-gray-400 hidden sm:block">
-                    {langDisplay[p.language] || p.language}
-                  </span>
-                  <StatusBadge status={p.status} />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+              ))}
+            </div>
+          ) : loadFailed ? (
+            <LoadError message={error} onRetry={reload} />
+          ) : recent.length === 0 ? (
+            <div className="merchant-empty-state">
+              <FileText className="w-6 h-6 mx-auto mb-3" />
+              <p className="text-sm font-semibold text-gray-700">
+                ยังไม่มีนโยบาย
+              </p>
+              <p className="text-xs mt-1 mb-4">
+                สร้างนโยบายฉบับแรก ฝ่ายกฎหมายจะตรวจสอบก่อนเผยแพร่
+              </p>
+              <Link to="/create/policy" className="merchant-button primary">
+                <Plus className="w-4 h-4" /> สร้างนโยบายแรก
+              </Link>
+            </div>
+          ) : (
+            <ul>
+              {recent.map((p) => (
+                <li key={p.id}>
+                  <Link
+                    to={`/dashboard/policies/${p.id}`}
+                    className="merchant-list-row merchant-list-link"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate">
+                        {p.typeName}
+                      </p>
+                      <p className="text-xs text-gray-600 flex items-center gap-1 mt-0.5 truncate">
+                        <Globe className="w-4 h-4 shrink-0" /> {p.domain}
+                        <span aria-hidden="true">·</span>
+                        {langDisplay[p.language] || p.language}
+                      </p>
+                    </div>
+                    <StatusBadge status={p.status} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
-      {/* Quick actions */}
-      <div
-        className="rounded-xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
-        style={{ background: "#edf5f2", border: "1px solid #c8ded6" }}
-      >
-        <div>
-          <p
-            className="font-semibold text-sm mb-1"
-            style={{ color: "#074f3e" }}
-          >
-            สร้างเอกสารฉบับถัดไป
-          </p>
-          <p className="text-xs" style={{ color: "#477064" }}>
-            ข้อมูลจะถูกส่งให้ฝ่ายกฎหมายตรวจสอบก่อนเผยแพร่
-          </p>
+        {hasSide && (
+        <div className="space-y-7">
+        {needsAction.length > 1 && (
+        <section className="merchant-panel self-start">
+          <div className="merchant-panel-head">
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">
+                ต้องดำเนินการอื่นๆ
+              </h2>
+              <p className="text-xs text-gray-600 mt-1">
+                นโยบายที่ฝ่ายกฎหมายส่งกลับให้แก้ไข
+              </p>
+            </div>
+          </div>
+          {needsAction.length === 0 ? (
+            <div className="merchant-empty-state">
+              <CheckCircle className="w-6 h-6 mx-auto mb-3" />
+              <p className="text-sm font-semibold text-gray-700">
+                ไม่มีรายการที่ต้องแก้ไข
+              </p>
+            </div>
+          ) : (
+            <ul>
+              {needsAction.slice(1).map((p) => (
+                <li key={p.id} className="merchant-list-row merchant-list-stack">
+                  <p className="text-sm font-semibold text-gray-900">
+                    {p.typeName}
+                  </p>
+                  <p className="text-xs text-gray-600 mt-0.5">{p.domain}</p>
+                  <p className="text-sm text-gray-700 mt-2 line-clamp-3">
+                    {p.reviewComment
+                      ? "เหตุผลจากฝ่ายกฎหมาย: " + p.reviewComment
+                      : "ฝ่ายกฎหมายไม่อนุมัติ โปรดตรวจสอบและแก้ไข"}
+                  </p>
+                  <Link
+                    to={`/dashboard/policies/${p.id}`}
+                    className="merchant-button mt-3"
+                  >
+                    แก้ไขนโยบาย <ArrowRight className="w-4 h-4" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+        )}
+        {!loading && countBy("approved") === 0 && (
+          <section className="merchant-panel self-start">
+            <div className="merchant-panel-head">
+              <div>
+                <h2 className="text-base font-semibold text-gray-900">
+                  เริ่มต้นใช้งาน
+                </h2>
+                <p className="text-xs text-gray-600 mt-1">
+                  จากสร้างนโยบายไปจนเผยแพร่บนเว็บไซต์
+                </p>
+              </div>
+            </div>
+            <ol className="merchant-steps">
+              <li data-done={userPolicies.length > 0}>
+                <span className="merchant-step-mark" aria-hidden="true">
+                  {userPolicies.length > 0 ? <CheckCircle className="w-5 h-5" /> : "1"}
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">
+                    สร้างนโยบายฉบับแรก
+                  </p>
+                </div>
+              </li>
+              <li data-done="false">
+                <span className="merchant-step-mark" aria-hidden="true">2</span>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">
+                    รอฝ่ายกฎหมายตรวจสอบและอนุมัติ
+                  </p>
+                  <p className="text-xs text-gray-600 mt-0.5">
+                    โดยปกติภายใน 1–2 วันทำการ
+                  </p>
+                </div>
+              </li>
+              <li data-done="false">
+                <span className="merchant-step-mark" aria-hidden="true">3</span>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">
+                    นำลิงก์นโยบายไปติดตั้งบนเว็บไซต์
+                  </p>
+                  <button
+                    onClick={() => setView("consents")}
+                    className="merchant-button mt-2"
+                  >
+                    ตั้งค่าความยินยอมล่วงหน้า <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </li>
+            </ol>
+          </section>
+        )}
         </div>
-        <Link
-          to="/create/policy"
-          className="btn-green text-sm px-6 py-2.5 shrink-0 flex items-center gap-2"
-          style={{ borderRadius: "8px" }}
-        >
-          <Plus className="w-4 h-4" /> สร้าง Policy ใหม่
-        </Link>
+        )}
       </div>
     </div>
   );
@@ -352,17 +559,17 @@ const downloadFormats = [
   {
     key: "pdf",
     label: "PDF",
-    description: "Portable document",
+    description: "เอกสารพกพา (PDF)",
     Icon: FileText,
   },
   {
     key: "docx",
     label: "Word (.docx)",
-    description: "Editable Word file",
+    description: "ไฟล์ Word แก้ไขได้",
     Icon: FileType2,
   },
-  { key: "txt", label: "TXT", description: "Plain text file", Icon: FileText },
-  { key: "html", label: "HTML", description: "Web page file", Icon: Code2 },
+  { key: "txt", label: "TXT", description: "ไฟล์ข้อความธรรมดา", Icon: FileText },
+  { key: "html", label: "HTML", description: "ไฟล์เว็บเพจ", Icon: Code2 },
 ] as const;
 
 function PolicyDownloadsDialog({
@@ -372,6 +579,7 @@ function PolicyDownloadsDialog({
   policy: SavedPolicy;
   close: () => void;
 }) {
+  useEscapeKey(close);
   const languages = [
     { key: "th", label: "Thai", downloads: policy.downloadsByLanguage?.th },
     { key: "en", label: "English", downloads: policy.downloadsByLanguage?.en },
@@ -396,7 +604,7 @@ function PolicyDownloadsDialog({
         <header className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
           <div>
             <h2 className="text-base font-semibold text-gray-900">
-              Download policy files
+              ดาวน์โหลดไฟล์นโยบาย
             </h2>
             <p className="mt-1 text-xs text-gray-500">
               {policy.typeName} · {policy.websiteName}
@@ -405,7 +613,7 @@ function PolicyDownloadsDialog({
           <button
             className="grid h-8 w-8 place-items-center rounded border border-gray-200 text-gray-500 hover:bg-gray-50"
             onClick={close}
-            aria-label="Close downloads"
+            aria-label="ปิดหน้าต่างดาวน์โหลด"
           >
             <X className="h-4 w-4" />
           </button>
@@ -415,10 +623,10 @@ function PolicyDownloadsDialog({
             <div className="border border-dashed border-gray-300 px-5 py-10 text-center">
               <Clock className="mx-auto mb-3 h-5 w-5 text-gray-400" />
               <p className="text-sm font-semibold text-gray-700">
-                Files are not ready yet
+                ไฟล์ยังไม่พร้อมให้ดาวน์โหลด
               </p>
               <p className="mt-1 text-xs text-gray-500">
-                Exports become available after Legal approves the policy.
+                ไฟล์จะพร้อมให้ดาวน์โหลดหลังฝ่ายกฎหมายอนุมัตินโยบาย
               </p>
             </div>
           ) : (
@@ -470,7 +678,8 @@ function PolicyDownloadsDialog({
 }
 
 function PoliciesList() {
-  const { policies, setPolicies, loading } = useMerchantPolicies();
+  const { policies, setPolicies, loading, error, reload } =
+    useMerchantPolicies();
   const [consentPolicyIds, setConsentPolicyIds] = useState<Set<string>>(() => new Set());
   const [copied, setCopied] = useState<string | null>(null);
   const [downloadPolicy, setDownloadPolicy] = useState<SavedPolicy | null>(
@@ -584,13 +793,6 @@ function PoliciesList() {
             {policies.length} นโยบายในบัญชีของคุณ
           </p>
         </div>
-        <Link
-          to="/create/policy"
-          className="btn-green text-sm px-5 py-2.5 flex items-center gap-2"
-          style={{ borderRadius: "8px" }}
-        >
-          <Plus className="w-4 h-4" /> สร้างใหม่
-        </Link>
       </div>
 
       {deleteError && (
@@ -600,8 +802,12 @@ function PoliciesList() {
       )}
 
       {loading ? (
-        <div className="py-16 text-center text-sm text-gray-400">
-          Loading policies...
+        <div className="skeleton-stack" role="status" aria-label="กำลังโหลดนโยบาย">
+          {[0, 1, 2, 3].map((item) => <div key={item} className="skeleton h-20" />)}
+        </div>
+      ) : error && policies.length === 0 ? (
+        <div className="merchant-empty bg-white border border-gray-100">
+          <LoadError message={error} onRetry={reload} />
         </div>
       ) : policies.length === 0 ? (
         <div className="merchant-empty bg-white border border-gray-100 p-10 text-center">
@@ -633,7 +839,7 @@ function PoliciesList() {
                 }}
                 className="h-9 w-full border border-gray-300 bg-white pl-9 pr-3 text-sm"
                 placeholder="ค้นหาชื่อนโยบาย เว็บไซต์ หรือโดเมน"
-                aria-label="Search policies"
+                aria-label="ค้นหานโยบาย"
               />
             </div>
             <select
@@ -643,7 +849,7 @@ function PoliciesList() {
                 setPage(1);
               }}
               className="h-9 border border-gray-300 bg-white px-3 text-sm"
-              aria-label="Filter by status"
+              aria-label="กรองตามสถานะ"
             >
               <option value="all">ทุกสถานะ</option>
               <option value="pending_review">รอตรวจสอบ</option>
@@ -658,7 +864,7 @@ function PoliciesList() {
                 setPage(1);
               }}
               className="h-9 border border-gray-300 bg-white px-3 text-sm"
-              aria-label="Filter by language"
+              aria-label="กรองตามภาษา"
             >
               <option value="all">ทุกภาษา</option>
               <option value="th">ไทย</option>
@@ -749,11 +955,11 @@ function PoliciesList() {
                   {/* Actions */}
                   <div className="col-span-2 flex items-center justify-end gap-1">
                     <Link
-                      title="Open policy workspace"
+                      title="เปิดหน้านโยบาย"
                       to={`/dashboard/policies/${p.id}`}
                       className="w-7 h-7 flex items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700"
                     >
-                      <FileEdit className="w-3.5 h-3.5" />
+                      <FileEdit className="w-4 h-4" />
                     </Link>
                     {(p.status === "approved" || p.status === "edited") && (
                       <>
@@ -772,15 +978,15 @@ function PoliciesList() {
                               (e.currentTarget.style.backgroundColor = "transparent")
                             }
                           >
-                            <Copy className="w-3.5 h-3.5" />
+                            <Copy className="w-4 h-4" />
                           </button>
                         ) : null}
                         <button
-                          title="Download policy files"
+                          title="ดาวน์โหลดไฟล์นโยบาย"
                           onClick={() => setDownloadPolicy(p)}
                           className="flex h-7 items-center gap-1.5 rounded border border-gray-200 px-2 text-xs font-medium text-gray-600 hover:border-emerald-600 hover:text-emerald-700"
                         >
-                          <Download className="h-3.5 w-3.5" /> Files
+                          <Download className="h-4 w-4" /> Files
                         </button>
                         {consentPolicyIds.has(p.id) ? (
                           <a
@@ -799,7 +1005,7 @@ function PoliciesList() {
                               e.currentTarget.style.color = "#9ca3af";
                             }}
                           >
-                            <ExternalLink className="w-3.5 h-3.5" />
+                            <ExternalLink className="w-4 h-4" />
                           </a>
                         ) : null}
                       </>
@@ -818,7 +1024,7 @@ function PoliciesList() {
                         e.currentTarget.style.color = "#9ca3af";
                       }}
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -843,7 +1049,7 @@ function PoliciesList() {
                   className="grid h-8 w-8 place-items-center rounded border border-gray-200 text-gray-500 disabled:opacity-40"
                   disabled={currentPage === 1}
                   onClick={() => setPage(currentPage - 1)}
-                  aria-label="Previous page"
+                  aria-label="หน้าก่อนหน้า"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
@@ -853,7 +1059,7 @@ function PoliciesList() {
                       key={value}
                       onClick={() => setPage(value)}
                       className={`h-8 min-w-8 rounded border px-2 text-xs font-semibold ${currentPage === value ? "border-emerald-700 bg-emerald-700 text-white" : "border-gray-200 bg-white text-gray-600"}`}
-                      aria-label={`Page ${value}`}
+                      aria-label={`หน้า ${value}`}
                     >
                       {value}
                     </button>
@@ -863,7 +1069,7 @@ function PoliciesList() {
                   className="grid h-8 w-8 place-items-center rounded border border-gray-200 text-gray-500 disabled:opacity-40"
                   disabled={currentPage === pageCount}
                   onClick={() => setPage(currentPage + 1)}
-                  aria-label="Next page"
+                  aria-label="หน้าถัดไป"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>
@@ -1017,6 +1223,7 @@ function PolicyEvidenceDialog({
   log: PolicyActivityLog;
   close: () => void;
 }) {
+  useEscapeKey(close);
   const metadata = log.metadata || {};
   const items = [
     ["รหัสเหตุการณ์", log.id],
@@ -1100,6 +1307,7 @@ function ConsentEvidenceDialog({
   log: ConsentActivityLog;
   close: () => void;
 }) {
+  useEscapeKey(close);
   const evidence = log.evidence || {};
   const purposes = log.purposes as ConsentPurpose[];
   return (
@@ -1174,7 +1382,7 @@ function ConsentEvidenceDialog({
             </div>
             <div>
               <dt className="text-xs text-gray-400">สถานะปัจจุบัน</dt>
-              <dd className="mt-1 font-semibold text-gray-800">{log.status}</dd>
+              <dd className="mt-1 font-semibold text-gray-800">{consentStatusLabel[log.status] ?? log.status}</dd>
             </div>
           </dl>
           <div>
@@ -1424,11 +1632,11 @@ function ActivityLogsView() {
               onClick={() => void exportConsentLogs(format)}
               className="flex h-9 items-center gap-2 border border-emerald-700 bg-white px-4 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <Download className="h-3.5 w-3.5" />
+              <Download className="h-4 w-4" />
               {exportingConsent === format
                 ? "กำลังสร้าง..."
                 : consentUsage?.plan === "business"
-                  ? `Export Consent ${format.toUpperCase()}`
+                  ? `ส่งออกความยินยอม ${format.toUpperCase()}`
                   : `${format.toUpperCase()} · BUSINESS`}
             </button>
           ))}
@@ -1548,7 +1756,7 @@ function ActivityLogsView() {
             onClick={clearFilters}
             className="flex h-9 items-center gap-1.5 border border-gray-300 bg-white px-3 text-xs font-semibold text-gray-600 hover:bg-gray-50"
           >
-            <X className="h-3.5 w-3.5" />
+            <X className="h-4 w-4" />
             ล้างตัวกรอง
           </button>
         ) : null}
@@ -1563,8 +1771,8 @@ function ActivityLogsView() {
       )}
       <section className="overflow-hidden border border-gray-100 bg-white">
         {loading ? (
-          <div className="py-16 text-center text-sm text-gray-400">
-            กำลังโหลดบันทึกกิจกรรม...
+          <div className="skeleton-stack" role="status" aria-label="กำลังโหลดบันทึกกิจกรรม">
+            {[0, 1, 2, 3, 4].map((item) => <div key={item} className="skeleton h-10" />)}
           </div>
         ) : visibleLogs.length === 0 ? (
           <div className="py-16 text-center text-sm text-gray-400">
@@ -1573,7 +1781,7 @@ function ActivityLogsView() {
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="merchant-card-table mct-activity w-full text-left text-xs">
                 <thead className="bg-gray-50 text-gray-500">
                   <tr>
                     <th className="px-4 py-3 font-semibold">ประเภท</th>
@@ -1904,9 +2112,6 @@ function MerchantBillingView() {
         onCancel={() => !canceling && setCancelOpen(false)}
       />
       <div className="mb-6">
-        <p className="mb-2 font-mono text-[11px] uppercase tracking-wider text-emerald-700">
-          Billing account
-        </p>
         <h1 className="text-2xl font-bold text-gray-900">แพ็กเกจและการชำระเงิน</h1>
         <p className="mt-1 text-sm text-gray-500">
           เลือกความจุ Consent Log ที่เหมาะกับงาน และตรวจสอบสถานะแพ็กเกจของบัญชีคุณ
@@ -1920,11 +2125,8 @@ function MerchantBillingView() {
       ) : null}
 
       {loading ? (
-        <div className="grid min-h-64 place-items-center rounded-xl border border-gray-100 bg-white">
-          <div className="text-center">
-            <Loader className="mx-auto h-5 w-5 animate-spin text-emerald-700" />
-            <p className="mt-3 text-xs text-gray-400">กำลังโหลดสถานะแพ็กเกจ...</p>
-          </div>
+        <div className="grid gap-4 lg:grid-cols-3" role="status" aria-label="กำลังโหลดสถานะแพ็กเกจ">
+          {[0, 1, 2].map((item) => <div key={item} className="skeleton h-72" />)}
         </div>
       ) : error ? (
         <div className="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
@@ -1933,10 +2135,7 @@ function MerchantBillingView() {
           <section className="mb-6">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">
-                  Plans
-                </p>
-                <h2 className="mt-1 text-lg font-bold text-gray-900">เลือกแพ็กเกจที่เหมาะกับจำนวน Consent Log</h2>
+                <h2 className="text-lg font-bold text-gray-900">เลือกแพ็กเกจที่เหมาะกับจำนวน Consent Log</h2>
               </div>
               <p className="text-xs text-gray-500">สร้างเอกสาร PDPA ได้ฟรีทุกแพ็กเกจ</p>
             </div>
@@ -2048,7 +2247,6 @@ function MerchantBillingView() {
           <section className="mb-6 rounded-xl border border-gray-200 bg-white p-6">
             <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Consent Log Add-on</p>
                 <h2 className="mt-1 text-lg font-bold text-gray-900">เพิ่มความจุ Consent Log ได้ทั้ง FREE และ BUSINESS</h2>
                 <p className="mt-1 text-xs text-gray-500">โควตา Add-on จะบวกจากแพ็กเกจปัจจุบันตลอดรอบรายเดือน สิทธิ์ Export ยังเป็นของ BUSINESS</p>
               </div>
@@ -2165,7 +2363,7 @@ function MerchantBillingView() {
             </div>
             <div className="grid divide-y divide-gray-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
               {[
-                ["สถานะ", current?.status ?? "ไม่มีรายการ"],
+                ["สถานะ", current ? (subscriptionStatusLabel[current.status] ?? current.status) : "ไม่มีรายการ"],
                 ["เริ่มรอบปัจจุบัน", formatDate(current?.currentPeriodStart)],
                 ["การต่ออายุ", current ? (current.cancelAtPeriodEnd ? "สิ้นสุดเมื่อครบรอบ" : "ต่ออายุอัตโนมัติ") : "ไม่มีการต่ออายุ"],
               ].map(([label, value]) => (
@@ -2189,7 +2387,7 @@ function MerchantBillingView() {
             </header>
             {payments.length ? (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[680px] text-left text-sm">
+                <table className="merchant-card-table mct-billing w-full min-w-[680px] text-left text-sm">
                   <thead className="bg-slate-50 text-[11px] text-gray-500">
                     <tr><th className="px-5 py-3">เลขอ้างอิงใบแจ้งหนี้</th><th className="px-5 py-3">รายการ</th><th className="px-5 py-3">วันที่</th><th className="px-5 py-3">ยอดชำระ</th><th className="px-5 py-3">สถานะ</th></tr>
                   </thead>
@@ -2366,8 +2564,9 @@ function AccountSettings({ user }: { user: AuthUser }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader className="w-6 h-6 animate-spin text-gray-300" />
+      <div className="skeleton-stack" role="status" aria-label="กำลังโหลดข้อมูล">
+        <div className="skeleton h-12" />
+        <div className="skeleton h-64" />
       </div>
     );
   }
@@ -2603,7 +2802,7 @@ function AccountSettings({ user }: { user: AuthUser }) {
             className="btn-green text-sm px-8 py-2.5 flex items-center gap-2"
             style={{ borderRadius: "8px", opacity: saving ? 0.7 : 1 }}
           >
-            {saving && <Loader className="w-3.5 h-3.5 animate-spin" />}
+            {saving && <Loader className="w-4 h-4 animate-spin" />}
             {saving ? "กำลังบันทึก..." : "บันทึกการเปลี่ยนแปลง"}
           </button>
           {saved && (
@@ -2811,213 +3010,125 @@ export default function Dashboard() {
         onCancel={() => setConfirmLogout(false)}
       />
 
-      {/* ── Sidebar ── */}
-      <>
-        {/* Mobile overlay */}
-        {sidebarOpen && (
-          <div
-            className="fixed inset-0 z-20 bg-black/50 lg:hidden"
-            onClick={() => setSidebarOpen(false)}
-          />
-        )}
-
-        <aside
-          className={`merchant-sidebar fixed top-0 left-0 h-full z-30 flex flex-col transition-transform duration-300
-            ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}
-        >
-          {/* Logo */}
-          <div className="merchant-brand flex items-center justify-between">
-            <Link
-              to="/"
-              className="flex items-center gap-3"
-              onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-            >
-              <img
-                src="/favicon.svg"
-                alt="FlowPDPA"
-                className="w-8 h-8"
-                style={{ filter: "brightness(0) invert(1)" }}
-              />
-              <span
-                className="font-extrabold text-base"
-                style={{ color: "#ffffff" }}
-              >
-                Flow<span style={{ color: "#4ade80" }}>PDPA</span>
-              </span>
-            </Link>
-            <button
-              className="lg:hidden p-1 rounded"
-              style={{ color: "#94a3b8" }}
-              onClick={() => setSidebarOpen(false)}
-              aria-label="ปิดเมนู"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Nav */}
-          <nav className="flex-1 overflow-y-auto px-3 py-1">
-            {merchantNavGroups.map((group) => (
-              <div key={group.label} className="mb-3 last:mb-0">
-                <div className="merchant-nav-label px-3">{group.label}</div>
-                <div className="space-y-1">
-                  {group.items.map(({ key, label, Icon }) => {
-                    const active = activeView === key;
-                    return (
-                      <button
-                        key={key}
-                        onClick={() => {
-                          if (key === "new") {
-                            navigate("/create/policy");
-                            return;
-                          }
-                          setActiveView(key);
-                          setSidebarOpen(false);
-                        }}
-                        className="merchant-nav-item w-full flex items-center gap-3 px-3 py-2.5 text-sm transition-colors text-left"
-                        data-active={active}
-                      >
-                        <Icon className="w-4 h-4 shrink-0" />
-                        {label}
-                        {key === "new" && (
-                          <span
-                            className="ml-auto text-xs font-bold"
-                            style={{ color: "#4ade80" }}
-                          >
-                            +
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </nav>
-
-          {/* User + Logout */}
-          <div className="merchant-user px-3 py-4">
-            <div className="flex items-center gap-3 px-3 py-2.5 mb-1">
-              <div className="merchant-avatar w-8 h-8 flex items-center justify-center text-xs font-medium shrink-0">
-                {initials}
-              </div>
-              <div className="overflow-hidden">
-                <div
-                  className="text-xs font-semibold truncate"
-                  style={{ color: "#e2e8f0" }}
-                >
-                  {user.name}
-                </div>
-                <div className="text-xs truncate" style={{ color: "#475569" }}>
-                  {user.plan}
-                </div>
-              </div>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
-              style={{ color: "#64748b" }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(239,68,68,0.1)";
-                e.currentTarget.style.color = "#fca5a5";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "transparent";
-                e.currentTarget.style.color = "#64748b";
-              }}
-            >
-              <LogOut className="w-4 h-4 shrink-0" />
-              ออกจากระบบ
-            </button>
-          </div>
-        </aside>
-      </>
-
       {/* ── Main content ── */}
       <div className="flex-1 flex flex-col min-w-0">
         <div className="merchant-main flex flex-col min-h-screen">
-          {/* Top bar */}
-          <header className="merchant-topbar sticky top-0 z-10 flex items-center justify-between px-5 lg:px-8 py-3">
-            <div className="flex items-center gap-3">
-              {/* Mobile hamburger */}
-              <button
-                className="lg:hidden p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
-                onClick={() => setSidebarOpen(true)}
+          <header className="merchant-topnav">
+            <div className="merchant-topnav-bar">
+              <Link
+                to="/"
+                className="merchant-brand-link"
+                onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
               >
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  className="w-5 h-5"
+                <span className="merchant-brand-mark2" aria-hidden="true">
+                  <img src="/favicon.svg" alt="" />
+                </span>
+                <span className="merchant-brand-name">
+                  Flow<span>PDPA</span>
+                </span>
+              </Link>
+              <nav className="merchant-nav2" aria-label="เมนูหลัก">
+                {topNavItems.map(({ key, label, Icon }) => (
+                  <button
+                    key={key}
+                    className="merchant-pill"
+                    data-active={activeView === key}
+                    aria-current={activeView === key ? "page" : undefined}
+                    onClick={() => setActiveView(key)}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {label}
+                  </button>
+                ))}
+              </nav>
+              <div className="merchant-actions">
+                <Link to="/create/policy" className="merchant-cta" aria-label="สร้างนโยบาย">
+                  <Plus className="w-4 h-4" />
+                  <span>สร้างนโยบาย</span>
+                </Link>
+                <button
+                  onClick={() => setActiveView("settings")}
+                  className="merchant-account"
+                  data-active={activeView === "settings"}
+                  title="ตั้งค่าบัญชี"
                 >
-                  <line x1="3" y1="6" x2="21" y2="6" />
-                  <line x1="3" y1="12" x2="21" y2="12" />
-                  <line x1="3" y1="18" x2="21" y2="18" />
-                </svg>
-              </button>
-              <div>
-                <h1
-                  className="text-base font-semibold"
-                  style={{ color: "#172033" }}
+                  <span className="merchant-avatar2">{initials}</span>
+                  <span className="merchant-account-text">
+                    <b>{user.name}</b>
+                    <i>{user.plan}</i>
+                  </span>
+                </button>
+                <button
+                  className="merchant-icon-button merchant-logout"
+                  onClick={handleLogout}
+                  aria-label="ออกจากระบบ"
+                  title="ออกจากระบบ"
                 >
-                  {currentNav?.label ?? "Dashboard"}
-                </h1>
-                <p
-                  className="text-xs hidden sm:block"
-                  style={{ color: "#98a2b3" }}
+                  <LogOut className="w-4 h-4" />
+                </button>
+                <button
+                  className="merchant-icon-button merchant-menu-toggle"
+                  aria-expanded={sidebarOpen}
+                  aria-label={sidebarOpen ? "ปิดเมนู" : "เปิดเมนู"}
+                  onClick={() => setSidebarOpen(!sidebarOpen)}
                 >
-                  พื้นที่จัดการเอกสารและการตรวจสอบ
-                </p>
+                  <Menu className="w-5 h-5" />
+                </button>
               </div>
             </div>
-
-            <div className="flex items-center gap-2">
-              <button className="relative w-9 h-9 flex items-center justify-center rounded-lg transition-colors text-gray-500 hover:bg-gray-100">
-                <Bell className="w-4 h-4" />
-                <span
-                  className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full"
-                  style={{ backgroundColor: "var(--green)" }}
-                />
-              </button>
-              <button
-                onClick={() => setActiveView("settings")}
-                className="flex items-center gap-2 pl-3 pr-4 py-1.5 rounded-lg transition-colors hover:bg-gray-100"
-              >
-                <div className="merchant-avatar w-7 h-7 flex items-center justify-center text-xs font-medium">
-                  {initials}
-                </div>
-                <span className="text-sm font-medium text-gray-700 hidden sm:block">
-                  {user.name}
-                </span>
-              </button>
-            </div>
+            {sidebarOpen && (
+              <nav className="merchant-sheet" aria-label="เมนูหลัก">
+                {[...topNavItems, { key: "settings", label: "ตั้งค่าบัญชี", Icon: Settings }].map(
+                  ({ key, label, Icon }) => (
+                    <button
+                      key={key}
+                      className="merchant-pill"
+                      data-active={activeView === key}
+                      onClick={() => {
+                        setActiveView(key);
+                        setSidebarOpen(false);
+                      }}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {label}
+                    </button>
+                  ),
+                )}
+                <button className="merchant-pill" onClick={handleLogout}>
+                  <LogOut className="w-4 h-4" />
+                  ออกจากระบบ
+                </button>
+              </nav>
+            )}
           </header>
 
           {/* Page content */}
-          <main className="merchant-content flex-1 px-4 py-5 lg:px-5 lg:py-6">
+          <main
+            className="merchant-content flex-1 px-4 py-5 lg:px-5 lg:py-6"
+            aria-label={currentNav?.label}
+          >
             {visitedViews.has("overview") && (
-              <section hidden={activeView !== "overview"}>
+              <section className="motion-view" hidden={activeView !== "overview"}>
                 <Overview setView={setActiveView} user={user} />
               </section>
             )}
             {visitedViews.has("policies") && (
-              <section hidden={activeView !== "policies"}><PoliciesList /></section>
+              <section className="motion-view" hidden={activeView !== "policies"}><PoliciesList /></section>
             )}
             {visitedViews.has("activity") && (
-              <section hidden={activeView !== "activity"}><ActivityLogsView /></section>
+              <section className="motion-view" hidden={activeView !== "activity"}><ActivityLogsView /></section>
             )}
             {visitedViews.has("consents") && (
-              <section hidden={activeView !== "consents"}><ConsentManagement /></section>
+              <section className="motion-view" hidden={activeView !== "consents"}><ConsentManagement /></section>
             )}
             {visitedViews.has("templates") && (
-              <section hidden={activeView !== "templates"}><DocumentTemplates /></section>
+              <section className="motion-view" hidden={activeView !== "templates"}><DocumentTemplates /></section>
             )}
             {visitedViews.has("billing") && (
-              <section hidden={activeView !== "billing"}><MerchantBillingView /></section>
+              <section className="motion-view" hidden={activeView !== "billing"}><MerchantBillingView /></section>
             )}
             {visitedViews.has("settings") && (
-              <section hidden={activeView !== "settings"}><AccountSettings user={user} /></section>
+              <section className="motion-view" hidden={activeView !== "settings"}><AccountSettings user={user} /></section>
             )}
           </main>
         </div>

@@ -1,3 +1,4 @@
+import { friendlyError } from "@/utils/friendlyError";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -57,7 +58,7 @@ export default function ForgotPassword() {
     setSendingCode(false);
     if (!response.success) {
       setCooldown(0);
-      setError(response.error?.message || "ไม่สามารถส่งรหัสได้ กรุณาลองใหม่");
+      setError(friendlyError(response.error, "ไม่สามารถส่งรหัสได้ กรุณาลองใหม่"));
       return;
     }
 
@@ -88,7 +89,7 @@ export default function ForgotPassword() {
     });
     setResetting(false);
     if (!response.success) {
-      setError(response.error?.message || "รหัสไม่ถูกต้องหรือหมดอายุแล้ว");
+      setError(friendlyError(response.error, "รหัสไม่ถูกต้องหรือหมดอายุแล้ว"));
       return;
     }
     setStep("done");
