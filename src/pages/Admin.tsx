@@ -195,6 +195,18 @@ const badgeMeta: Record<string, { color: string; bg: string }> = {
   edited: { color: "#2457a6", bg: "#eaf0fa" },
   warning: { color: "#a86207", bg: "#fff6e5" },
   error: { color: "#c2410c", bg: "#fff0e8" },
+  draft: { color: "#667085", bg: "#f2f4f7" },
+  open: { color: "#a86207", bg: "#fff6e5" },
+  unpaid: { color: "#b42318", bg: "#fdf0ef" },
+  uncollectible: { color: "#b42318", bg: "#fdf0ef" },
+  void: { color: "#667085", bg: "#f2f4f7" },
+  trialing: { color: "#2457a6", bg: "#eaf0fa" },
+  canceled: { color: "#667085", bg: "#f2f4f7" },
+  cancelled: { color: "#667085", bg: "#f2f4f7" },
+  incomplete: { color: "#a86207", bg: "#fff6e5" },
+  incomplete_expired: { color: "#b42318", bg: "#fdf0ef" },
+  paused: { color: "#667085", bg: "#f2f4f7" },
+  refunded: { color: "#2457a6", bg: "#eaf0fa" },
 };
 
 const auditActionLabels: Record<string, string> = {
@@ -229,40 +241,61 @@ const auditActionLabels: Record<string, string> = {
   subscription_resumed: "เปิดการต่ออายุ",
 };
 
+const statusLabels: Record<string, string> = {
+  all: "ทั้งหมด",
+  active: "ใช้งานอยู่",
+  paid: "ชำระแล้ว",
+  approved: "อนุมัติแล้ว",
+  pending: "รอดำเนินการ",
+  pending_review: "รอตรวจสอบ",
+  pending_admin_review: "รอ Admin ตรวจซ้ำ",
+  changes_requested_by_admin: "Admin ส่งกลับแก้ไข",
+  submitted_to_admin: "ส่งให้ Admin ตรวจแล้ว",
+  past_due: "เกินกำหนด",
+  suspended: "ระงับการใช้งาน",
+  failed: "ไม่สำเร็จ",
+  rejected: "ไม่อนุมัติ",
+  critical: "วิกฤต",
+  inactive: "ไม่ใช้งาน",
+  archived: "เก็บถาวร",
+  free: "ฟรี",
+  edited: "แก้ไขแล้ว",
+  warning: "คำเตือน",
+  error: "ข้อผิดพลาด",
+  create: "สร้าง",
+  update: "แก้ไข",
+  delete: "ลบ",
+  read: "อ่าน",
+  // สถานะใบแจ้งหนี้ / การสมัครสมาชิกจาก Stripe ที่ map เดิมไม่มี
+  // ทำให้ Badge fallback ไปแสดงคำดิบภาษาอังกฤษบนหน้าภาพรวม
+  // "draft" ใช้คำกลางเพราะเจอทั้งนโยบายฉบับร่างและใบแจ้งหนี้ draft ของ Stripe
+  draft: "ฉบับร่าง",
+  open: "รอชำระ",
+  unpaid: "ยังไม่ชำระ",
+  uncollectible: "เรียกเก็บไม่ได้",
+  void: "ยกเลิกใบแจ้งหนี้",
+  trialing: "ช่วงทดลองใช้",
+  canceled: "ยกเลิกแล้ว",
+  cancelled: "ยกเลิกแล้ว",
+  incomplete: "รอชำระเงิน",
+  incomplete_expired: "หมดเวลาชำระเงิน",
+  paused: "พักการใช้งาน",
+  refunded: "คืนเงินแล้ว",
+  ...auditActionLabels,
+};
+
+// ใช้ร่วมกันทั้ง Badge และ <option> ของตัวกรองสถานะ
+const statusLabel = (value: string | null | undefined) =>
+  value ? statusLabels[value] || value.replaceAll("_", " ") : "-";
+
 function Badge({ value }: { value: string }) {
   const meta = badgeMeta[value] || { color: "#475467", bg: "#f2f4f7" };
-  const labels: Record<string, string> = {
-    active: "ใช้งานอยู่",
-    paid: "ชำระแล้ว",
-    approved: "อนุมัติแล้ว",
-    pending: "รอดำเนินการ",
-    pending_review: "รอตรวจสอบ",
-    pending_admin_review: "รอ Admin ตรวจซ้ำ",
-    changes_requested_by_admin: "Admin ส่งกลับแก้ไข",
-    submitted_to_admin: "ส่งให้ Admin ตรวจแล้ว",
-    past_due: "เกินกำหนด",
-    suspended: "ระงับการใช้งาน",
-    failed: "ไม่สำเร็จ",
-    rejected: "ไม่อนุมัติ",
-    critical: "วิกฤต",
-    inactive: "ไม่ใช้งาน",
-    archived: "เก็บถาวร",
-    free: "ฟรี",
-    edited: "แก้ไขแล้ว",
-    warning: "คำเตือน",
-    error: "ข้อผิดพลาด",
-    create: "สร้าง",
-    update: "แก้ไข",
-    delete: "ลบ",
-    read: "อ่าน",
-    ...auditActionLabels,
-  };
   return (
     <span
       className="portal-badge"
       style={{ color: meta.color, background: meta.bg }}
     >
-      {labels[value] || value.replaceAll("_", " ")}
+      {statusLabel(value)}
     </span>
   );
 }
@@ -563,6 +596,16 @@ function Overview({
   legalUsers: LegalUser[];
   change: (view: AdminView) => void;
 }) {
+  // Keep the overview deterministic even when hydrated from an older cached
+  // response. The API applies the same newest-first ordering.
+  const recentPayments = [...overview.recentPayments].sort((left, right) => {
+    const leftTimestamp = Date.parse(left.paidAt || left.createdAt || "");
+    const rightTimestamp = Date.parse(right.paidAt || right.createdAt || "");
+    const leftTime = Number.isFinite(leftTimestamp) ? leftTimestamp : 0;
+    const rightTime = Number.isFinite(rightTimestamp) ? rightTimestamp : 0;
+
+    return rightTime - leftTime || right.id.localeCompare(left.id);
+  });
   const stats = [
     {
       label: "ผู้ประกอบการที่ใช้งานอยู่",
@@ -622,9 +665,9 @@ function Overview({
               ดูการชำระเงิน <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
-          {overview.recentPayments.length ? (
+          {recentPayments.length ? (
             <div className="divide-y divide-gray-100">
-              {overview.recentPayments.map((payment) => (
+              {recentPayments.map((payment) => (
                 <div
                   className="flex items-center justify-between gap-4 px-5 py-3.5"
                   key={payment.id}
@@ -633,10 +676,10 @@ function Overview({
                     <p className="truncate text-sm font-semibold">
                       {payment.merchantName ||
                         payment.merchantEmail ||
-                        "Unknown merchant"}
+                        "ไม่ทราบผู้ประกอบการ"}
                     </p>
                     <p className="mt-1 text-[11px] text-gray-400">
-                      {payment.policyType || "Subscription"} ·{" "}
+                      {payment.policyType || "แพ็กเกจสมาชิก"} ·{" "}
                       {formatDate(payment.paidAt || payment.createdAt)}
                     </p>
                   </div>
@@ -665,19 +708,19 @@ function Overview({
           <div className="divide-y divide-gray-100">
             {[
               {
-                label: "Pending payments",
+                label: "การชำระเงินที่รอดำเนินการ",
                 value: overview.kpi.pendingPayments,
                 Icon: CreditCard,
                 view: "payments" as const,
               },
               {
-                label: "Active system errors",
+                label: "ข้อผิดพลาดของระบบที่ยังไม่แก้ไข",
                 value: overview.kpi.activeErrors,
                 Icon: AlertTriangle,
                 view: "logs" as const,
               },
               {
-                label: "Unassigned legal reviews",
+                label: "เอกสารรอตรวจที่ยังไม่ได้มอบหมาย",
                 value: overview.kpi.unassignedLegalReviews,
                 Icon: Users,
                 view: "policies" as const,
@@ -1425,7 +1468,7 @@ function PolicyView({
             data-active={filter === value}
             onClick={() => setFilter(value)}
           >
-            {value.replaceAll("_", " ")}
+            {statusLabel(value)}
           </button>
         ))}
       </div>
@@ -1639,7 +1682,7 @@ function BillingView({
           <option value="all">ทุกสถานะ</option>
           {statuses.map((value) => (
             <option key={value} value={value}>
-              {value}
+              {statusLabel(value)}
             </option>
           ))}
         </select>
@@ -1691,7 +1734,7 @@ function BillingView({
                     </td>
                     <td>{formatDate(row.currentPeriodStart)}</td>
                     <td>{formatDate(row.currentPeriodEnd)}</td>
-                    <td>{row.cancelAtPeriodEnd ? "At period end" : "-"}</td>
+                    <td>{row.cancelAtPeriodEnd ? "ยกเลิกสิ้นรอบบิล" : "-"}</td>
                     <td>
                       <Badge value={row.status} />
                     </td>
@@ -1968,7 +2011,7 @@ function LegalAssignments({
               data-active={statusFilter === value}
               onClick={() => setStatusFilter(value)}
             >
-              {value === "all" ? "All reviews" : value.replaceAll("_", " ")}
+              {statusLabel(value)}
             </button>
           ),
         )}
@@ -4228,7 +4271,7 @@ function AnalyticsView({ analytics }: { analytics: AdminAnalytics }) {
             ([status, count]) => (
               <MetricBar
                 key={status}
-                label={status.replaceAll("_", " ")}
+                label={statusLabel(status)}
                 value={count}
                 max={Object.values(analytics.policies.byStatus).reduce(
                   (sum, value) => sum + value,
