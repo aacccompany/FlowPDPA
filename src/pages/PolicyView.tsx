@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { AlertCircle, CheckCircle2, Loader2, ShieldCheck, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, Languages, Loader2, ShieldCheck, X } from "lucide-react";
 import { api } from "@/services/api";
 import type { PublicConsentForm } from "@/services/api";
 
@@ -11,6 +11,7 @@ const API_BASE_URL = (
 export default function PolicyView() {
   const { slug } = useParams<{ slug: string }>();
   const [documentHtml, setDocumentHtml] = useState("");
+  const [language, setLanguage] = useState<"th" | "en">("th");
   const [loading, setLoading] = useState(true);
   const [savingAcknowledgement, setSavingAcknowledgement] = useState(false);
   const [savingDismissal, setSavingDismissal] = useState(false);
@@ -23,6 +24,9 @@ export default function PolicyView() {
   const [fieldValues, setFieldValues] = useState<
     Record<string, string | boolean>
   >({});
+  const [consentChoices, setConsentChoices] = useState<
+    Record<string, boolean>
+  >({});
   const [savingConsent, setSavingConsent] = useState(false);
   const [consentComplete, setConsentComplete] = useState(false);
 
@@ -34,7 +38,7 @@ export default function PolicyView() {
       }
     });
     const controller = new AbortController();
-    void fetch(`${API_BASE_URL}/policies/public/${encodeURIComponent(slug)}`, {
+    void fetch(`${API_BASE_URL}/policies/public/${encodeURIComponent(slug)}/${language}`, {
       signal: controller.signal,
     })
       .then(async (response) => {
@@ -57,7 +61,7 @@ export default function PolicyView() {
       })
       .finally(() => setLoading(false));
     return () => controller.abort();
-  }, [slug]);
+  }, [slug, language]);
 
   const acknowledgeDocument = async () => {
     if (!slug || savingAcknowledgement) return;
@@ -100,30 +104,77 @@ export default function PolicyView() {
 
   const saveConsentChoices = async () => {
     if (!consentForm || savingConsent) return;
-    setSavingConsent(true);
     setError("");
-    const missingRequired = consentForm.fields.some(
-      (field) => field.required && !fieldValues[field.id],
-    );
-    if (missingRequired) {
-      setError("กรุณากรอกช่องข้อมูลที่จำเป็นให้ครบถ้วน");
-      return;
-    }
-    const response = await api.consents.submitPublic(consentForm.token, {
-      policyId: consentForm.policyId,
-      subjectName: String(fieldValues["subject-name"] || ""),
-      subjectEmail: String(fieldValues["subject-email"] || ""),
-      choices: {},
-      fieldValues,
+    const missingRequiredField = consentForm.fields.find((field) => {
+      if (!field.required) return false;
+      const value = fieldValues[field.id];
+      return typeof value === "string" ? !value.trim() : value !== true;
     });
-    setSavingConsent(false);
-    if (!response.success) {
-      setError(
-        response.error?.message || "ไม่สามารถบันทึกตัวเลือกความยินยอมได้",
-      );
+    if (missingRequiredField) {
+      setError(`กรุณากรอก “${missingRequiredField.label}” ให้ครบถ้วน`);
       return;
     }
-    setConsentComplete(true);
+    const emailField = consentForm.fields.find(
+      (field) => field.type === "email" && fieldValues[field.id],
+    );
+    if (
+      emailField &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+        String(fieldValues[emailField.id]).trim(),
+      )
+    ) {
+      setError(`กรุณากรอก “${emailField.label}” ให้เป็นอีเมลที่ถูกต้อง`);
+      return;
+    }
+    const choices = Object.fromEntries(
+      consentForm.purposes.map((purpose) => [
+        purpose.id,
+        Boolean(consentChoices[purpose.id]),
+      ]),
+    );
+    const missingRequiredPurpose = consentForm.purposes.find(
+      (purpose) => purpose.required && !choices[purpose.id],
+    );
+    if (missingRequiredPurpose) {
+      setError(`กรุณายืนยัน “${missingRequiredPurpose.label}” ก่อนบันทึก`);
+      return;
+    }
+
+    const subjectNameField = consentForm.fields.find(
+      (field) =>
+        field.id === "subject-name" ||
+        (field.type === "text" && /name|ชื่อ/i.test(field.label)),
+    );
+    const subjectEmailField = consentForm.fields.find(
+      (field) =>
+        field.id === "subject-email" ||
+        field.type === "email" ||
+        /email|อีเมล/i.test(field.label),
+    );
+
+    setSavingConsent(true);
+    try {
+      const response = await api.consents.submitPublic(consentForm.token, {
+        policyId: consentForm.policyId,
+        subjectName: subjectNameField
+          ? String(fieldValues[subjectNameField.id] || "").trim()
+          : "",
+        subjectEmail: subjectEmailField
+          ? String(fieldValues[subjectEmailField.id] || "").trim()
+          : "",
+        choices,
+        fieldValues,
+      });
+      if (!response.success) {
+        setError(
+          response.error?.message || "ไม่สามารถบันทึกตัวเลือกความยินยอมได้",
+        );
+        return;
+      }
+      setConsentComplete(true);
+    } finally {
+      setSavingConsent(false);
+    }
   };
 
   if (loading)
@@ -157,6 +208,26 @@ export default function PolicyView() {
 
   return (
     <main className="relative min-h-screen bg-gray-100">
+      <nav
+        aria-label="เลือกภาษาเอกสาร"
+        className="fixed right-4 top-4 z-40 flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-1 shadow-lg"
+      >
+        <Languages className="ml-2 h-4 w-4 text-gray-500" />
+        {(["th", "en"] as const).map((item) => (
+          <button
+            key={item}
+            type="button"
+            onClick={() => setLanguage(item)}
+            className={`rounded px-3 py-1.5 text-xs font-semibold transition ${
+              language === item
+                ? "bg-emerald-700 text-white"
+                : "text-gray-600 hover:bg-gray-100"
+            }`}
+          >
+            {item === "th" ? "ไทย" : "English"}
+          </button>
+        ))}
+      </nav>
       <iframe
         title="เอกสารนโยบายสาธารณะ"
         srcDoc={documentHtml}
@@ -335,6 +406,44 @@ export default function PolicyView() {
                 </label>
               ))}
             </div>
+          )}
+          {consentForm.purposes.length > 0 && (
+            <fieldset className="mt-4 grid gap-2">
+              <legend className="mb-1 text-xs font-semibold text-gray-700">
+                ตัวเลือกความยินยอม
+              </legend>
+              {consentForm.purposes.map((purpose) => (
+                <label
+                  key={purpose.id}
+                  className="flex cursor-pointer items-start gap-3 rounded border border-gray-200 px-3 py-3 text-sm text-gray-800"
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 accent-emerald-700"
+                    checked={Boolean(consentChoices[purpose.id])}
+                    onChange={(event) =>
+                      setConsentChoices((current) => ({
+                        ...current,
+                        [purpose.id]: event.target.checked,
+                      }))
+                    }
+                  />
+                  <span>
+                    <span className="font-semibold">
+                      {purpose.label}
+                      {purpose.required && (
+                        <span className="text-red-500"> *</span>
+                      )}
+                    </span>
+                    {purpose.description && (
+                      <span className="mt-0.5 block text-xs leading-5 text-gray-500">
+                        {purpose.description}
+                      </span>
+                    )}
+                  </span>
+                </label>
+              ))}
+            </fieldset>
           )}
           {error && (
             <p className="mt-3 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">

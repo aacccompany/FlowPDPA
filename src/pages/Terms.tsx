@@ -54,7 +54,7 @@ export default function Terms() {
               <h2 className="text-lg font-bold text-gray-900 mb-3">4. ค่าบริการและการชำระเงิน</h2>
               <ul className="list-disc pl-5 space-y-2">
                 <li>ราคาทั้งหมดเป็นสกุลเงินบาทไทย (THB) และรวมภาษีมูลค่าเพิ่ม (VAT) 7% แล้ว</li>
-                <li>แผน Premium ชำระครั้งเดียวและไม่มีค่าต่ออายุ</li>
+                <li>แผน Business เรียกเก็บค่าบริการรายเดือนจนกว่าจะยกเลิกการต่ออายุ</li>
                 <li>เราไม่คืนเงินสำหรับบริการที่ใช้ไปแล้ว เว้นแต่กรณีที่ระบุในนโยบายคืนเงิน</li>
                 <li>หากชำระเงินไม่สำเร็จ เราอาจระงับการเข้าถึงบัญชีจนกว่าจะชำระครบ</li>
               </ul>
@@ -119,9 +119,8 @@ export default function Terms() {
               <h2 className="text-lg font-bold text-gray-900 mb-3">10. ติดต่อเรา</h2>
               <p className="mb-2">หากมีคำถามเกี่ยวกับเงื่อนไขนี้ ติดต่อเราได้ที่:</p>
               <div className="bg-gray-50 border border-gray-100 rounded-xl p-5 text-sm space-y-1">
-                <p className="font-semibold text-gray-900">บริษัท ฟลว์พีดีพีเอ จำกัด</p>
-                <p>99/9 อาคารขอนแก่น บิซิเนส เซ็นเตอร์ ชั้น 5 ถนนศรีจันทร์ ตำบลในเมือง อำเภอเมืองขอนแก่น จังหวัดขอนแก่น 40000</p>
-                <p>โทร: 043-123-456</p>
+                <p className="font-semibold text-gray-900">FlowPDPA</p>
+                <p>177/54 หมู่ที่ 17 ถนนมิตรภาพ ตำบลในเมือง อำเภอเมืองขอนแก่น จังหวัดขอนแก่น 40000</p>
                 <p>อีเมล: <a href="mailto:contact@flowpdpa.co.th" className="font-semibold" style={{ color: 'var(--green)' }}>contact@flowpdpa.co.th</a></p>
               </div>
             </section>

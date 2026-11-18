@@ -26,8 +26,29 @@ export function normalizeWebsiteUrl(value: string): string {
 export function isValidWebsiteUrl(value: string): boolean {
   try {
     const parsed = new URL(normalizeWebsiteUrl(value))
-    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && Boolean(parsed.hostname)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
+    if (parsed.username || parsed.password || !parsed.hostname) return false
+    const hostname = parsed.hostname.toLowerCase()
+    const isLocalhost = hostname === 'localhost'
+    const isIpv4 = /^(?:\d{1,3}\.){3}\d{1,3}$/.test(hostname)
+      && hostname.split('.').every(part => Number(part) <= 255)
+    const isDomain = hostname.includes('.')
+      && !hostname.startsWith('.')
+      && !hostname.endsWith('.')
+      && hostname.split('.').every(label => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(label))
+    return isLocalhost || isIpv4 || isDomain
   } catch {
     return false
   }
+}
+
+export function isValidThaiNationalId(value: string): boolean {
+  const digits = value.replace(/\D/g, '')
+  if (!/^\d{13}$/.test(digits) || /^(\d)\1{12}$/.test(digits)) return false
+  const total = digits
+    .slice(0, 12)
+    .split('')
+    .reduce((sum, digit, index) => sum + Number(digit) * (13 - index), 0)
+  const checksum = (11 - (total % 11)) % 10
+  return checksum === Number(digits[12])
 }

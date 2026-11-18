@@ -535,9 +535,11 @@ function Dashboard({
   openChanges: () => void;
   select: (row: Submission) => void;
 }) {
-  const pending = submissions.filter((row) =>
-    ["pending_review", "changes_requested_by_admin"].includes(row.status),
-  );
+  const pending = submissions
+    .filter((row) =>
+      ["pending_review", "changes_requested_by_admin"].includes(row.status),
+    )
+    .sort(byUrgency);
   const pendingChanges = changes.filter((row) => row.status === "pending_review");
   const stats = [
     {
@@ -1410,8 +1412,21 @@ export default function Legal() {
     };
   }, []);
   useVisiblePolling(async () => {
-    const response = await api.legal.dashboard();
-    if (response.success && response.data) setDashboard(response.data);
+    const [dashboardResponse, submissionsResponse, changesResponse] =
+      await Promise.all([
+        api.legal.dashboard(),
+        api.legal.listSubmissions(),
+        api.legal.listChangeRequests(),
+      ]);
+    if (dashboardResponse.success && dashboardResponse.data) {
+      setDashboard(dashboardResponse.data);
+    }
+    if (submissionsResponse.success && submissionsResponse.data) {
+      setSubmissions(submissionsResponse.data.map(submissionFromApi));
+    }
+    if (changesResponse.success && changesResponse.data) {
+      setChanges(changesResponse.data.map(changeFromApi));
+    }
   });
   useEffect(() => {
     if (!notice) return;

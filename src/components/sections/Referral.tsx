@@ -28,7 +28,7 @@ export default function Referral() {
           </div>
 
           <a
-            href="#contact"
+            href="/support"
             className="flex items-center gap-2 text-sm font-bold text-white px-6 py-3 shrink-0 whitespace-nowrap transition-all"
             style={{ backgroundColor: 'var(--green)', borderRadius: '6px' }}
             onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--green-dark)')}

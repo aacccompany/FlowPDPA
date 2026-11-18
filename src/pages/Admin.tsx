@@ -30,6 +30,7 @@ import {
   X,
 } from "lucide-react";
 import { api } from "@/services/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { useVisiblePolling } from "@/hooks/useVisiblePolling";
 import type {
   AdminAnalytics,
@@ -90,6 +91,23 @@ type ErrorLog = AdminErrorLog;
 type MerchantStatus = AdminMerchantStatus;
 type PolicyStatus = AdminPolicyStatus;
 type LegalStatus = AdminLegalStatus;
+
+const ADMIN_VIEW_TITLES: Record<AdminView, string> = {
+  overview: "ภาพรวมผู้ดูแลระบบ",
+  merchants: "ผู้ประกอบการ",
+  subscriptions: "การสมัครสมาชิก",
+  payments: "การชำระเงิน",
+  policies: "นโยบายทั้งหมด",
+  templates: "เทมเพลตเอกสาร",
+  assignments: "มอบหมายการตรวจสอบ",
+  admin_reviews: "ตรวจซ้ำก่อนส่งเอกสารให้ลูกค้า",
+  legal: "ทีมกฎหมาย",
+  logs: "บันทึกระบบ",
+  audit: "บันทึกกิจกรรม",
+  merchant_activity: "กิจกรรมผู้ประกอบการ",
+  company_documents: "เอกสารนิติบุคคล",
+  analytics: "การวิเคราะห์",
+};
 
 const formatDate = (value: string | null) =>
   value
@@ -367,6 +385,7 @@ function Sidebar({
   open,
   close,
   logout,
+  accountEmail,
 }: {
   view: AdminView;
   change: (view: AdminView) => void;
@@ -374,6 +393,7 @@ function Sidebar({
   open: boolean;
   close: () => void;
   logout: () => void;
+  accountEmail: string;
 }) {
   const groups = [
     {
@@ -520,7 +540,7 @@ function Sidebar({
                 ผู้ดูแลแพลตฟอร์ม
               </p>
               <p className="text-[11px]" style={{ color: "#475569" }}>
-                admin@flowpdpa.co.th
+                {accountEmail}
               </p>
             </div>
           </div>
@@ -638,7 +658,7 @@ function Overview({
             <div>
               <h2 className="text-sm font-semibold">รายการที่ต้องดำเนินการ</h2>
               <p className="text-xs text-gray-400 mt-1">
-                Operational items needing action
+                รายการที่ต้องดำเนินการ
               </p>
             </div>
           </div>
@@ -890,7 +910,7 @@ function MerchantView({
       email: draft.email.trim().toLowerCase(),
     });
     if (!response.success) {
-      setError(response.error?.message || "Unable to create merchant.");
+      setError(response.error?.message || "ไม่สามารถสร้างบัญชีผู้ประกอบการได้");
       return;
     }
     setDraft(emptyMerchantDraft);
@@ -962,7 +982,7 @@ function MerchantView({
             onClick={() => setCreating(true)}
           >
             <Plus className="w-4 h-4" />
-            Create merchant
+            สร้างผู้ประกอบการ
           </button></div>}
       />
       <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -1845,7 +1865,7 @@ function PolicyContentModal({
               </span>
               <span className="text-xs text-gray-300">|</span>
               <span className="text-xs text-gray-500">
-                Reviewed {formatDate(policy.reviewedAt)}
+                ตรวจสอบเมื่อ {formatDate(policy.reviewedAt)}
               </span>
               <div className="ml-auto flex gap-2">
                 {availableLanguages.map(([value]) => (
@@ -2049,17 +2069,21 @@ function LegalAssignments({
   );
 }
 
-function AdminReviewQueue() {
+function AdminReviewQueue({
+  onDecisionComplete,
+}: {
+  onDecisionComplete?: () => Promise<void> | void;
+}) {
   const [items, setItems] = useState<AdminPolicyReviewItem[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
-  const [refresh, setRefresh] = useState(0);
   const [reviewingItem, setReviewingItem] =
     useState<AdminPolicyReviewItem | null>(null);
   const [reviewComment, setReviewComment] = useState("");
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [selectedPolicy, setSelectedPolicy] =
     useState<AdminPolicyDetail | null>(null);
   const [contentOpen, setContentOpen] = useState(false);
@@ -2087,7 +2111,7 @@ function AdminReviewQueue() {
     return () => {
       cancelled = true;
     };
-  }, [page, refresh]);
+  }, [page]);
 
   const openContent = async (policyId: string) => {
     setSelectedPolicy(null);
@@ -2113,6 +2137,7 @@ function AdminReviewQueue() {
     }
     setSavingId(item.id);
     setError("");
+    setSuccess("");
     const response = await api.admin.decideAdminPolicyReview(
       item.id,
       status,
@@ -2123,12 +2148,18 @@ function AdminReviewQueue() {
       setError(response.error?.message || "ไม่สามารถบันทึกผลตรวจได้");
       return;
     }
+    setItems((current) => current.filter((currentItem) => currentItem.id !== item.id));
+    setTotal((current) => Math.max(0, current - 1));
     setReviewingItem(null);
     setReviewComment("");
+    setSuccess(
+      status === "approved"
+        ? "อนุมัติและส่งเอกสารให้ลูกค้าเรียบร้อยแล้ว"
+        : "ส่งเอกสารกลับให้ฝ่ายกฎหมายแก้ไขเรียบร้อยแล้ว",
+    );
+    await onDecisionComplete?.();
     if (items.length === 1 && page > 1) {
       setPage((current) => current - 1);
-    } else {
-      setRefresh((current) => current + 1);
     }
   };
 
@@ -2149,6 +2180,11 @@ function AdminReviewQueue() {
       {error ? (
         <p className="mb-4 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
           {error}
+        </p>
+      ) : null}
+      {success ? (
+        <p className="mb-4 border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+          {success}
         </p>
       ) : null}
       <section className="portal-panel">
@@ -4840,6 +4876,7 @@ function SearchBox({
 
 export default function Admin() {
   const navigate = useNavigate();
+  const { user, logout: clearSession } = useAuth();
   const [view, setView] = useState<AdminView>("overview");
   const [policyMerchantFilter, setPolicyMerchantFilter] = useState<{
     id: string;
@@ -4935,14 +4972,33 @@ export default function Admin() {
     const response = await api.admin.overview();
     if (response.success && response.data?.kpi) setOverview(response.data);
   });
-  const activeTitle = useMemo(
-    () => view.charAt(0).toUpperCase() + view.slice(1),
-    [view],
-  );
+  const activeTitle = ADMIN_VIEW_TITLES[view];
   const logout = () => setConfirmLogout(true);
   const confirmSignOut = async () => {
     await api.auth.logout();
+    clearSession();
     navigate("/login", { replace: true });
+  };
+  const refreshAdminReviewState = async () => {
+    const [overviewResponse, analyticsResponse, policiesResponse] =
+      await Promise.all([
+        api.admin.overview(),
+        api.admin.analytics(),
+        api.admin.listPolicies({ limit: 200 }),
+      ]);
+    if (overviewResponse.success && overviewResponse.data?.kpi) {
+      setOverview(overviewResponse.data);
+    }
+    if (analyticsResponse.success && analyticsResponse.data) {
+      setAnalytics(analyticsResponse.data);
+    }
+    if (policiesResponse.success && policiesResponse.data) {
+      setPolicies(
+        Array.isArray(policiesResponse.data.policies)
+          ? policiesResponse.data.policies
+          : [],
+      );
+    }
   };
   let content: React.ReactNode;
   if (loading)
@@ -4987,7 +5043,10 @@ export default function Admin() {
     );
   else if (view === "assignments")
     content = <LegalAssignments users={legalUsers} policies={policies} />;
-  else if (view === "admin_reviews") content = <AdminReviewQueue />;
+  else if (view === "admin_reviews")
+    content = (
+      <AdminReviewQueue onDecisionComplete={refreshAdminReviewState} />
+    );
   else if (view === "legal")
     content = (
       <LegalManagement
@@ -5025,6 +5084,7 @@ export default function Admin() {
         open={menuOpen}
         close={() => setMenuOpen(false)}
         logout={logout}
+        accountEmail={user?.email || "-"}
       />
       <div className="portal-main">
         <header className="portal-topbar">

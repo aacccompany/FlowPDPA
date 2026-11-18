@@ -21,8 +21,8 @@ export default function PrivacyPolicy() {
             <section>
               <h2 className="text-lg font-bold text-gray-900 mb-3">1. ข้อมูลเกี่ยวกับเรา</h2>
               <p>
-                บริษัท ฟลว์พีดีพีเอ จำกัด ("FlowPDPA", "เรา", "บริษัท") ตั้งอยู่ที่ 99/9 อาคารขอนแก่น บิซิเนส เซ็นเตอร์ ชั้น 5
-                ถนนศรีจันทร์ ตำบลในเมือง อำเภอเมืองขอนแก่น จังหวัดขอนแก่น 40000 เราเป็นผู้ควบคุมข้อมูลส่วนบุคคล
+                FlowPDPA ("เรา") ตั้งอยู่ที่ 177/54 หมู่ที่ 17 ถนนมิตรภาพ ตำบลในเมือง
+                อำเภอเมืองขอนแก่น จังหวัดขอนแก่น 40000 เราเป็นผู้ควบคุมข้อมูลส่วนบุคคล
                 (Data Controller) ของข้อมูลที่เก็บรวบรวมผ่านเว็บไซต์ flowpdpa.co.th
               </p>
             </section>
@@ -125,9 +125,8 @@ export default function PrivacyPolicy() {
               <h2 className="text-lg font-bold text-gray-900 mb-3">11. ติดต่อเรา</h2>
               <p className="mb-2">หากมีคำถามเกี่ยวกับนโยบายนี้ ติดต่อเจ้าหน้าที่คุ้มครองข้อมูล (DPO) ได้ที่:</p>
               <div className="bg-gray-50 border border-gray-100 rounded-xl p-5 text-sm space-y-1">
-                <p className="font-semibold text-gray-900">บริษัท ฟลว์พีดีพีเอ จำกัด</p>
-                <p>99/9 อาคารขอนแก่น บิซิเนส เซ็นเตอร์ ชั้น 5 ถนนศรีจันทร์ ตำบลในเมือง อำเภอเมืองขอนแก่น จังหวัดขอนแก่น 40000</p>
-                <p>โทร: 043-123-456</p>
+                <p className="font-semibold text-gray-900">FlowPDPA</p>
+                <p>177/54 หมู่ที่ 17 ถนนมิตรภาพ ตำบลในเมือง อำเภอเมืองขอนแก่น จังหวัดขอนแก่น 40000</p>
                 <p>อีเมล: <a href="mailto:privacy@flowpdpa.co.th" className="font-semibold" style={{ color: 'var(--green)' }}>privacy@flowpdpa.co.th</a></p>
               </div>
             </section>

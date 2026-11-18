@@ -26,8 +26,8 @@ const features = [
   },
   {
     Icon: CircleDollarSign,
-    title: 'ชำระครั้งเดียว คุ้มค่าตลอดชีพ',
-    desc: 'ไม่มีค่าสมาชิกรายปี ไม่มีค่าต่ออายุ ชำระเพียง 2,500 บาทครั้งเดียว รับ Privacy Policy ภาษาไทยและอังกฤษพร้อมอัปเดตตลอดชีพ',
+    title: 'เริ่มต้นฟรี อัปเกรดตามการใช้งาน',
+    desc: 'สร้างเอกสาร PDPA ได้ฟรี และเลือกแพ็กเกจ Business 289 บาทต่อเดือนเมื่อต้องการฟังก์ชันจัดการเพิ่มเติม',
   },
   {
     Icon: Building2,
@@ -37,7 +37,7 @@ const features = [
 ]
 
 const comparison = [
-  { feature: 'ราคา',                       us: '2,500 บาท (ครั้งเดียว)', lawyer: '20,000–50,000 บาท', template: 'ฟรี', usGood: true, lawyerGood: false, templateGood: false },
+  { feature: 'ราคา',                       us: 'ฟรี หรือ Business 289 บาท/เดือน', lawyer: '20,000–50,000 บาท', template: 'ฟรี', usGood: true, lawyerGood: false, templateGood: false },
   { feature: 'ถูกต้องตาม PDPA ไทย',        us: true, lawyer: true, template: false },
   { feature: 'พร้อมใช้ใน',                 us: '< 5 นาที', lawyer: '2–4 สัปดาห์', template: 'ทันที (ไม่ถูกต้อง)', usGood: true, lawyerGood: false, templateGood: false },
   { feature: 'อัปเดตเมื่อกฎหมายเปลี่ยน', us: true, lawyer: false, template: false },

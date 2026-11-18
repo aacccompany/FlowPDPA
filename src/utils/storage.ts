@@ -61,6 +61,12 @@ export const normalizeRole = (role?: string): UserRole => {
   return 'merchant'
 }
 
+export const normalizePlan = (plan?: string): string => {
+  const value = plan?.trim().toLowerCase()
+  if (value === 'business' || value === 'premium' || value === 'enterprise') return 'Business'
+  return 'Free'
+}
+
 export const roleHome = (role?: UserRole | string): string => {
   const normalized = typeof role === 'string' ? normalizeRole(role) : role
   if (normalized === 'admin') return '/admin'
@@ -115,7 +121,7 @@ const readAuth = (): StoredAuth | null => {
       email,
       name: cachedProfile?.name ?? '',
       role: normalizeRole(typeof claims.role === 'string' ? claims.role : undefined),
-      plan: cachedProfile?.plan ?? (typeof claims.plan === 'string' ? claims.plan : 'Free'),
+      plan: normalizePlan(cachedProfile?.plan ?? (typeof claims.plan === 'string' ? claims.plan : undefined)),
       company: cachedProfile?.company,
       phone: cachedProfile?.phone,
       emailVerified: cachedProfile?.emailVerified ?? false,

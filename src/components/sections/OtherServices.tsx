@@ -98,7 +98,7 @@ export default function OtherServices() {
               <span className="font-bold text-lg" style={{ color: 'var(--green)' }}>ติดต่อสอบถาม</span>
             </p>
           </div>
-          <a href="#contact" className="btn-green px-8 py-3 shrink-0 whitespace-nowrap">
+          <a href="/support" className="btn-green px-8 py-3 shrink-0 whitespace-nowrap">
             สอบถามรายละเอียด
           </a>
         </div>

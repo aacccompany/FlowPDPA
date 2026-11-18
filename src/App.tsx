@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { BrowserRouter, Navigate, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
 import { MailCheck } from 'lucide-react'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
@@ -34,6 +34,36 @@ const NotFound = lazy(() => import('@/pages/NotFound'))
 
 function RouteFallback() {
   return <div className="min-h-screen" style={{ backgroundColor: '#f8fafc' }} aria-busy="true" />
+}
+
+const PAGE_TITLES: Array<[RegExp, string]> = [
+  [/^\/admin/, 'ผู้ดูแลระบบ'],
+  [/^\/legal/, 'ฝ่ายกฎหมาย'],
+  [/^\/dashboard\/policies\//, 'รายละเอียดนโยบาย'],
+  [/^\/dashboard/, 'ภาพรวมผู้ประกอบการ'],
+  [/^\/create\/policy/, 'สร้าง Privacy Policy'],
+  [/^\/p\//, 'Privacy Policy'],
+  [/^\/login/, 'เข้าสู่ระบบ'],
+  [/^\/register/, 'สมัครสมาชิก'],
+  [/^\/privacy-notice/, 'Privacy Notice'],
+  [/^\/privacy-policy/, 'นโยบายความเป็นส่วนตัว'],
+  [/^\/terms/, 'เงื่อนไขการใช้งาน'],
+  [/^\/support/, 'ติดต่อและช่วยเหลือ'],
+  [/^\/faq/, 'คำถามที่พบบ่อย'],
+  [/^\/about/, 'เกี่ยวกับเรา'],
+  [/^\/why-us/, 'ทำไมต้อง FlowPDPA'],
+  [/^\/$/, 'สร้าง Privacy Policy ตาม PDPA'],
+]
+
+function PageTitle() {
+  const { pathname } = useLocation()
+
+  useEffect(() => {
+    const title = PAGE_TITLES.find(([pattern]) => pattern.test(pathname))?.[1]
+    document.title = title ? `${title} | FlowPDPA` : 'FlowPDPA'
+  }, [pathname])
+
+  return null
 }
 
 function ProtectedRoute({ children, roles }: { children: React.ReactNode; roles: UserRole[] }) {
@@ -118,6 +148,7 @@ export default function App() {
       <BrowserRouter>
         <AuthProvider>
           <ScrollToTop />
+          <PageTitle />
           <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/admin" element={<ProtectedRoute roles={['admin']}><Admin /></ProtectedRoute>} />

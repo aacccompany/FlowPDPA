@@ -409,8 +409,6 @@ export default function Helpdesk() {
                     <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" style={{ color: 'var(--blue)' }} />
                     <p className="text-xs leading-relaxed" style={{ color: '#334155' }}>
                       หากปัญหาของคุณเร่งด่วน ติดต่อโดยตรงที่{' '}
-                      <a href="tel:043123456" className="font-bold underline" style={{ color: 'var(--blue)' }}>043-123-456</a>
-                      {' '}หรือ{' '}
                       <a href="mailto:contact@flowpdpa.co.th" className="font-bold underline" style={{ color: 'var(--blue)' }}>contact@flowpdpa.co.th</a>
                       {' '}จันทร์ – ศุกร์ 09:00 – 18:00 น.
                     </p>

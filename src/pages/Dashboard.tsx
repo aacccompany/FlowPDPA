@@ -232,7 +232,7 @@ const statusDisplay: Record<
     color: "#dc2626",
     bg: "rgba(220,38,38,0.1)",
   },
-  approved: { label: "Reviewed", color: "#059669", bg: "rgba(5,150,105,0.12)" },
+  approved: { label: "ตรวจสอบแล้ว", color: "#059669", bg: "rgba(5,150,105,0.12)" },
   rejected: { label: "Rejected", color: "#dc2626", bg: "rgba(220,38,38,0.1)" },
   edited: { label: "Edited", color: "#7c3aed", bg: "rgba(124,58,237,0.1)" },
   Draft: { label: "Draft", color: "#64748b", bg: "rgba(100,116,139,0.1)" },
@@ -2108,10 +2108,13 @@ function MerchantBillingView() {
           minute: "2-digit",
         }).format(new Date(value))
       : "—";
-  const planLabel = current?.plan
-    ? current.plan.charAt(0).toUpperCase() + current.plan.slice(1)
+  const normalizedPlan = ["business", "premium", "enterprise"].includes(
+    current?.plan?.toLowerCase() || "",
+  )
+    ? "Business"
     : "Free";
-  const isBusiness = current?.plan?.toLowerCase() === "business";
+  const planLabel = normalizedPlan;
+  const isBusiness = normalizedPlan === "Business";
 
   const openBillingPortal = async () => {
     if (openingBillingPortal) return;

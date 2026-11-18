@@ -6,7 +6,7 @@ const benefits = [
   { title: 'Dashboard จัดการนโยบาย', desc: 'ดูและแก้ไขทุก Policy ของคุณได้ในหน้าเดียว' },
   { title: 'ได้รับทั้งภาษาไทยและอังกฤษ', desc: 'นโยบายพร้อมในสองภาษา เหมาะกับทุกกลุ่มลูกค้า' },
   { title: 'ดาวน์โหลดไฟล์ PDF และ Word', desc: 'รับไฟล์เอกสารพร้อมใช้ในรูปแบบมาตรฐาน' },
-  { title: 'เพิ่มเนื้อหาพิเศษได้ (Premium)', desc: 'เพิ่มเงื่อนไขเฉพาะสำหรับธุรกิจของคุณ *เฉพาะแพ็กเกจ Premium' },
+  { title: 'เพิ่มเนื้อหาพิเศษได้ (Business)', desc: 'เพิ่มเงื่อนไขเฉพาะสำหรับธุรกิจของคุณ *เฉพาะแพ็กเกจ Business' },
 ]
 
 export default function OneTimeValue() {
@@ -15,7 +15,7 @@ export default function OneTimeValue() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <p className="text-center text-gray-500 text-sm mb-2">สิ่งที่คุณได้รับทั้งหมด</p>
         <h2 className="text-2xl sm:text-4xl font-bold text-gray-900 text-center mb-12">
-          ชำระครั้งเดียว คุ้มค่าระยะยาว
+          สร้างเอกสารฟรี อัปเกรดฟังก์ชันเมื่อธุรกิจเติบโต
         </h2>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">

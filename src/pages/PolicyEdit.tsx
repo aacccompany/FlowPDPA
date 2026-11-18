@@ -122,7 +122,14 @@ export default function PolicyEdit() {
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!auth?.email || !form.requestedChange.trim()) return;
+    if (!auth?.email) {
+      setError("ไม่พบอีเมลผู้ใช้งาน กรุณาเข้าสู่ระบบใหม่อีกครั้ง");
+      return;
+    }
+    if (!form.requestedChange.trim()) {
+      setError("กรุณาระบุรายละเอียดที่ต้องการแก้ไข");
+      return;
+    }
     setSaving(true);
     setError("");
     setSuccess("");

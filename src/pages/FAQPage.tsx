@@ -58,7 +58,7 @@ const categories = [
       },
       {
         q: 'ฉันสามารถแก้ไขนโยบายหลังจากสร้างแล้วได้หรือไม่',
-        a: 'ได้ คุณสามารถเข้ามาแก้ไขข้อมูลธุรกิจและอัปเดตนโยบายได้ตลอดเวลาผ่าน dashboard สำหรับแผน Premium ระบบจะบันทึกประวัติเวอร์ชันทุกครั้งที่มีการแก้ไข',
+        a: 'ได้ คุณสามารถเข้ามาแก้ไขข้อมูลธุรกิจและติดตามนโยบายผ่าน Dashboard โดยแพ็กเกจ Business สามารถส่งคำขอแก้ไขให้ฝ่ายกฎหมายตรวจสอบได้',
       },
     ],
   },
@@ -67,11 +67,11 @@ const categories = [
     items: [
       {
         q: 'ถ้ากฎหมาย PDPA มีการเปลี่ยนแปลง นโยบายของฉันจะถูกอัปเดตหรือเปล่า',
-        a: 'ใช่ นโยบายของลูกค้า Premium จะถูกอัปเดตโดยทีมผู้เชี่ยวชาญของ FlowPDPA ทุกครั้งที่มีการเปลี่ยนแปลงกฎหมาย คุณจะได้รับแจ้งทางอีเมลทุกครั้งที่มีการอัปเดต',
+        a: 'ลูกค้าแพ็กเกจ Business สามารถส่งคำขอแก้ไขและติดตามสถานะการตรวจสอบได้จาก Dashboard',
       },
       {
         q: 'นโยบายที่สร้างจาก FlowPDPA ใช้ได้กับต่างประเทศด้วยหรือไม่',
-        a: 'แผน Premium ครอบคลุม GDPR (สหภาพยุโรป) และ CCPA (แคลิฟอร์เนีย) ด้วย เหมาะสำหรับธุรกิจที่มีลูกค้าทั้งในและต่างประเทศ',
+        a: 'เอกสารปัจจุบันออกแบบสำหรับ PDPA ประเทศไทย หากธุรกิจอยู่ภายใต้ GDPR หรือ CCPA ควรขอคำแนะนำเพิ่มเติมจากผู้เชี่ยวชาญ',
       },
       {
         q: 'มีการรับรองว่านโยบายถูกต้องตามกฎหมายหรือไม่',
@@ -97,7 +97,7 @@ export default function FAQPage() {
           <h1 className="text-3xl sm:text-4xl font-black text-white mb-5">คำถามที่พบบ่อย</h1>
           <p className="text-base leading-relaxed" style={{ color: '#64748b' }}>
             ไม่พบคำตอบที่ต้องการ?{' '}
-            <Link to="/#contact" className="font-semibold underline" style={{ color: 'var(--green)' }}>
+            <Link to="/support" className="font-semibold underline" style={{ color: 'var(--green)' }}>
               ติดต่อทีมงาน
             </Link>{' '}
             ได้เลย เราตอบภายใน 1 วันทำการ
@@ -152,7 +152,7 @@ export default function FAQPage() {
         <div className="max-w-2xl mx-auto px-4 text-center">
           <h2 className="text-2xl font-bold text-white mb-3">ยังมีคำถามอื่นอีกไหม?</h2>
           <p className="text-blue-200 text-sm mb-6">ทีมผู้เชี่ยวชาญของเราพร้อมช่วยเหลือคุณตลอดเวลาทำการ</p>
-          <Link to="/#contact" className="btn-green px-10 py-3 text-sm inline-block" style={{ borderRadius: '8px' }}>
+          <Link to="/support" className="btn-green px-10 py-3 text-sm inline-block" style={{ borderRadius: '8px' }}>
             ติดต่อเรา
           </Link>
         </div>

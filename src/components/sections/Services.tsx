@@ -4,23 +4,14 @@ import FadeUp from '@/components/ui/FadeUp'
 
 const tabs = [
   'Privacy Policy',
-  'HR Privacy Policy',
-  'Cookies Policy',
-  'CCTV Policy',
-  'Recruitment Policy',
-  'Vendor Policy',
-  'DPA',
-  'Consulting Service',
-  'FlowPDPA Kit',
 ]
 
 const tableRows = [
-  { label: 'คุ้มครองตาม PDPA ประเทศไทย', sublabel: 'สำหรับธุรกิจที่มีลูกค้าในประเทศไทย', free: true, premium: true },
-  { label: 'คุ้มครองตาม CCPA (แคลิฟอร์เนีย)', sublabel: 'สำหรับธุรกิจที่ให้บริการลูกค้าในสหรัฐฯ', free: false, premium: true },
-  { label: 'คุ้มครองตาม GDPR (สหภาพยุโรป)', sublabel: 'สำหรับธุรกิจที่ให้บริการในยุโรป', free: false, premium: true },
-  { label: 'ใช้งานในเชิงพาณิชย์ได้เต็มรูปแบบ', sublabel: '', free: false, premium: true },
-  { label: 'ครอบคลุมการส่งข้อมูลให้บุคคลที่สาม', sublabel: '', free: false, premium: true },
-  { label: 'ครอบคลุมข้อมูลอ่อนไหว', sublabel: 'เช่น สุขภาพ พันธุกรรม ชีวภาพ ศาสนา', free: false, premium: true },
+  { label: 'สร้าง Privacy + Cookies Policy', sublabel: 'เอกสารภาษาไทยและภาษาอังกฤษ', free: true, premium: true },
+  { label: 'ดาวน์โหลด PDF, Word และ HTML', sublabel: '', free: true, premium: true },
+  { label: 'เก็บ Consent Log', sublabel: 'Free 100 รายการ / Business 500 รายการ', free: true, premium: true },
+  { label: 'แก้ไขและจัดการข้อมูลลูกค้า', sublabel: '', free: false, premium: true },
+  { label: 'ส่งออก Consent Log', sublabel: 'CSV และ PDF', free: false, premium: true },
 ]
 
 const serviceInfo: Record<string, { title: string; desc: string }> = {
@@ -134,8 +125,8 @@ export default function Services() {
                   <div className="text-sm font-bold mt-1" style={{ color: '#111827' }}>ฟรี</div>
                 </th>
                 <th className="px-4 py-4 text-center w-1/4">
-                  <span className="inline-block px-3 py-1 text-white text-xs font-bold" style={{ backgroundColor: 'var(--green)', borderRadius: '4px' }}>Premium</span>
-                  <div className="text-sm font-bold mt-1" style={{ color: '#111827' }}>2,500 บาท</div>
+                  <span className="inline-block px-3 py-1 text-white text-xs font-bold" style={{ backgroundColor: 'var(--green)', borderRadius: '4px' }}>Business</span>
+                  <div className="text-sm font-bold mt-1" style={{ color: '#111827' }}>289 บาท/เดือน</div>
                 </th>
               </tr>
             </thead>

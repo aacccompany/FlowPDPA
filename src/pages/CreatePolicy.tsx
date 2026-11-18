@@ -24,6 +24,7 @@ import {
 import { PolicyTypeIcon } from "@/components/policy/PolicyTypeIcon";
 import {
   isValidEmail,
+  isValidThaiNationalId,
   isValidThaiPhone,
   isValidWebsiteUrl,
   normalizeWebsiteUrl,
@@ -225,6 +226,31 @@ const onInputBlur = (
     HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
   >,
 ) => (e.currentTarget.style.borderColor = "#e5e7eb");
+
+const validationFieldLabels: Record<string, string> = {
+  websiteUrl: "URL เว็บไซต์",
+  contactEmail: "อีเมลติดต่อ",
+  contactPhone: "เบอร์โทรศัพท์",
+  ownerIdCard: "เลขบัตรประชาชน",
+  companyRegNumber: "เลขทะเบียนนิติบุคคล",
+  dpoEmail: "อีเมล DPO",
+  websiteName: "ชื่อเว็บไซต์",
+  ownerFullName: "ชื่อ-นามสกุล",
+  companyName: "ชื่อบริษัท / องค์กร",
+};
+
+function getValidationMessage(details: unknown): string {
+  if (!Array.isArray(details) || details.length === 0) {
+    return "ข้อมูลบางช่องไม่ถูกต้อง กรุณาตรวจสอบข้อมูลที่กรอกอีกครั้ง";
+  }
+  const first = details[0] as { loc?: unknown; msg?: unknown };
+  const location = Array.isArray(first.loc) ? first.loc : [];
+  const field = [...location].reverse().find((part) => typeof part === "string");
+  const label = typeof field === "string" ? validationFieldLabels[field] : undefined;
+  return label
+    ? `${label} ไม่ถูกต้อง กรุณาตรวจสอบแล้วลองอีกครั้ง`
+    : "ข้อมูลบางช่องไม่ถูกต้อง กรุณาตรวจสอบข้อมูลที่กรอกอีกครั้ง";
+}
 
 function FormField({
   label,
@@ -1518,9 +1544,22 @@ function Step4({
                 key={key}
                 label={label}
                 checked={data.thirdParties.includes(key)}
-                onChange={() =>
-                  setData({ thirdParties: toggleItem(data.thirdParties, key) })
-                }
+                onChange={() => {
+                  if (key === "none") {
+                    setData({
+                      thirdParties: data.thirdParties.includes("none")
+                        ? []
+                        : ["none"],
+                    });
+                    return;
+                  }
+                  setData({
+                    thirdParties: toggleItem(
+                      data.thirdParties.filter((item) => item !== "none"),
+                      key,
+                    ),
+                  });
+                }}
               />
             ))}
           </div>
@@ -1699,6 +1738,8 @@ function Step6({ data }: { data: FormData }) {
           <ReviewRow label="ชื่อเว็บไซต์" value={data.websiteName} />
           <ReviewRow label="URL" value={data.websiteUrl} />
           <ReviewRow label="อีเมลติดต่อ" value={data.contactEmail} />
+          <ReviewRow label="เบอร์โทรศัพท์" value={data.contactPhone || "-"} />
+          <ReviewRow label="อีเมล DPO" value={data.dpoEmail} />
         </div>
 
         <div className="bg-white rounded-xl border border-gray-100 px-6 py-2">
@@ -1990,7 +2031,7 @@ const initialData: FormData = {
   thirdParties: [],
   language: "both",
   dpoEmail: "",
-  retentionPeriod: "the period necessary for the stated purposes",
+  retentionPeriod: "เท่าที่จำเป็นตามวัตถุประสงค์ที่ระบุ",
   exportFormat: ["PDF", "Word (.docx)", "HTML Embed"],
 };
 
@@ -2105,7 +2146,7 @@ export default function CreatePolicy() {
       );
       if (data.ownerType === "person")
         return (
-          base && !!data.ownerFullName && /^\d{13}$/.test(data.ownerIdCard)
+          base && !!data.ownerFullName && isValidThaiNationalId(data.ownerIdCard)
         );
       return (
         base &&
@@ -2136,7 +2177,10 @@ export default function CreatePolicy() {
         return "เบอร์โทรศัพท์ไม่ถูกต้อง";
       if (data.ownerType === "person") {
         if (!data.ownerFullName) return "กรอกชื่อ-นามสกุล";
-        return "กรอกเลขบัตรประชาชน 13 หลัก";
+        if (!/^\d{13}$/.test(data.ownerIdCard))
+          return "กรอกเลขบัตรประชาชนให้ครบ 13 หลัก";
+        if (!isValidThaiNationalId(data.ownerIdCard))
+          return "เลขบัตรประชาชนไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง";
       }
       if (
         !(
@@ -2167,6 +2211,24 @@ export default function CreatePolicy() {
       setGenerationError("กรุณาเลือกประเภทนโยบายและยอมรับเงื่อนไขการใช้งาน");
       return;
     }
+    if (!isValidWebsiteUrl(sourceData.websiteUrl)) {
+      setGenerating(false);
+      setGenerationError("กรุณากรอก URL เว็บไซต์ให้ถูกต้อง เช่น https://example.com");
+      return;
+    }
+    if (!isValidEmail(sourceData.contactEmail)) {
+      setGenerating(false);
+      setGenerationError("กรุณากรอกอีเมลติดต่อให้ถูกต้อง");
+      return;
+    }
+    if (
+      sourceData.ownerType === "person" &&
+      !isValidThaiNationalId(sourceData.ownerIdCard)
+    ) {
+      setGenerating(false);
+      setGenerationError("เลขบัตรประชาชนไม่ถูกต้อง กรุณาตรวจสอบเลขทั้ง 13 หลัก");
+      return;
+    }
     if (!isValidEmail(sourceData.dpoEmail)) {
       setGenerating(false);
       setGenerationError(
@@ -2174,9 +2236,11 @@ export default function CreatePolicy() {
       );
       return;
     }
-    setDone(true);
     const payload: PolicyQuestionnaire = {
       ...sourceData,
+      hasCookies: sourceData.thirdParties.some((party) =>
+        ["ga", "gtm", "gads", "fb"].includes(party),
+      ),
       exportFormat: ["PDF", "Word (.docx)", "HTML Embed"],
       websiteUrl: normalizeWebsiteUrl(sourceData.websiteUrl),
       policyType: sourceData.policyType,
@@ -2188,11 +2252,14 @@ export default function CreatePolicy() {
     const response = await api.policies.create(payload);
     setGenerating(false);
     if (response.success && response.data) {
+      setDone(true);
       setSavedSlug(response.data.slug);
       return;
     }
     setGenerationError(
-      response.error?.message ?? "Unable to create policy. Please try again.",
+      response.error?.status === 422
+        ? getValidationMessage(response.error?.details)
+        : response.error?.message ?? "ไม่สามารถสร้างนโยบายได้ กรุณาลองใหม่อีกครั้ง",
     );
   };
 

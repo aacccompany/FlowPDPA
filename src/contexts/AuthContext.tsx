@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { api } from '@/services/api'
 import {
   AUTH_CHANGED_EVENT,
+  normalizePlan,
   normalizeRole,
   session,
   storage,
@@ -74,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: user.email,
     name: user.name,
     role: normalizeRole(user.role),
-    plan: user.plan ?? 'Free',
+    plan: normalizePlan(user.plan),
     company: user.company,
     phone: user.phone,
     emailVerified: user.email_verified ?? false,

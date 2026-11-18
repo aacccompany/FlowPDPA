@@ -1,11 +1,11 @@
 import { Link } from 'react-router-dom'
-import { MapPin, Phone, Mail } from 'lucide-react'
+import { MapPin, Mail } from 'lucide-react'
 
 const navLinks = [
   { label: 'หน้าแรก', to: '/' },
   { label: 'ทำไมต้อง FlowPDPA', to: '/#why' },
   { label: 'เกี่ยวกับเรา', to: '/about' },
-  { label: 'โปรแกรมพาร์ทเนอร์', to: '/#contact' },
+  { label: 'โปรแกรมพาร์ทเนอร์', to: '/support' },
 ]
 
 const legalLinks = [
@@ -165,14 +165,9 @@ export default function Footer() {
               <li className="flex items-start gap-3">
                 <MapPin className="w-4 h-4 mt-0.5 shrink-0" style={{ color: '#4ade80' }} />
                 <p className="text-sm leading-relaxed" style={{ color: '#94a3b8' }}>
-                  99/9 อาคารขอนแก่น บิซิเนส เซ็นเตอร์ ชั้น 5<br />
-                  ถนนศรีจันทร์ ต.ในเมือง อ.เมืองขอนแก่น<br />
-                  จ.ขอนแก่น 40000
+                  177/54 หมู่ที่ 17 ถนนมิตรภาพ<br />
+                  ต.ในเมือง อ.เมืองขอนแก่น จ.ขอนแก่น 40000
                 </p>
-              </li>
-              <li className="flex items-center gap-3">
-                <Phone className="w-4 h-4 shrink-0" style={{ color: '#4ade80' }} />
-                <span className="text-sm font-semibold text-white">043-123-456</span>
               </li>
               <li className="flex items-center gap-3">
                 <Mail className="w-4 h-4 shrink-0" style={{ color: '#4ade80' }} />
@@ -196,7 +191,7 @@ export default function Footer() {
           className="flex flex-col sm:flex-row justify-between items-center gap-3 pt-8 text-xs"
           style={{ borderTop: '1px solid rgba(255,255,255,0.07)', color: '#475569' }}
         >
-          <p>©2025 บริษัท ฟลว์พีดีพีเอ จำกัด · All Rights Reserved.</p>
+          <p>©{new Date().getFullYear()} FlowPDPA · All Rights Reserved.</p>
           <div className="flex gap-5">
             <Link
               to="/terms"
