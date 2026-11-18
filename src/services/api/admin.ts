@@ -5,6 +5,8 @@ import type {
   AdminAuditLog,
   AdminErrorLog,
   AdminLegalReview,
+  AdminLegalWorkloadCategory,
+  AdminLegalWorkloadDocument,
   AdminLegalStatus,
   AdminLegalUser,
   AdminLegalWorkload,
@@ -35,7 +37,8 @@ const query = (params: Record<string, string | number | undefined>) => {
 };
 
 export const adminApi = {
-  overview: () => apiRequest<AdminOverview>(API_ENDPOINTS.admin.overview),
+  overview: () =>
+    apiRequest<AdminOverview>(API_ENDPOINTS.admin.overview, { cache: false }),
   listMerchants: (
     params: {
       status?: string;
@@ -223,6 +226,35 @@ export const adminApi = {
       };
       workload: AdminLegalWorkload[];
     }>(API_ENDPOINTS.admin.legalWorkload),
+  legalWorkloadDocuments: (
+    legalUserId: string,
+    params: {
+      category: AdminLegalWorkloadCategory;
+      search?: string;
+      sla?: "all" | "on_time" | "overdue";
+      resolution?: "all" | "pending" | "cleared";
+      sort?: "newest" | "oldest" | "most_overdue";
+      page?: number;
+      limit?: number;
+    },
+  ) =>
+    apiRequest<{
+      items: AdminLegalWorkloadDocument[];
+      pagination: AdminPagination;
+    }>(
+      `${API_ENDPOINTS.admin.legalWorkloadDocuments(legalUserId)}${query(params)}`,
+    ),
+  updateLegalOverdueResolution: (
+    legalUserId: string,
+    payload: {
+      reviewEventIds: string[];
+      status: "pending" | "cleared";
+    },
+  ) =>
+    apiRequest<{ updated: number; status: "pending" | "cleared" }>(
+      API_ENDPOINTS.admin.legalOverdueResolution(legalUserId),
+      { method: "PUT", body: payload },
+    ),
   legalReviews: (
     params: {
       legalUserId?: string;
@@ -234,9 +266,9 @@ export const adminApi = {
     apiRequest<{ reviews: AdminLegalReview[]; pagination: AdminPagination }>(
       `${API_ENDPOINTS.admin.legalReviews}${query(params)}`,
     ),
-  listAdminReviewQueue: () =>
-    apiRequest<{ items: AdminPolicyReviewItem[] }>(
-      API_ENDPOINTS.admin.adminReviewQueue,
+  listAdminReviewQueue: (params: { page?: number; limit?: number } = {}) =>
+    apiRequest<{ items: AdminPolicyReviewItem[]; pagination: AdminPagination }>(
+      `${API_ENDPOINTS.admin.adminReviewQueue}${query(params)}`,
     ),
   decideAdminPolicyReview: (
     policyId: string,

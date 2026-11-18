@@ -30,6 +30,7 @@ import {
   X,
 } from "lucide-react";
 import { api } from "@/services/api";
+import { useVisiblePolling } from "@/hooks/useVisiblePolling";
 import type {
   AdminAnalytics,
   AdminAuditLog,
@@ -38,6 +39,8 @@ import type {
   AdminLegalStatus,
   AdminLegalUser,
   AdminLegalWorkload,
+  AdminLegalWorkloadCategory,
+  AdminLegalWorkloadDocument,
   AdminMerchant,
   AdminMerchantActivity,
   AdminMerchantStatus,
@@ -98,12 +101,62 @@ const formatDate = (value: string | null) =>
         minute: "2-digit",
       })
     : "-";
+const formatDuration = (minutes: number | null) => {
+  if (minutes === null || !Number.isFinite(minutes)) return "-";
+  const roundedMinutes = Math.max(0, Math.round(minutes));
+  const days = Math.floor(roundedMinutes / 1440);
+  const hours = Math.floor((roundedMinutes % 1440) / 60);
+  const remainingMinutes = roundedMinutes % 60;
+  return [
+    days > 0 ? `${days} วัน` : "",
+    hours > 0 ? `${hours} ชม.` : "",
+    `${remainingMinutes} นาที`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+};
 const money = (amount: number) =>
   new Intl.NumberFormat("th-TH", {
     style: "currency",
     currency: "THB",
     maximumFractionDigits: 2,
   }).format(amount / 100);
+
+type SortDirection = "asc" | "desc";
+
+const timestamp = (value: string | null | undefined) =>
+  value ? new Date(value).getTime() : 0;
+
+function SortDirectionFilter({
+  value,
+  onChange,
+  mode = "date",
+}: {
+  value: SortDirection;
+  onChange: (value: SortDirection) => void;
+  mode?: "date" | "text";
+}) {
+  return (
+    <select
+      className="portal-filter h-9"
+      value={value}
+      onChange={(event) => onChange(event.target.value as SortDirection)}
+      aria-label="ลำดับการเรียง"
+    >
+      {mode === "date" ? (
+        <>
+          <option value="desc">ล่าสุดก่อน (DESC)</option>
+          <option value="asc">เก่าสุดก่อน (ASC)</option>
+        </>
+      ) : (
+        <>
+          <option value="asc">ชื่อ A–Z (ASC)</option>
+          <option value="desc">ชื่อ Z–A (DESC)</option>
+        </>
+      )}
+    </select>
+  );
+}
 
 const badgeMeta: Record<string, { color: string; bg: string }> = {
   active: { color: "#087a5b", bg: "#e8f4ef" },
@@ -310,14 +363,14 @@ function PageTitle({
 function Sidebar({
   view,
   change,
-  adminReviewCount,
+  badges,
   open,
   close,
   logout,
 }: {
   view: AdminView;
   change: (view: AdminView) => void;
-  adminReviewCount: number;
+  badges: Partial<Record<AdminView, number>>;
   open: boolean;
   close: () => void;
   logout: () => void;
@@ -337,21 +390,29 @@ function Sidebar({
           id: "admin_reviews" as const,
           text: "ตรวจซ้ำก่อนส่งลูกค้า",
           Icon: UserCog,
-          count: adminReviewCount,
+          count: badges.admin_reviews,
         },
       ],
     },
     {
       label: "เนื้อหาและการกำกับดูแล",
       items: [
-        { id: "policies" as const, text: "นโยบาย", Icon: FileText },
+        {
+          id: "policies" as const,
+          text: "นโยบาย",
+          Icon: FileText,
+        },
         { id: "company_documents" as const, text: "เอกสารนิติบุคคล", Icon: Building2 },
         {
           id: "templates" as const,
           text: "เทมเพลตเอกสาร",
           Icon: Languages,
         },
-        { id: "legal" as const, text: "จัดการฝ่ายกฎหมาย", Icon: Scale },
+        {
+          id: "legal" as const,
+          text: "จัดการฝ่ายกฎหมาย",
+          Icon: Scale,
+        },
       ],
     },
     {
@@ -362,7 +423,11 @@ function Sidebar({
           text: "การสมัครสมาชิก",
           Icon: WalletCards,
         },
-        { id: "payments" as const, text: "การชำระเงิน", Icon: ReceiptText },
+        {
+          id: "payments" as const,
+          text: "การชำระเงิน",
+          Icon: ReceiptText,
+        },
       ],
     },
     {
@@ -374,7 +439,11 @@ function Sidebar({
           Icon: Activity,
         },
         { id: "audit" as const, text: "บันทึกกิจกรรม", Icon: Activity },
-        { id: "logs" as const, text: "บันทึกระบบ", Icon: AlertTriangle },
+        {
+          id: "logs" as const,
+          text: "บันทึกระบบ",
+          Icon: AlertTriangle,
+        },
         { id: "analytics" as const, text: "การวิเคราะห์", Icon: BarChart3 },
       ],
     },
@@ -425,9 +494,9 @@ function Sidebar({
                 >
                   <Icon />
                   <span className="flex-1 text-left">{text}</span>
-                  {"count" in item && item.count > 0 ? (
+                  {"count" in item && (item.count ?? 0) > 0 ? (
                     <span className="min-w-5 rounded-full bg-emerald-400 px-1.5 py-0.5 text-center text-[10px] font-black text-slate-950">
-                      {item.count > 99 ? "99+" : item.count}
+                      {(item.count ?? 0) > 99 ? "99+" : item.count}
                     </span>
                   ) : null}
                 </button>
@@ -762,6 +831,7 @@ function MerchantView({
   const [statusFilter, setStatusFilter] = useState<"all" | MerchantStatus>(
     "all",
   );
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState(emptyMerchantDraft);
@@ -769,14 +839,19 @@ function MerchantView({
   const [editDraft, setEditDraft] = useState(emptyMerchantDraft);
   const [deleting, setDeleting] = useState<Merchant | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const visible = rows.filter((row) => {
-    const matchesQuery = `${row.id} ${row.name} ${row.email} ${row.companyName || ""}`
-      .toLowerCase()
-      .includes(query.toLowerCase());
-    return (
-      matchesQuery && (statusFilter === "all" || row.status === statusFilter)
-    );
-  });
+  const visible = rows
+    .filter((row) => {
+      const matchesQuery = `${row.id} ${row.name} ${row.email} ${row.companyName || ""}`
+        .toLowerCase()
+        .includes(query.toLowerCase());
+      return (
+        matchesQuery && (statusFilter === "all" || row.status === statusFilter)
+      );
+    })
+    .toSorted((left, right) => {
+      const result = left.name.localeCompare(right.name, "th");
+      return sortDirection === "asc" ? result : -result;
+    });
   const pagination = usePagination(visible);
   const refresh = async () => {
     const response = await api.admin.listMerchants({
@@ -912,6 +987,11 @@ function MerchantView({
             ),
           )}
         </select>
+        <SortDirectionFilter
+          value={sortDirection}
+          onChange={setSortDirection}
+          mode="text"
+        />
       </div>
       {error && (
         <p className="mb-4 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
@@ -1167,6 +1247,7 @@ function PolicyView({
   const [filter, setFilter] = useState<"all" | PolicyStatus>("all");
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [error, setError] = useState("");
   const [selectedPolicy, setSelectedPolicy] =
     useState<AdminPolicyDetail | null>(null);
@@ -1194,18 +1275,23 @@ function PolicyView({
       a.name.localeCompare(b.name, "th"),
     );
   }, [rows]);
-  const visible = rows.filter((row) => {
-    const matchesQuery =
-      `${row.websiteName} ${row.slug} ${row.merchantName || ""} ${row.merchantEmail || ""}`
-        .toLowerCase()
-        .includes(query.trim().toLowerCase());
-    return (
-      matchesQuery &&
-      (!merchantFilter || row.merchantId === merchantFilter.id) &&
-      (filter === "all" || row.status === filter) &&
-      (typeFilter === "all" || row.type === typeFilter)
-    );
-  });
+  const visible = rows
+    .filter((row) => {
+      const matchesQuery =
+        `${row.websiteName} ${row.slug} ${row.merchantName || ""} ${row.merchantEmail || ""}`
+          .toLowerCase()
+          .includes(query.trim().toLowerCase());
+      return (
+        matchesQuery &&
+        (!merchantFilter || row.merchantId === merchantFilter.id) &&
+        (filter === "all" || row.status === filter) &&
+        (typeFilter === "all" || row.type === typeFilter)
+      );
+    })
+    .toSorted((left, right) => {
+      const result = timestamp(left.updatedAt) - timestamp(right.updatedAt);
+      return sortDirection === "asc" ? result : -result;
+    });
   const pagination = usePagination(visible);
   const assign = async (id: string, legalId: string) => {
     if (!legalId) return;
@@ -1273,7 +1359,7 @@ function PolicyView({
           </button>
         </div>
       ) : null}
-      <div className="mb-3 grid gap-2 md:grid-cols-[minmax(280px,1fr)_minmax(210px,280px)_minmax(160px,220px)]">
+      <div className="mb-3 grid gap-2 md:grid-cols-[minmax(280px,1fr)_minmax(210px,280px)_minmax(160px,220px)_minmax(160px,200px)]">
         <SearchBox
           value={query}
           setValue={setQuery}
@@ -1297,6 +1383,10 @@ function PolicyView({
             </option>
           ))}
         </select>
+        <SortDirectionFilter
+          value={sortDirection}
+          onChange={setSortDirection}
+        />
       </div>
       <div className="flex flex-wrap items-center gap-2 mb-4">
         {(
@@ -1432,6 +1522,7 @@ function BillingView({
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [paymentDetail, setPaymentDetail] = useState<AdminPaymentDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
@@ -1456,6 +1547,9 @@ function BillingView({
       (statusFilter === "all" || row.status === statusFilter) &&
       (typeFilter === "all" || row.plan === typeFilter)
     );
+  }).toSorted((left, right) => {
+    const result = timestamp(left.createdAt) - timestamp(right.createdAt);
+    return sortDirection === "asc" ? result : -result;
   });
   const visiblePayments = payments.filter((row) => {
     const matchesQuery =
@@ -1467,6 +1561,9 @@ function BillingView({
       (statusFilter === "all" || row.status === statusFilter) &&
       (typeFilter === "all" || row.plan === typeFilter)
     );
+  }).toSorted((left, right) => {
+    const result = timestamp(left.paidAt ?? left.createdAt) - timestamp(right.paidAt ?? right.createdAt);
+    return sortDirection === "asc" ? result : -result;
   });
   const subscriptionPagination = usePagination(visibleSubscriptions);
   const paymentPagination = usePagination(visiblePayments);
@@ -1538,6 +1635,10 @@ function BillingView({
             </option>
           ))}
         </select>
+        <SortDirectionFilter
+          value={sortDirection}
+          onChange={setSortDirection}
+        />
       </div>
       <section className="portal-panel">
         <div className="portal-table-wrap">
@@ -1794,6 +1895,7 @@ function LegalAssignments({
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [reviewerFilter, setReviewerFilter] = useState("all");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [error, setError] = useState("");
   const [selectedPolicy, setSelectedPolicy] =
     useState<AdminPolicyDetail | null>(null);
@@ -1811,6 +1913,9 @@ function LegalAssignments({
       (statusFilter === "all" || row.status === statusFilter) &&
       (reviewerFilter === "all" || row.assignedLegalUserId === reviewerFilter)
     );
+  }).toSorted((left, right) => {
+    const result = timestamp(left.updatedAt) - timestamp(right.updatedAt);
+    return sortDirection === "asc" ? result : -result;
   });
   const pagination = usePagination(visible);
   const openContent = async (policyId: string) => {
@@ -1867,6 +1972,10 @@ function LegalAssignments({
             </option>
           ))}
         </select>
+        <SortDirectionFilter
+          value={sortDirection}
+          onChange={setSortDirection}
+        />
       </div>
       {error && (
         <p className="mb-4 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
@@ -1942,7 +2051,12 @@ function LegalAssignments({
 
 function AdminReviewQueue() {
   const [items, setItems] = useState<AdminPolicyReviewItem[]>([]);
-  const [comments, setComments] = useState<Record<string, string>>({});
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [refresh, setRefresh] = useState(0);
+  const [reviewingItem, setReviewingItem] =
+    useState<AdminPolicyReviewItem | null>(null);
+  const [reviewComment, setReviewComment] = useState("");
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -1951,21 +2065,29 @@ function AdminReviewQueue() {
   const [contentOpen, setContentOpen] = useState(false);
   const [contentLoading, setContentLoading] = useState(false);
 
-  const loadQueue = async () => {
-    setLoading(true);
-    const response = await api.admin.listAdminReviewQueue();
-    setLoading(false);
-    if (!response.success || !response.data) {
-      setError(response.error?.message || "ไม่สามารถโหลดคิวตรวจซ้ำได้");
-      return;
-    }
-    setItems(response.data.items);
-    setError("");
-  };
-
   useEffect(() => {
+    let cancelled = false;
+    const loadQueue = async () => {
+      setLoading(true);
+      const response = await api.admin.listAdminReviewQueue({
+        page,
+        limit: ADMIN_PAGE_SIZE,
+      });
+      if (cancelled) return;
+      setLoading(false);
+      if (!response.success || !response.data) {
+        setError(response.error?.message || "ไม่สามารถโหลดคิวตรวจซ้ำได้");
+        return;
+      }
+      setItems(response.data.items);
+      setTotal(response.data.pagination.total);
+      setError("");
+    };
     void loadQueue();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [page, refresh]);
 
   const openContent = async (policyId: string) => {
     setSelectedPolicy(null);
@@ -1984,7 +2106,7 @@ function AdminReviewQueue() {
     item: AdminPolicyReviewItem,
     status: "approved" | "changes_requested",
   ) => {
-    const comment = comments[item.id]?.trim() || "";
+    const comment = reviewComment.trim();
     if (status === "changes_requested" && !comment) {
       setError("กรุณาระบุสิ่งที่ Legal ต้องแก้ไขก่อนส่งกลับ");
       return;
@@ -2001,7 +2123,13 @@ function AdminReviewQueue() {
       setError(response.error?.message || "ไม่สามารถบันทึกผลตรวจได้");
       return;
     }
-    setItems((current) => current.filter((row) => row.id !== item.id));
+    setReviewingItem(null);
+    setReviewComment("");
+    if (items.length === 1 && page > 1) {
+      setPage((current) => current - 1);
+    } else {
+      setRefresh((current) => current + 1);
+    }
   };
 
   return (
@@ -2029,70 +2157,162 @@ function AdminReviewQueue() {
         ) : items.length === 0 ? (
           <div className="portal-empty">ไม่มีเอกสารรอ Admin ตรวจซ้ำ</div>
         ) : (
-          <div className="divide-y divide-gray-100">
-            {items.map((item) => (
-              <article key={item.id} className="grid gap-4 p-5 lg:grid-cols-[1fr_1.2fr_auto] lg:items-center">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="font-bold text-gray-900">{item.websiteName}</h2>
-                    <Badge value={item.status} />
-                  </div>
-                  <p className="mt-1 text-xs text-gray-400">
-                    {item.slug} · Version {item.version}
-                  </p>
-                  <p className="mt-2 text-xs text-gray-600">
-                    Legal: {item.reviewedBy || "-"} · {formatDate(item.reviewedAt)}
-                  </p>
-                </div>
-                <div>
-                  <p className="mb-1 text-xs font-semibold text-gray-600">ความคิดเห็น Admin</p>
-                  <textarea
-                    className="min-h-20 w-full rounded border border-gray-300 p-2.5 text-sm"
-                    value={comments[item.id] || ""}
-                    onChange={(event) =>
-                      setComments((current) => ({
-                        ...current,
-                        [item.id]: event.target.value,
-                      }))
-                    }
-                    placeholder="ระบุเหตุผลเมื่อต้องการส่งกลับ Legal"
-                  />
-                  {item.reviewComment ? (
-                    <p className="mt-2 border-l-2 border-emerald-300 pl-2 text-xs text-gray-500">
-                      หมายเหตุจาก Legal: {item.reviewComment}
-                    </p>
-                  ) : null}
-                </div>
-                <div className="flex flex-wrap gap-2 lg:w-48 lg:flex-col">
-                  <button
-                    type="button"
-                    className="portal-button justify-center"
-                    onClick={() => void openContent(item.id)}
-                  >
-                    <Eye className="h-3.5 w-3.5" /> ดูเอกสาร
-                  </button>
-                  <button
-                    type="button"
-                    className="portal-button primary justify-center"
-                    disabled={savingId === item.id}
-                    onClick={() => void decide(item, "approved")}
-                  >
-                    อนุมัติและส่งลูกค้า
-                  </button>
-                  <button
-                    type="button"
-                    className="portal-button danger justify-center"
-                    disabled={savingId === item.id}
-                    onClick={() => void decide(item, "changes_requested")}
-                  >
-                    ส่งกลับ Legal
-                  </button>
-                </div>
-              </article>
-            ))}
+          <div className="overflow-x-auto">
+            <table className="portal-table min-w-[850px]">
+              <thead>
+                <tr>
+                  <th>เอกสาร</th>
+                  <th>ผู้ตรวจ Legal</th>
+                  <th>วันที่ส่งให้ Admin</th>
+                  <th>หมายเหตุจาก Legal</th>
+                  <th>จัดการ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr key={item.id}>
+                    <td>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-bold text-gray-900">{item.websiteName}</p>
+                        <Badge value={item.status} />
+                      </div>
+                      <p className="mt-1 text-xs text-gray-400">
+                        {item.slug} · Version {item.version}
+                      </p>
+                    </td>
+                    <td>
+                      <p className="text-sm text-gray-700">{item.reviewedBy || "-"}</p>
+                    </td>
+                    <td className="whitespace-nowrap text-sm text-gray-600">
+                      {formatDate(item.reviewedAt)}
+                    </td>
+                    <td className="max-w-xs text-sm text-gray-600">
+                      <p className="line-clamp-2">{item.reviewComment || "-"}</p>
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="portal-button primary justify-center"
+                        onClick={() => {
+                          setError("");
+                          setReviewComment("");
+                          setReviewingItem(item);
+                        }}
+                      >
+                        ตรวจสอบ <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
+        {total > 0 ? (
+          <Pagination
+            page={page}
+            pageCount={Math.max(1, Math.ceil(total / ADMIN_PAGE_SIZE))}
+            total={total}
+            pageSize={ADMIN_PAGE_SIZE}
+            setPage={setPage}
+          />
+        ) : null}
       </section>
+      {reviewingItem ? (
+        <div className="fixed inset-0 z-40 grid place-items-center bg-slate-950/40 p-4">
+          <section className="portal-panel w-full max-w-2xl overflow-hidden shadow-2xl">
+            <header className="portal-panel-head">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700">
+                  Admin quality gate
+                </p>
+                <h2 className="mt-1 text-lg font-bold text-gray-900">
+                  ตรวจสอบก่อนส่งให้ลูกค้า
+                </h2>
+              </div>
+              <button
+                type="button"
+                className="portal-button px-2"
+                onClick={() => {
+                  setReviewingItem(null);
+                  setReviewComment("");
+                  setError("");
+                }}
+                aria-label="ปิดหน้าตรวจสอบ"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </header>
+            <div className="space-y-4 p-5">
+              <div className="grid gap-3 rounded border border-gray-200 bg-gray-50 p-4 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs text-gray-400">เอกสาร</p>
+                  <p className="mt-1 font-semibold text-gray-900">
+                    {reviewingItem.websiteName}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-400">
+                    {reviewingItem.slug} · Version {reviewingItem.version}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400">ผู้ตรวจ Legal</p>
+                  <p className="mt-1 text-sm text-gray-700">
+                    {reviewingItem.reviewedBy || "-"}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-400">
+                    {formatDate(reviewingItem.reviewedAt)}
+                  </p>
+                </div>
+              </div>
+              {reviewingItem.reviewComment ? (
+                <div className="rounded border-l-4 border-emerald-500 bg-emerald-50 px-4 py-3">
+                  <p className="text-xs font-semibold text-emerald-800">หมายเหตุจาก Legal</p>
+                  <p className="mt-1 text-sm text-gray-700">{reviewingItem.reviewComment}</p>
+                </div>
+              ) : null}
+              <label className="block text-xs font-semibold text-gray-600">
+                ความคิดเห็น Admin
+                <textarea
+                  className="mt-2 min-h-28 w-full rounded border border-gray-300 p-3 text-sm font-normal"
+                  value={reviewComment}
+                  onChange={(event) => setReviewComment(event.target.value)}
+                  placeholder="ระบุเหตุผลเมื่อต้องการส่งกลับ Legal"
+                />
+              </label>
+              {error ? (
+                <p className="border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  {error}
+                </p>
+              ) : null}
+              <div className="grid gap-2 sm:grid-cols-3">
+                <button
+                  type="button"
+                  className="portal-button justify-center"
+                  onClick={() => void openContent(reviewingItem.id)}
+                >
+                  <Eye className="h-3.5 w-3.5" /> ดูเอกสาร
+                </button>
+                <button
+                  type="button"
+                  className="portal-button primary justify-center"
+                  disabled={savingId === reviewingItem.id}
+                  onClick={() => void decide(reviewingItem, "approved")}
+                >
+                  อนุมัติและส่งลูกค้า
+                </button>
+                <button
+                  type="button"
+                  className="portal-button danger justify-center"
+                  disabled={savingId === reviewingItem.id}
+                  onClick={() => void decide(reviewingItem, "changes_requested")}
+                >
+                  ส่งกลับ Legal
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
       {contentOpen ? (
         <PolicyContentModal
           policy={selectedPolicy}
@@ -2137,32 +2357,168 @@ function LegalManagement({
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [selectedPolicy, setSelectedPolicy] =
     useState<AdminPolicyDetail | null>(null);
   const [contentOpen, setContentOpen] = useState(false);
   const [contentLoading, setContentLoading] = useState(false);
+  const [workloadDetail, setWorkloadDetail] = useState<{
+    reviewer: AdminLegalWorkload;
+    category: AdminLegalWorkloadCategory;
+  } | null>(null);
+  const [workloadDocuments, setWorkloadDocuments] = useState<
+    AdminLegalWorkloadDocument[]
+  >([]);
+  const [workloadDocumentPage, setWorkloadDocumentPage] = useState(1);
+  const [workloadDocumentTotal, setWorkloadDocumentTotal] = useState(0);
+  const [workloadDocumentLoading, setWorkloadDocumentLoading] = useState(false);
+  const [workloadDocumentError, setWorkloadDocumentError] = useState("");
+  const [workloadDocumentQuery, setWorkloadDocumentQuery] = useState("");
+  const deferredWorkloadDocumentQuery = useDeferredValue(workloadDocumentQuery);
+  const [workloadDocumentSla, setWorkloadDocumentSla] = useState<
+    "all" | "on_time" | "overdue"
+  >("all");
+  const [workloadDocumentSort, setWorkloadDocumentSort] = useState<
+    "newest" | "oldest" | "most_overdue"
+  >("newest");
+  const [workloadDocumentResolution, setWorkloadDocumentResolution] = useState<
+    "all" | "pending" | "cleared"
+  >("all");
+  const [selectedOverdueEvents, setSelectedOverdueEvents] = useState<string[]>([]);
+  const [updatingOverdueResolution, setUpdatingOverdueResolution] = useState(false);
+  const [workloadResolutionError, setWorkloadResolutionError] = useState("");
+  const [workloadDocumentRefresh, setWorkloadDocumentRefresh] = useState(0);
   const visibleUsers = users.filter(
     (row) =>
       `${row.name} ${row.email} ${row.phone || ""}`
         .toLowerCase()
         .includes(query.toLowerCase()) &&
       (statusFilter === "all" || row.status === statusFilter),
-  );
+  ).toSorted((left, right) => {
+    const result = left.name.localeCompare(right.name, "th");
+    return sortDirection === "asc" ? result : -result;
+  });
   const visibleWorkload = workload.filter(
     (row) =>
       row.name.toLowerCase().includes(query.toLowerCase()) &&
       (statusFilter !== "overdue" || row.overdue > 0),
-  );
+  ).toSorted((left, right) => {
+    const result = left.name.localeCompare(right.name, "th");
+    return sortDirection === "asc" ? result : -result;
+  });
   const visibleReviews = reviews.filter(
     (row) =>
       `${row.legalUserEmail} ${row.websiteName} ${row.policySlug} ${row.comment || ""}`
         .toLowerCase()
         .includes(query.toLowerCase()) &&
       (statusFilter === "all" || row.status === statusFilter),
-  );
+  ).toSorted((left, right) => {
+    const result = timestamp(left.reviewedAt) - timestamp(right.reviewedAt);
+    return sortDirection === "asc" ? result : -result;
+  });
   const userPagination = usePagination(visibleUsers);
   const workloadPagination = usePagination(visibleWorkload);
   const reviewPagination = usePagination(visibleReviews);
+  const workloadDetailLabels: Record<AdminLegalWorkloadCategory, string> = {
+    pending: "รอดำเนินการ",
+    overdue: "เกินกำหนด",
+    approved_this_month: "อนุมัติเดือนนี้",
+  };
+  const openWorkloadDetail = (
+    reviewer: AdminLegalWorkload,
+    category: AdminLegalWorkloadCategory,
+  ) => {
+    setWorkloadDocumentPage(1);
+    setWorkloadDocuments([]);
+    setWorkloadDocumentTotal(0);
+    setWorkloadDocumentError("");
+    setWorkloadDocumentQuery("");
+    setWorkloadDocumentSla("all");
+    setWorkloadDocumentSort("newest");
+    setWorkloadDocumentResolution("all");
+    setSelectedOverdueEvents([]);
+    setWorkloadResolutionError("");
+    setWorkloadDetail({ reviewer, category });
+  };
+  useEffect(() => {
+    if (!workloadDetail) return;
+    let cancelled = false;
+    const load = async () => {
+      setWorkloadDocumentLoading(true);
+      setSelectedOverdueEvents([]);
+      setWorkloadDocumentError("");
+      const response = await api.admin.legalWorkloadDocuments(
+        workloadDetail.reviewer.legalUserId,
+        {
+          category: workloadDetail.category,
+          page: workloadDocumentPage,
+          limit: ADMIN_PAGE_SIZE,
+          search: deferredWorkloadDocumentQuery.trim() || undefined,
+          sla:
+            workloadDetail.category === "approved_this_month"
+              ? workloadDocumentSla
+              : "all",
+          sort: workloadDocumentSort,
+          resolution:
+            workloadDetail.category === "approved_this_month"
+              ? workloadDocumentResolution
+              : "all",
+        },
+      );
+      if (cancelled) return;
+      if (!response.success || !response.data) {
+        setWorkloadDocuments([]);
+        setWorkloadDocumentTotal(0);
+        setWorkloadDocumentError(
+          response.error?.message || "ไม่สามารถโหลดรายการเอกสารได้",
+        );
+      } else {
+        setWorkloadDocuments(response.data.items);
+        setWorkloadDocumentTotal(response.data.pagination.total);
+      }
+      setWorkloadDocumentLoading(false);
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    workloadDetail,
+    workloadDocumentPage,
+    deferredWorkloadDocumentQuery,
+    workloadDocumentSla,
+    workloadDocumentSort,
+    workloadDocumentResolution,
+    workloadDocumentRefresh,
+  ]);
+  const updateOverdueResolution = async (status: "pending" | "cleared") => {
+    if (!workloadDetail || selectedOverdueEvents.length === 0) return;
+    setUpdatingOverdueResolution(true);
+    setWorkloadResolutionError("");
+    const response = await api.admin.updateLegalOverdueResolution(
+      workloadDetail.reviewer.legalUserId,
+      { reviewEventIds: selectedOverdueEvents, status },
+    );
+    setUpdatingOverdueResolution(false);
+    if (!response.success) {
+      setWorkloadResolutionError(
+        response.error?.message || "ไม่สามารถอัปเดตสถานะการจัดการได้",
+      );
+      return;
+    }
+    setSelectedOverdueEvents([]);
+    setWorkloadDocumentRefresh((value) => value + 1);
+  };
+  const selectableOverdueEventIds = workloadDocuments.flatMap((document) =>
+    workloadDetail?.category === "approved_this_month" &&
+    document.reviewEventId &&
+    (document.overdueMinutes ?? 0) > 0
+      ? [document.reviewEventId]
+      : [],
+  );
+  const allPageOverdueEventsSelected =
+    selectableOverdueEventIds.length > 0 &&
+    selectableOverdueEventIds.every((id) => selectedOverdueEvents.includes(id));
   const refreshUsers = async () => {
     const response = await api.admin.listLegalUsers();
     if (response.success && response.data) setUsers(response.data.legalUsers);
@@ -2329,6 +2685,11 @@ function LegalManagement({
             ))
           )}
         </select>
+        <SortDirectionFilter
+          value={sortDirection}
+          onChange={setSortDirection}
+          mode={tab === "history" ? "date" : "text"}
+        />
       </div>
       {error && (
         <p className="mb-4 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
@@ -2410,27 +2771,46 @@ function LegalManagement({
                   <th>รอดำเนินการ</th>
                   <th>เกินกำหนด</th>
                   <th>อนุมัติเดือนนี้</th>
-                  <th>เวลาตรวจเฉลี่ย</th>
-                  <th>ภาระงาน</th>
                 </tr>
               </thead>
               <tbody>
                 {workloadPagination.pageRows.map((row) => (
                   <tr key={row.legalUserId}>
                     <td className="font-semibold">{row.name}</td>
-                    <td>{row.pending}</td>
-                    <td>{row.overdue}</td>
-                    <td>{row.approvedThisMonth}</td>
-                    <td>{row.averageReviewHours}h</td>
                     <td>
-                      <div className="w-32 h-1.5 bg-gray-100">
-                        <div
-                          className="h-full bg-green-700"
-                          style={{
-                            width: Math.min(100, row.pending * 12) + "%",
-                          }}
-                        />
-                      </div>
+                      <button
+                        type="button"
+                        className="font-semibold text-emerald-700 underline-offset-4 hover:underline disabled:cursor-default disabled:text-gray-400 disabled:no-underline"
+                        disabled={row.pending === 0}
+                        onClick={() => openWorkloadDetail(row, "pending")}
+                        aria-label={`ดูเอกสารรอดำเนินการของ ${row.name}`}
+                      >
+                        {row.pending}
+                      </button>
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="font-semibold text-red-700 underline-offset-4 hover:underline disabled:cursor-default disabled:text-gray-400 disabled:no-underline"
+                        disabled={row.overdue === 0}
+                        onClick={() => openWorkloadDetail(row, "overdue")}
+                        aria-label={`ดูเอกสารเกินกำหนดของ ${row.name}`}
+                      >
+                        {row.overdue}
+                      </button>
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="font-semibold text-emerald-700 underline-offset-4 hover:underline disabled:cursor-default disabled:text-gray-400 disabled:no-underline"
+                        disabled={row.approvedThisMonth === 0}
+                        onClick={() =>
+                          openWorkloadDetail(row, "approved_this_month")
+                        }
+                        aria-label={`ดูเอกสารที่อนุมัติเดือนนี้ของ ${row.name}`}
+                      >
+                        {row.approvedThisMonth}
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -2485,6 +2865,314 @@ function LegalManagement({
           <Pagination {...reviewPagination} total={visibleReviews.length} />
         )}
       </section>
+      {workloadDetail && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="workload-detail-title"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setWorkloadDetail(null);
+          }}
+        >
+          <div className="portal-panel flex max-h-[85vh] w-full max-w-5xl flex-col overflow-hidden">
+            <div className="portal-panel-head">
+              <div>
+                <h2 id="workload-detail-title" className="text-base font-semibold">
+                  {workloadDetailLabels[workloadDetail.category]}
+                </h2>
+                <p className="mt-1 text-xs text-gray-500">
+                  ผู้ตรวจสอบ: {workloadDetail.reviewer.name} · {workloadDocumentTotal} รายการ
+                </p>
+              </div>
+              <button
+                type="button"
+                className="portal-button px-2"
+                onClick={() => setWorkloadDetail(null)}
+                aria-label="ปิดรายการเอกสาร"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 p-3">
+              <label className="relative min-w-64 flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="search"
+                  className="portal-filter w-full pl-9"
+                  value={workloadDocumentQuery}
+                  onChange={(event) => {
+                    setWorkloadDocumentQuery(event.target.value);
+                    setWorkloadDocumentPage(1);
+                  }}
+                  placeholder="ค้นหานโยบาย, slug หรือผู้ประกอบการ"
+                  aria-label="ค้นหาเอกสารในรายการภาระงาน"
+                />
+              </label>
+              {workloadDetail.category === "approved_this_month" && (
+                <select
+                  className="portal-filter min-w-40"
+                  value={workloadDocumentSla}
+                  onChange={(event) => {
+                    setWorkloadDocumentSla(
+                      event.target.value as "all" | "on_time" | "overdue",
+                    );
+                    setWorkloadDocumentPage(1);
+                  }}
+                  aria-label="กรองตาม SLA"
+                >
+                  <option value="all">SLA ทั้งหมด</option>
+                  <option value="on_time">ตรงเวลา</option>
+                  <option value="overdue">อนุมัติเกินกำหนด</option>
+                </select>
+              )}
+              {workloadDetail.category === "approved_this_month" && (
+                <select
+                  className="portal-filter min-w-44"
+                  value={workloadDocumentResolution}
+                  onChange={(event) => {
+                    const nextResolution = event.target.value as
+                      | "all"
+                      | "pending"
+                      | "cleared";
+                    setWorkloadDocumentResolution(nextResolution);
+                    if (nextResolution !== "all") {
+                      setWorkloadDocumentSla("overdue");
+                    }
+                    setWorkloadDocumentPage(1);
+                  }}
+                  aria-label="กรองสถานะการจัดการรายการเกินกำหนด"
+                >
+                  <option value="all">การจัดการทั้งหมด</option>
+                  <option value="pending">รอดำเนินการ</option>
+                  <option value="cleared">ดำเนินการแล้ว</option>
+                </select>
+              )}
+              <select
+                className="portal-filter min-w-48"
+                value={workloadDocumentSort}
+                onChange={(event) => {
+                  setWorkloadDocumentSort(
+                    event.target.value as
+                      | "newest"
+                      | "oldest"
+                      | "most_overdue",
+                  );
+                  setWorkloadDocumentPage(1);
+                }}
+                aria-label="เรียงรายการเอกสาร"
+              >
+                <option value="newest">วันที่ส่ง: ล่าสุดก่อน</option>
+                <option value="oldest">วันที่ส่ง: เก่าสุดก่อน</option>
+                {(workloadDetail.category === "overdue" ||
+                  workloadDetail.category === "approved_this_month") && (
+                  <option value="most_overdue">เกินกำหนดมากที่สุด</option>
+                )}
+              </select>
+              {(workloadDocumentQuery ||
+                workloadDocumentSla !== "all" ||
+                workloadDocumentResolution !== "all" ||
+                workloadDocumentSort !== "newest") && (
+                <button
+                  type="button"
+                  className="portal-button"
+                  onClick={() => {
+                    setWorkloadDocumentQuery("");
+                    setWorkloadDocumentSla("all");
+                    setWorkloadDocumentResolution("all");
+                    setWorkloadDocumentSort("newest");
+                    setWorkloadDocumentPage(1);
+                  }}
+                >
+                  ล้างตัวกรอง
+                </button>
+              )}
+            </div>
+            {workloadResolutionError && (
+              <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+                {workloadResolutionError}
+              </div>
+            )}
+            {selectedOverdueEvents.length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-emerald-50 px-4 py-2">
+                <p className="text-sm font-medium text-emerald-900">
+                  เลือกแล้ว {selectedOverdueEvents.length} รายการ
+                </p>
+                <div>
+                  <button
+                    type="button"
+                    className="portal-button portal-button-primary"
+                    disabled={updatingOverdueResolution}
+                    onClick={() => void updateOverdueResolution("cleared")}
+                  >
+                    {updatingOverdueResolution ? "กำลังบันทึก..." : "ทำเครื่องหมายดำเนินการแล้ว"}
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="min-h-52 overflow-auto">
+              {workloadDocumentLoading ? (
+                <div className="grid min-h-52 place-items-center text-sm text-gray-500">
+                  <Loader2 className="mr-2 inline h-5 w-5 animate-spin" />
+                  กำลังโหลดรายการเอกสาร
+                </div>
+              ) : workloadDocumentError ? (
+                <div className="grid min-h-52 place-items-center p-6 text-sm text-red-700">
+                  {workloadDocumentError}
+                </div>
+              ) : workloadDocuments.length === 0 ? (
+                <div className="grid min-h-52 place-items-center text-sm text-gray-500">
+                  ไม่พบเอกสารในกลุ่มนี้
+                </div>
+              ) : (
+                <table className="portal-table">
+                  <thead>
+                    <tr>
+                      {workloadDetail.category === "approved_this_month" && (
+                        <th className="w-10">
+                          <input
+                            type="checkbox"
+                            checked={allPageOverdueEventsSelected}
+                            disabled={selectableOverdueEventIds.length === 0}
+                            onChange={(event) => {
+                              setSelectedOverdueEvents((current) => {
+                                if (event.target.checked) {
+                                  return Array.from(
+                                    new Set([...current, ...selectableOverdueEventIds]),
+                                  );
+                                }
+                                return current.filter(
+                                  (id) => !selectableOverdueEventIds.includes(id),
+                                );
+                              });
+                            }}
+                            aria-label="เลือกเอกสารเกินกำหนดทั้งหมดในหน้านี้"
+                          />
+                        </th>
+                      )}
+                      <th>นโยบาย</th>
+                      <th>ผู้ประกอบการ</th>
+                      <th>สถานะ</th>
+                      <th>วันที่สร้าง</th>
+                      <th>
+                        {workloadDetail.category === "approved_this_month"
+                          ? "วันที่ฝ่ายกฎหมายส่ง"
+                            : "กำหนดส่ง"}
+                      </th>
+                      {workloadDetail.category === "overdue" ||
+                      workloadDetail.category === "approved_this_month" ? (
+                        <th>เกินกำหนด</th>
+                      ) : null}
+                      {workloadDetail.category === "approved_this_month" && (
+                        <th>สถานะการจัดการ</th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {workloadDocuments.map((document) => (
+                      <tr key={document.reviewEventId || document.id}>
+                        {workloadDetail.category === "approved_this_month" && (
+                          <td>
+                            <input
+                              type="checkbox"
+                              disabled={
+                                !document.reviewEventId ||
+                                (document.overdueMinutes ?? 0) <= 0
+                              }
+                              checked={
+                                !!document.reviewEventId &&
+                                selectedOverdueEvents.includes(document.reviewEventId)
+                              }
+                              onChange={(event) => {
+                                if (!document.reviewEventId) return;
+                                const eventId = document.reviewEventId;
+                                setSelectedOverdueEvents((current) =>
+                                  event.target.checked
+                                    ? Array.from(new Set([...current, eventId]))
+                                    : current.filter((id) => id !== eventId),
+                                );
+                              }}
+                              aria-label={`เลือก ${document.websiteName}`}
+                            />
+                          </td>
+                        )}
+                        <td>
+                          <p className="font-semibold">{document.websiteName}</p>
+                          <p className="text-xs text-gray-400">{document.slug}</p>
+                        </td>
+                        <td>
+                          <p>{document.merchantName}</p>
+                          <p className="text-xs text-gray-400">{document.merchantEmail}</p>
+                        </td>
+                        <td>
+                          <Badge
+                            value={
+                              workloadDetail.category === "approved_this_month"
+                                ? "approved"
+                                : document.reviewAction || document.status
+                            }
+                          />
+                        </td>
+                        <td>{formatDate(document.createdAt)}</td>
+                        <td>
+                          {formatDate(
+                            workloadDetail.category === "approved_this_month"
+                              ? document.reviewedAt
+                              : document.deadline,
+                          )}
+                        </td>
+                        {workloadDetail.category === "overdue" ||
+                        workloadDetail.category === "approved_this_month" ? (
+                          <td
+                            className={
+                              document.overdueMinutes && document.overdueMinutes > 0
+                                ? "font-semibold text-red-700"
+                                : "text-gray-500"
+                            }
+                          >
+                            {document.overdueMinutes && document.overdueMinutes > 0
+                              ? formatDuration(document.overdueMinutes)
+                              : "ตรงเวลา"}
+                          </td>
+                        ) : null}
+                        {workloadDetail.category === "approved_this_month" && (
+                          <td>
+                            {(document.overdueMinutes ?? 0) > 0 ? (
+                              <span
+                                className="portal-badge"
+                                style={
+                                  document.resolutionStatus === "cleared"
+                                    ? { color: "#087a5b", background: "#e8f4ef" }
+                                    : { color: "#a86207", background: "#fff6e5" }
+                                }
+                              >
+                                {document.resolutionStatus === "cleared"
+                                  ? "ดำเนินการแล้ว"
+                                  : "รอดำเนินการ"}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-400">ไม่เกินกำหนด</span>
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            {workloadDocumentTotal > ADMIN_PAGE_SIZE && (
+              <Pagination
+                page={workloadDocumentPage}
+                pageCount={Math.ceil(workloadDocumentTotal / ADMIN_PAGE_SIZE)}
+                total={workloadDocumentTotal}
+                pageSize={ADMIN_PAGE_SIZE}
+                setPage={setWorkloadDocumentPage}
+              />
+            )}
+          </div>
+        </div>
+      )}
       {creating && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/30 p-4">
           <div className="portal-panel w-full max-w-md">
@@ -2609,6 +3297,7 @@ function LogsView({ logs }: { logs: ErrorLog[] }) {
   const [service, setService] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const services = useMemo(
     () => Array.from(new Set(logs.map((log) => log.service))).sort(),
     [logs],
@@ -2638,8 +3327,11 @@ function LogsView({ logs }: { logs: ErrorLog[] }) {
           .toLocaleLowerCase()
           .includes(normalized),
       );
+    }).toSorted((left, right) => {
+      const result = timestamp(left.createdAt) - timestamp(right.createdAt);
+      return sortDirection === "asc" ? result : -result;
     });
-  }, [logs, query, level, service, dateFrom, dateTo]);
+  }, [logs, query, level, service, dateFrom, dateTo, sortDirection]);
   const pagination = usePagination(visible);
   const hasFilters = Boolean(query || level !== "all" || service !== "all" || dateFrom || dateTo);
   const clearFilters = () => {
@@ -2702,6 +3394,10 @@ function LogsView({ logs }: { logs: ErrorLog[] }) {
             onChange={(event) => setDateTo(event.target.value)}
           />
         </label>
+        <SortDirectionFilter
+          value={sortDirection}
+          onChange={setSortDirection}
+        />
         {hasFilters ? (
           <button type="button" className="portal-button" onClick={clearFilters}>
             <X className="h-3.5 w-3.5" />
@@ -2769,6 +3465,7 @@ function CompanyDocumentsView() {
   const [archiveStatus, setArchiveStatus] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [page, setPage] = useState(1);
   const [pageCount, setPageCount] = useState(1);
   const [total, setTotal] = useState(0);
@@ -2824,6 +3521,13 @@ function CompanyDocumentsView() {
     setQuery(""); setValidationStatus(""); setArchiveStatus(""); setDateFrom(""); setDateTo(""); setPage(1);
   };
   const hasFilters = Boolean(query || validationStatus || archiveStatus || dateFrom || dateTo);
+  const sortedRows = useMemo(
+    () => rows.toSorted((left, right) => {
+      const result = timestamp(left.createdAt) - timestamp(right.createdAt);
+      return sortDirection === "asc" ? result : -result;
+    }),
+    [rows, sortDirection],
+  );
 
   return <>
     <PageTitle eyebrow="การตรวจสอบนิติบุคคล" title="เอกสารนิติบุคคล" description="ตรวจหนังสือรับรอง ผล OCR และสถานะสำรองเอกสารไปยัง Google Drive" />
@@ -2839,6 +3543,7 @@ function CompanyDocumentsView() {
       </select>
       <label className="flex items-center gap-2 text-xs text-gray-500">จาก <input className="portal-filter h-9" type="date" value={dateFrom} onChange={event => setDateFrom(event.target.value)} /></label>
       <label className="flex items-center gap-2 text-xs text-gray-500">ถึง <input className="portal-filter h-9" type="date" value={dateTo} onChange={event => setDateTo(event.target.value)} /></label>
+      <SortDirectionFilter value={sortDirection} onChange={setSortDirection} />
       {hasFilters ? <button className="portal-button" type="button" onClick={clearFilters}><X className="h-3.5 w-3.5" /> ล้างตัวกรอง</button> : null}
       <span className="text-xs text-gray-400">ทั้งหมด {total} รายการ</span>
     </div>
@@ -2847,7 +3552,7 @@ function CompanyDocumentsView() {
       {loading ? <div className="portal-empty">กำลังโหลดเอกสาร...</div> : rows.length === 0 ? <div className="portal-empty">ไม่พบเอกสารที่ตรงกับตัวกรอง</div> : <>
         <div className="portal-table-wrap"><table className="portal-table"><thead><tr>
           <th>นิติบุคคล</th><th>ผู้ประกอบการ</th><th>เอกสาร</th><th>ผลตรวจ</th><th>Google Drive</th><th>วันที่อัปโหลด</th><th>จัดการ</th>
-        </tr></thead><tbody>{rows.map(row => <tr key={row.id}>
+        </tr></thead><tbody>{sortedRows.map(row => <tr key={row.id}>
           <td><p className="font-semibold">{row.companyNameEntered}</p><p className="text-xs text-gray-400">{row.companyRegistrationNumber || "ไม่มีเลขทะเบียน"}</p></td>
           <td><p className="font-semibold">{row.merchant.name}</p><p className="text-xs text-gray-400">{row.merchant.email}</p></td>
           <td><p className="max-w-64 truncate" title={row.storedFileName}>{row.storedFileName}</p><p className="text-xs text-gray-400">{(row.fileSize / 1024 / 1024).toFixed(2)} MB</p></td>
@@ -4226,6 +4931,10 @@ export default function Admin() {
       active = false;
     };
   }, []);
+  useVisiblePolling(async () => {
+    const response = await api.admin.overview();
+    if (response.success && response.data?.kpi) setOverview(response.data);
+  });
   const activeTitle = useMemo(
     () => view.charAt(0).toUpperCase() + view.slice(1),
     [view],
@@ -4310,7 +5019,9 @@ export default function Admin() {
       <Sidebar
         view={view}
         change={setView}
-        adminReviewCount={overview?.kpi.pendingAdminReviews ?? 0}
+        badges={{
+          admin_reviews: overview?.kpi.pendingAdminReviews ?? 0,
+        }}
         open={menuOpen}
         close={() => setMenuOpen(false)}
         logout={logout}

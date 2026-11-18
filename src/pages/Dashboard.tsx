@@ -1,6 +1,6 @@
 import { useEscapeKey } from "@/hooks/useEscapeKey";
 import { useTheme } from "@/hooks/useTheme";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { lazy, Suspense, useState, useEffect, useMemo, useCallback } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -41,6 +41,7 @@ import {
   type ContactProfile,
 } from "@/api/contact";
 import type { SavedPolicy } from "@/utils/policyStorage";
+import type { PolicySummary } from "@/services/api/policyTypes";
 import type {
   ConsentActivityLog,
   ConsentActivityType,
@@ -55,8 +56,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { api, API_ENDPOINTS, peekApiCache } from "@/services/api";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import "./Dashboard.css";
-import ConsentManagement from "./ConsentManagement";
-import DocumentTemplates from "./DocumentTemplates";
+const ConsentManagement = lazy(() => import("./ConsentManagement"));
+const DocumentTemplates = lazy(() => import("./DocumentTemplates"));
 
 // ── Auth helper ───────────────────────────────────────────────
 type AuthUser = {
@@ -111,6 +112,44 @@ function useMerchantPolicies() {
   }, []);
 
   return { policies, setPolicies, loading, error, reload };
+}
+
+const policySummaryEndpoint = `${API_ENDPOINTS.policies.root}?summary=true`;
+
+function useMerchantPolicySummaries() {
+  const [policies, setPolicies] = useState<PolicySummary[]>(
+    () => peekApiCache<PolicySummary[]>(policySummaryEndpoint)?.data ?? [],
+  );
+  const [loading, setLoading] = useState(
+    () => !peekApiCache<PolicySummary[]>(policySummaryEndpoint)?.success,
+  );
+  const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    void api.policies.listSummary().then((response) => {
+      if (!active) return;
+      if (response.success && response.data) {
+        setPolicies(response.data);
+        setError("");
+      } else {
+        setError(response.error?.message || "โหลดภาพรวมนโยบายไม่สำเร็จ");
+      }
+      setLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [attempt]);
+
+  const reload = useCallback(() => {
+    setError("");
+    setLoading(true);
+    setAttempt((value) => value + 1);
+  }, []);
+
+  return { policies, loading, error, reload };
 }
 
 // ── Sidebar nav items ─────────────────────────────────────────
@@ -258,7 +297,7 @@ function Overview({
   user: AuthUser;
 }) {
   const { policies: userPolicies, loading, error, reload } =
-    useMerchantPolicies();
+    useMerchantPolicySummaries();
   const loadFailed = Boolean(error) && userPolicies.length === 0;
   const countBy = (status: string) =>
     userPolicies.filter((p) => p.status === status).length;
@@ -571,7 +610,6 @@ const downloadFormats = [
     description: "ไฟล์ Word แก้ไขได้",
     Icon: FileType2,
   },
-  { key: "txt", label: "TXT", description: "ไฟล์ข้อความธรรมดา", Icon: FileText },
   { key: "html", label: "HTML", description: "ไฟล์เว็บเพจ", Icon: Code2 },
 ] as const;
 
@@ -694,6 +732,7 @@ function PoliciesList() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [languageFilter, setLanguageFilter] = useState("all");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
   const pageSize = 10;
   const search = query.trim().toLowerCase();
@@ -708,6 +747,9 @@ function PoliciesList() {
     const matchesLanguage =
       languageFilter === "all" || policy.language === languageFilter;
     return matchesSearch && matchesStatus && matchesLanguage;
+  }).toSorted((a, b) => {
+    const result = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
+    return sortDirection === "asc" ? result : -result;
   });
   const pageCount = Math.max(1, Math.ceil(filteredPolicies.length / pageSize));
   const currentPage = Math.min(page, pageCount);
@@ -724,7 +766,7 @@ function PoliciesList() {
     let active = true;
     void api.consents.listForms().then((response) => {
       if (active && response.success && response.data) {
-        setConsentPolicyIds(new Set(response.data.map((form) => form.policyId)));
+        setConsentPolicyIds(new Set(response.data.flatMap((form) => form.policyIds ?? [form.policyId])));
       }
     });
     return () => {
@@ -873,6 +915,18 @@ function PoliciesList() {
               <option value="th">ไทย</option>
               <option value="en">English</option>
               <option value="both">ไทย + English</option>
+            </select>
+            <select
+              value={sortDirection}
+              onChange={(event) => {
+                setSortDirection(event.target.value as "asc" | "desc");
+                setPage(1);
+              }}
+              className="h-9 border border-gray-300 bg-white px-3 text-sm"
+              aria-label="ลำดับการเรียงนโยบาย"
+            >
+              <option value="desc">อัปเดตล่าสุดก่อน (DESC)</option>
+              <option value="asc">อัปเดตเก่าสุดก่อน (ASC)</option>
             </select>
           </div>
           <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
@@ -1456,6 +1510,7 @@ function ActivityLogsView() {
   const [policyId, setPolicyId] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [selectedEvidence, setSelectedEvidence] =
     useState<ConsentActivityLog | null>(null);
   const [selectedPolicyEvidence, setSelectedPolicyEvidence] =
@@ -1530,7 +1585,7 @@ function ActivityLogsView() {
               policySlug: log.policySlug,
               type: log.type,
               relatedType: "consent",
-              relatedField: log.subjectEmail,
+              relatedField: log.subjectEmail || null,
               description: log.description,
               createdAt: log.createdAt,
               consent: log,
@@ -1592,8 +1647,11 @@ function ActivityLogsView() {
         log.consent?.subjectReference,
         log.consent?.formName,
       ].some((value) => value?.toLocaleLowerCase().includes(normalized));
+    }).toSorted((a, b) => {
+      const result = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      return sortDirection === "asc" ? result : -result;
     });
-  }, [logs, query, type, policyId, dateFrom, dateTo]);
+  }, [logs, query, type, policyId, dateFrom, dateTo, sortDirection]);
   const hasFilters = Boolean(
     query || type !== "all" || policyId !== "all" || dateFrom || dateTo,
   );
@@ -1728,6 +1786,18 @@ function ActivityLogsView() {
           {policies.map((policy) => (
             <option key={policy.id} value={policy.id}>{policy.name}</option>
           ))}
+        </select>
+        <select
+          value={sortDirection}
+          onChange={(event) => {
+            setSortDirection(event.target.value as "asc" | "desc");
+            setPage(1);
+          }}
+          className="h-9 border border-gray-300 bg-white px-3 text-sm"
+          aria-label="ลำดับการเรียงกิจกรรม"
+        >
+          <option value="desc">ใหม่สุดก่อน (DESC)</option>
+          <option value="asc">เก่าสุดก่อน (ASC)</option>
         </select>
         <label className="flex items-center gap-2 text-xs text-gray-500">
           จาก
@@ -1936,6 +2006,7 @@ function MerchantBillingView() {
   const [checkoutMessage, setCheckoutMessage] = useState("");
   const [purchasingAddon, setPurchasingAddon] = useState<ConsentLogAddon | null>(null);
   const [cancelingAddonId, setCancelingAddonId] = useState<string | null>(null);
+  const [openingBillingPortal, setOpeningBillingPortal] = useState(false);
 
   useEffect(() => {
     const checkout = searchParams.get("checkout");
@@ -2021,6 +2092,12 @@ function MerchantBillingView() {
   const graceDaysLeft = overdueDays
     ? Math.max(0, 15 - overdueDays)
     : null;
+  const renewalTime = current?.currentPeriodEnd
+    ? new Date(current.currentPeriodEnd).getTime()
+    : null;
+  const renewalDaysLeft = renewalTime === null
+    ? null
+    : Math.ceil((renewalTime - Date.now()) / 86_400_000);
   const formatDate = (value?: string | null) =>
     value
       ? new Intl.DateTimeFormat("th-TH", {
@@ -2035,6 +2112,19 @@ function MerchantBillingView() {
     ? current.plan.charAt(0).toUpperCase() + current.plan.slice(1)
     : "Free";
   const isBusiness = current?.plan?.toLowerCase() === "business";
+
+  const openBillingPortal = async () => {
+    if (openingBillingPortal) return;
+    setError("");
+    setOpeningBillingPortal(true);
+    const response = await api.billing.createPortalSession();
+    setOpeningBillingPortal(false);
+    if (!response.success || !response.data?.portalUrl) {
+      setError(response.error?.message ?? "ไม่สามารถเปิดหน้าจัดการการชำระเงินได้");
+      return;
+    }
+    window.location.assign(response.data.portalUrl);
+  };
 
   const cancelPlan = async () => {
     if (!current || canceling) return;
@@ -2320,6 +2410,39 @@ function MerchantBillingView() {
             </div>
           </section>
 
+          {current && renewalDaysLeft !== null && renewalDaysLeft <= 7 &&
+          !current.cancelAtPeriodEnd &&
+          !["past_due", "unpaid"].includes(current.status) ? (
+            <div className={`mb-5 border px-4 py-3 text-sm ${
+              renewalDaysLeft < 0
+                ? "border-red-300 bg-red-50 text-red-900"
+                : "border-amber-300 bg-amber-50 text-amber-900"
+            }`}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-bold">
+                    {renewalDaysLeft < 0
+                      ? "เลยกำหนดต่ออายุแล้ว แต่สถานะการชำระเงินยังไม่อัปเดต"
+                      : renewalDaysLeft === 0
+                        ? "แพ็กเกจจะต่ออายุวันนี้"
+                        : `แพ็กเกจจะต่ออายุในอีก ${renewalDaysLeft} วัน`}
+                  </p>
+                  <p className="mt-1 text-xs leading-5">
+                    Stripe จะเรียกเก็บเงินอัตโนมัติในวันที่ {formatDate(current.currentPeriodEnd)} กรุณาตรวจสอบวิธีชำระเงินให้พร้อม
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={openingBillingPortal}
+                  onClick={() => void openBillingPortal()}
+                  className="shrink-0 rounded-lg border border-current px-4 py-2 text-xs font-bold disabled:cursor-wait disabled:opacity-60"
+                >
+                  {openingBillingPortal ? "กำลังเปิด..." : "จัดการวิธีชำระเงิน"}
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           {current && ["past_due", "unpaid"].includes(current.status) ? (
             <div className="mb-5 border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               <p className="font-bold">
@@ -2337,6 +2460,14 @@ function MerchantBillingView() {
                     ? " · กรุณาชำระภายใน 14 วันเพื่อป้องกันการหยุดสิทธิ์แพ็กเกจ"
                     : ""}
               </p>
+              <button
+                type="button"
+                disabled={openingBillingPortal}
+                onClick={() => void openBillingPortal()}
+                className="mt-3 rounded-lg border border-amber-700 px-4 py-2 text-xs font-bold disabled:cursor-wait disabled:opacity-60"
+              >
+                {openingBillingPortal ? "กำลังเปิด..." : "แก้ไขวิธีชำระเงิน"}
+              </button>
             </div>
           ) : null}
           <section className="mb-6 overflow-hidden rounded-xl border border-emerald-200 bg-white">
@@ -2959,23 +3090,16 @@ export default function Dashboard() {
 
   useEffect(() => {
     const prefetch = () => {
-      const policiesRequest = api.policies.list();
       void Promise.all([
-        policiesRequest,
         api.billing.history(),
         api.consents.listForms(),
         api.consents.listRecords({ page: 1, limit: 10 }),
         api.consents.listActivityLogs(),
         api.templates.list(),
       ]);
-      void policiesRequest.then((response) => {
-        if (!response.success || !response.data) return;
-        void Promise.all(
-          response.data.map((policy) => api.policies.listActivityLogs(policy.id)),
-        );
-      });
     };
-    const timer = window.setTimeout(prefetch, 250);
+    // Let the overview render before warming secondary views.
+    const timer = window.setTimeout(prefetch, 1500);
     return () => window.clearTimeout(timer);
   }, []);
 
@@ -3132,10 +3256,18 @@ export default function Dashboard() {
               <section className="motion-view" hidden={activeView !== "activity"}><ActivityLogsView /></section>
             )}
             {visitedViews.has("consents") && (
-              <section className="motion-view" hidden={activeView !== "consents"}><ConsentManagement /></section>
+              <section className="motion-view" hidden={activeView !== "consents"}>
+                <Suspense fallback={<div className="merchant-panel min-h-48 animate-pulse" />}>
+                  <ConsentManagement />
+                </Suspense>
+              </section>
             )}
             {visitedViews.has("templates") && (
-              <section className="motion-view" hidden={activeView !== "templates"}><DocumentTemplates /></section>
+              <section className="motion-view" hidden={activeView !== "templates"}>
+                <Suspense fallback={<div className="merchant-panel min-h-48 animate-pulse" />}>
+                  <DocumentTemplates />
+                </Suspense>
+              </section>
             )}
             {visitedViews.has("billing") && (
               <section className="motion-view" hidden={activeView !== "billing"}><MerchantBillingView /></section>

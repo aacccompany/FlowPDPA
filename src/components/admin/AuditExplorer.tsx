@@ -105,6 +105,9 @@ export function AuditExplorer() {
   const [search, setSearch] = useState(() => params.get("auditSearch") ?? "");
   const deferredSearch = useDeferredValue(search.trim());
   const [page, setPage] = useState(() => Number(params.get("auditPage")) || 1);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">(
+    () => params.get("auditSort") === "asc" ? "asc" : "desc",
+  );
   const [rows, setRows] = useState<AdminAuditLog[]>([]);
   const [pages, setPages] = useState(1);
   const [total, setTotal] = useState(0);
@@ -121,7 +124,7 @@ export function AuditExplorer() {
   useEffect(() => {
     const next = new URLSearchParams(params);
     const put = (key: string, value: string) => value ? next.set(key, value) : next.delete(key);
-    put("auditSearch", search); put("auditPage", page > 1 ? String(page) : "");
+    put("auditSearch", search); put("auditPage", page > 1 ? String(page) : ""); put("auditSort", sortDirection);
     put("auditActions", filters.actions.join(",")); put("auditCategories", filters.categories.join(","));
     put("auditRoles", filters.roles.join(",")); put("auditResults", filters.results.join(","));
     put("auditSources", filters.sources.join(",")); put("auditMerchant", filters.merchantId);
@@ -131,7 +134,12 @@ export function AuditExplorer() {
     setParams(next, { replace: true });
     // URL synchronization intentionally follows applied state only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters, search, page, setParams]);
+  }, [filters, search, page, sortDirection, setParams]);
+
+  const sortedRows = useMemo(() => rows.toSorted((left, right) => {
+    const result = new Date(left.createdAt || 0).getTime() - new Date(right.createdAt || 0).getTime();
+    return sortDirection === "asc" ? result : -result;
+  }), [rows, sortDirection]);
 
   useEffect(() => {
     const sequence = ++requestSequence.current;
@@ -209,6 +217,12 @@ export function AuditExplorer() {
         <Filter /> ตัวกรอง {activeCount(filters) ? <b>{activeCount(filters)}</b> : null}
       </button>
     </div>
+    <div className="mb-3 flex justify-end">
+      <select className="portal-filter h-9" value={sortDirection} onChange={(event) => setSortDirection(event.target.value as "asc" | "desc")} aria-label="ลำดับการเรียง">
+        <option value="desc">ล่าสุดก่อน (DESC)</option>
+        <option value="asc">เก่าสุดก่อน (ASC)</option>
+      </select>
+    </div>
     {chips.length ? <div className="audit-chips">
       {chips.map((chip) => <button key={chip.key} type="button" onClick={chip.clear}>{chip.label}<X /></button>)}
       <button type="button" className="audit-clear" onClick={clearAll}>ล้างทั้งหมด</button>
@@ -236,7 +250,7 @@ export function AuditExplorer() {
       {error ? <div className="audit-empty text-red-700">{error}</div> : loading ? <div className="audit-empty">กำลังค้นหาหลักฐาน...</div> : rows.length === 0 ? <div className="audit-empty">ไม่พบกิจกรรมที่ตรงกับตัวกรอง</div> : <div className="audit-table-scroll">
         <table className="audit-table">
           <thead><tr><th>ผู้ดำเนินการ</th><th>กิจกรรม</th><th>หมวด / เป้าหมาย</th><th>ผลลัพธ์</th><th>วันเวลาที่บันทึก</th><th aria-label="รายละเอียด" /></tr></thead>
-          <tbody>{rows.map((row) => <tr key={row.id}>
+          <tbody>{sortedRows.map((row) => <tr key={row.id}>
             <td><strong>{row.actorEmail || "ระบบ"}</strong><small>{row.actorRole || row.actorType || "system"}</small></td>
             <td><strong>{ACTIONS[row.action] || row.action}</strong><small>{row.source || "api"}{row.requestId ? ` · ${row.requestId}` : ""}</small></td>
             <td><span>{CATEGORIES[row.category || ""] || row.category || "ระบบ"}</span><small>{row.targetType || "-"}{row.targetId ? ` · ${row.targetId}` : ""}</small></td>

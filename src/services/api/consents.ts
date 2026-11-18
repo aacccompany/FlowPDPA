@@ -8,7 +8,7 @@ export interface ConsentPurpose {
   required: boolean;
 }
 export type ConsentFieldType =
-  "text" | "email" | "textarea" | "checkbox" | "select";
+  "text" | "email" | "textarea" | "checkbox" | "radio" | "select";
 export interface ConsentField {
   id: string;
   type: ConsentFieldType;
@@ -20,6 +20,7 @@ export interface ConsentField {
 export interface ConsentForm {
   id: string;
   policyId: string;
+  policyIds: string[];
   templateId?: string;
   name: string;
   description?: string;
@@ -34,7 +35,7 @@ export interface ConsentRecord {
   id: string;
   formId: string;
   subjectName?: string;
-  subjectEmail: string;
+  subjectEmail?: string;
   subjectReference?: string;
   status: "active" | "granted" | "rejected" | "withdrawn";
   choices: Record<string, boolean>;
@@ -54,6 +55,7 @@ export interface ConsentUsage {
 }
 export interface PublicConsentForm {
   token: string;
+  policyId: string;
   name: string;
   description?: string;
   purposes: ConsentPurpose[];
@@ -73,7 +75,7 @@ export interface ConsentActivityLog {
   policyName: string;
   policySlug: string;
   subjectName?: string;
-  subjectEmail: string;
+  subjectEmail?: string;
   subjectReference?: string;
   status: ConsentRecord["status"];
   description: string;
@@ -91,7 +93,7 @@ export const consentsApi = {
   listActivityLogs: () =>
     apiRequest<ConsentActivityLog[]>(API_ENDPOINTS.consents.activityLogs),
   createForm: (data: {
-    policyId: string;
+    policyIds: string[];
     templateId?: string;
     name: string;
     description?: string;
@@ -105,7 +107,7 @@ export const consentsApi = {
   updateForm: (
     id: string,
     data: Partial<{
-      policyId: string;
+      policyIds: string[];
       templateId: string;
       name: string;
       description: string;
@@ -126,8 +128,9 @@ export const consentsApi = {
   submitPublic: (
     token: string,
     data: {
+      policyId: string;
       subjectName?: string;
-      subjectEmail: string;
+      subjectEmail?: string;
       subjectReference?: string;
       choices: Record<string, boolean>;
       fieldValues?: Record<string, string | boolean>;
@@ -184,7 +187,7 @@ export const consentsApi = {
     id: string,
     data: {
       subjectName?: string;
-      subjectEmail: string;
+      subjectEmail?: string;
       subjectReference?: string;
       fieldValues: Record<string, string | boolean>;
     },

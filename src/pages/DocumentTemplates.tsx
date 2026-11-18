@@ -1,79 +1,42 @@
 import { useEffect, useState } from "react";
-import {
-  Check,
-  ClipboardCopy,
-  Download,
-  Eye,
-  FileText,
-  Info,
-  X,
-} from "lucide-react";
-import { api, type DocumentTemplate } from "@/services/api";
+import { Check, ClipboardCopy, Eye, FileText, X } from "lucide-react";
+
 import { useEscapeKey } from "@/hooks/useEscapeKey";
-
-const disclaimer =
-  "เอกสารนี้เป็นแบบฟอร์มเริ่มต้นสำหรับนำไปปรับใช้ตามบริบทขององค์กร ไม่ใช่คำปรึกษาทางกฎหมาย และไม่รับรองว่าการใช้แบบฟอร์มนี้จะทำให้องค์กรปฏิบัติตามกฎหมายได้อย่างถูกต้อง 100% โดยอัตโนมัติ ควรตรวจสอบฐานกฎหมาย กระบวนการจริง และปรึกษาผู้เชี่ยวชาญก่อนนำไปใช้";
-
-const builtinTemplates = [
-  {
-    id: "privacy-notice",
-    title: "ประกาศความเป็นส่วนตัว",
-    purpose: "แจ้งรายละเอียดการเก็บ ใช้ เปิดเผย และสิทธิของเจ้าของข้อมูล",
-    content: `ประกาศความเป็นส่วนตัว (Privacy Notice)\n\n[ชื่อองค์กร] ให้ความสำคัญกับการคุ้มครองข้อมูลส่วนบุคคลของท่าน\n\n1. ผู้ควบคุมข้อมูลส่วนบุคคล\nชื่อองค์กร: [ระบุชื่อ]\nช่องทางติดต่อ: [ระบุที่อยู่ อีเมล และโทรศัพท์]\n\n2. ข้อมูลที่เก็บรวบรวม\n[ระบุประเภทข้อมูลส่วนบุคคลและข้อมูลอ่อนไหว]\n\n3. วัตถุประสงค์และฐานกฎหมาย\n[ระบุวัตถุประสงค์และฐานกฎหมายของแต่ละกิจกรรม]\n\n4. การเปิดเผยข้อมูล\n[ระบุผู้รับข้อมูลหรือประเภทผู้รับข้อมูล]\n\n5. ระยะเวลาเก็บรักษา\n[ระบุระยะเวลาหรือเกณฑ์ที่ใช้กำหนด]\n\n6. สิทธิของเจ้าของข้อมูล\nท่านอาจมีสิทธิเข้าถึง แก้ไข ลบ จำกัด คัดค้าน โอนย้าย หรือถอนความยินยอมตามที่กฎหมายกำหนด\n\n7. ช่องทางติดต่อและร้องเรียน\n[ระบุช่องทางยื่นคำร้องและข้อมูล DPO ถ้ามี]`,
-  },
-  {
-    id: "consent-form",
-    title: "แบบฟอร์มขอความยินยอม",
-    purpose: "ขอความยินยอมแบบแยกวัตถุประสงค์และถอนภายหลังได้",
-    content: `แบบฟอร์มขอความยินยอม (Consent Form)\n\nผู้ควบคุมข้อมูล: [ชื่อองค์กร]\nเจ้าของข้อมูล: [ชื่อ/อีเมล/รหัสอ้างอิง]\n\nโปรดเลือกโดยอิสระสำหรับแต่ละวัตถุประสงค์\n[ ] ยินยอม  [ ] ไม่ยินยอม — [วัตถุประสงค์ที่ 1 พร้อมข้อมูลและระยะเวลา]\n[ ] ยินยอม  [ ] ไม่ยินยอม — [วัตถุประสงค์ที่ 2 พร้อมข้อมูลและระยะเวลา]\n\nการไม่ให้ความยินยอมจะมีผลดังนี้: [ระบุผลที่เกิดขึ้นจริง]\nท่านถอนความยินยอมได้ที่: [ช่องทาง] โดยการถอนจะไม่กระทบการประมวลผลที่ชอบด้วยกฎหมายก่อนถอน\n\nชื่อผู้ให้ความยินยอม: ____________________\nวันที่และเวลา: ____________________\nหลักฐาน/รหัสรายการ: ____________________`,
-  },
-  {
-    id: "withdrawal-form",
-    title: "แบบฟอร์มถอนความยินยอม",
-    purpose: "รับคำขอถอนและบันทึกผลกระทบกับวันที่ดำเนินการ",
-    content: `แบบฟอร์มถอนความยินยอม\n\nถึง [ชื่อองค์กร]\nข้าพเจ้า [ชื่อเจ้าของข้อมูล] อีเมล/รหัสอ้างอิง [ระบุ] ประสงค์ถอนความยินยอมสำหรับ\n[ ] วัตถุประสงค์ทั้งหมด\n[ ] เฉพาะวัตถุประสงค์: [ระบุ]\n\nช่องทางที่เคยให้ความยินยอม: [ระบุ]\nวันที่โดยประมาณที่ให้ความยินยอม: [ระบุ]\nเหตุผล (ไม่บังคับ): [ระบุ]\n\nข้าพเจ้ารับทราบว่าการถอนความยินยอมไม่กระทบความชอบด้วยกฎหมายของการประมวลผลก่อนการถอน\n\nลงชื่อ/ยืนยันตัวตน: ____________________\nวันที่และเวลา: ____________________\nสำหรับเจ้าหน้าที่ — เลขคำขอ/ผล/วันที่ดำเนินการ: ____________________`,
-  },
-  {
-    id: "data-subject-request",
-    title: "แบบฟอร์มคำร้องเจ้าของข้อมูล",
-    purpose: "รองรับคำขอใช้สิทธิตาม PDPA และติดตามการดำเนินงาน",
-    content: `แบบฟอร์มคำร้องขอใช้สิทธิของเจ้าของข้อมูล\n\nข้อมูลผู้ยื่นคำร้อง\nชื่อ: [ระบุ]  อีเมล/โทรศัพท์: [ระบุ]  ความสัมพันธ์กับเจ้าของข้อมูล: [ระบุ]\n\nสิทธิที่ต้องการใช้\n[ ] เข้าถึง/ขอสำเนา  [ ] แก้ไข  [ ] ลบ  [ ] จำกัดการใช้\n[ ] คัดค้าน  [ ] โอนย้าย  [ ] ถอนความยินยอม  [ ] อื่น ๆ\n\nรายละเอียดและข้อมูลที่เกี่ยวข้อง: [ระบุ]\nช่วงเวลาของข้อมูล: [ระบุ]\nช่องทางรับผลคำร้อง: [ระบุ]\n\nเอกสารยืนยันตัวตนที่จำเป็นและได้สัดส่วน: [ระบุ]\nวันที่ยื่นคำร้อง: [ระบุ]\n\nสำหรับเจ้าหน้าที่ — เลขคำร้อง/ผู้รับผิดชอบ/กำหนดตอบ/ผลการพิจารณา: [ระบุ]`,
-  },
-  {
-    id: "collection-notice",
-    title: "ข้อความแจ้งการเก็บข้อมูล",
-    purpose: "ข้อความสั้นสำหรับหน้าเว็บ จุดบริการ หรือก่อนเริ่มกรอกแบบฟอร์ม",
-    content: `ข้อความแจ้งการเก็บข้อมูลส่วนบุคคล\n\n[ชื่อองค์กร] จะเก็บข้อมูล [ระบุข้อมูล] เพื่อ [ระบุวัตถุประสงค์] โดยอาศัย [ระบุฐานกฎหมาย] และเก็บไว้เป็นเวลา [ระบุระยะเวลา]\n\nเราอาจเปิดเผยข้อมูลแก่ [ระบุผู้รับข้อมูล] เท่าที่จำเป็น ท่านสามารถอ่านประกาศความเป็นส่วนตัวฉบับเต็มได้ที่ [ลิงก์] และใช้สิทธิหรือติดต่อเราได้ที่ [อีเมล/โทรศัพท์/DPO]\n\nหากกิจกรรมนี้อาศัยความยินยอม ท่านเลือกให้หรือไม่ให้ความยินยอมได้โดยอิสระและถอนภายหลังได้ผ่าน [ช่องทาง]`,
-  },
-] satisfies Array<
-  Pick<DocumentTemplate, "id" | "title" | "purpose" | "content">
->;
+import { api, type DocumentTemplate } from "@/services/api";
 
 function fullText(template: DocumentTemplate) {
-  return `${template.content}\n\nข้อควรทราบ\n${template.disclaimer || disclaimer}`;
+  return template.disclaimer
+    ? `${template.content}\n\nข้อควรทราบ\n${template.disclaimer}`
+    : template.content;
 }
 
 export default function DocumentTemplates() {
   const [selected, setSelected] = useState<DocumentTemplate | null>(null);
-  useEscapeKey(() => setSelected(null), selected !== null);
   const [copied, setCopied] = useState<string | null>(null);
-  const [templates, setTemplates] = useState<DocumentTemplate[]>(
-    builtinTemplates.map((template) => ({
-      ...template,
-      category: template.id,
-      disclaimer,
-      fields: [],
-      status: "active",
-      createdAt: "",
-      updatedAt: "",
-    })),
-  );
+  const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEscapeKey(() => setSelected(null), selected !== null);
 
   useEffect(() => {
+    let cancelled = false;
+
     void api.templates.list().then((response) => {
-      if (response.success && response.data?.length)
-        setTemplates(response.data);
+      if (cancelled) return;
+
+      if (response.success) {
+        setTemplates(response.data ?? []);
+        setError(null);
+      } else {
+        setError(response.error?.message ?? "ไม่สามารถโหลดแบบฟอร์มได้");
+      }
+      setLoading(false);
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function copyTemplate(template: DocumentTemplate) {
@@ -84,84 +47,74 @@ export default function DocumentTemplates() {
       1800,
     );
   }
-  function downloadTemplate(template: DocumentTemplate) {
-    const blob = new Blob([fullText(template)], {
-      type: "text/plain;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${template.id}-template.txt`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  }
 
   return (
     <div>
       <div className="mb-6">
         <h1 className="text-xl font-black text-gray-900">คลังแบบฟอร์ม PDPA</h1>
         <p className="mt-1 text-sm text-gray-500">
-          เลือกแบบฟอร์มเริ่มต้น แล้วปรับข้อความให้ตรงกับกระบวนการจริงขององค์กร
+          เลือกแบบฟอร์มที่องค์กรจัดเตรียมไว้ แล้วปรับข้อความให้ตรงกับกระบวนการจริง
         </p>
       </div>
-      <div className="mb-5 flex gap-3 border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-        <Info className="mt-0.5 h-5 w-5 shrink-0" />
-        <p>
-          <strong>ข้อควรทราบ:</strong> {disclaimer}
-        </p>
-      </div>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {templates.map((template, index) => (
-          <article
-            key={template.id}
-            className="group flex min-h-56 flex-col border border-gray-200 bg-white p-5 transition hover:border-emerald-300 hover:shadow-sm"
-          >
-            <div className="mb-5 flex items-start justify-between">
-              <span className="grid h-10 w-10 place-items-center border border-emerald-100 bg-emerald-50 text-emerald-700">
+
+      {loading ? (
+        <div className="border border-gray-200 bg-white p-10 text-center text-sm text-gray-500">
+          กำลังโหลดแบบฟอร์ม…
+        </div>
+      ) : error ? (
+        <div className="border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      ) : templates.length === 0 ? (
+        <div className="border border-dashed border-gray-300 bg-white p-10 text-center">
+          <FileText className="mx-auto h-8 w-8 text-gray-300" />
+          <p className="mt-3 font-semibold text-gray-800">ยังไม่มีแบบฟอร์ม</p>
+          <p className="mt-1 text-sm text-gray-500">
+            แบบฟอร์มที่ผู้ดูแลระบบเปิดใช้งานจะแสดงที่นี่
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {templates.map((template) => (
+            <article
+              key={template.id}
+              className="group flex min-h-56 flex-col border border-gray-200 bg-white p-5 transition hover:border-emerald-300 hover:shadow-sm"
+            >
+              <span className="mb-5 grid h-10 w-10 place-items-center border border-emerald-100 bg-emerald-50 text-emerald-700">
                 <FileText className="h-5 w-5" />
               </span>
-              <span className="font-mono text-xs text-gray-300">
-                T{String(index + 1).padStart(2, "0")}
-              </span>
-            </div>
-            <h2 className="font-bold text-gray-900">{template.title}</h2>
-            <p className="mt-2 flex-1 text-sm leading-6 text-gray-500">
-              {template.purpose}
-            </p>
-            <div className="mt-5 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setSelected(template)}
-                className="inline-flex items-center gap-1.5 border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-              >
-                <Eye className="h-4 w-4" />
-                ดูตัวอย่าง
-              </button>
-              <button
-                type="button"
-                onClick={() => void copyTemplate(template)}
-                className="inline-flex items-center gap-1.5 border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-              >
-                {copied === template.id ? (
-                  <Check className="h-4 w-4 text-emerald-600" />
-                ) : (
-                  <ClipboardCopy className="h-4 w-4" />
-                )}
-                {copied === template.id ? "คัดลอกแล้ว" : "คัดลอก"}
-              </button>
-              <button
-                type="button"
-                onClick={() => downloadTemplate(template)}
-                className="inline-flex items-center gap-1.5 bg-emerald-700 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-800"
-              >
-                <Download className="h-4 w-4" />
-                ดาวน์โหลด
-              </button>
-            </div>
-          </article>
-        ))}
-      </div>
-      {selected && (
+              <h2 className="font-bold text-gray-900">{template.title}</h2>
+              <p className="mt-2 flex-1 text-sm leading-6 text-gray-500">
+                {template.purpose}
+              </p>
+              <div className="mt-5 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelected(template)}
+                  className="inline-flex items-center gap-1.5 border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                >
+                  <Eye className="h-4 w-4" />
+                  ดูตัวอย่าง
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void copyTemplate(template)}
+                  className="inline-flex items-center gap-1.5 border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                >
+                  {copied === template.id ? (
+                    <Check className="h-4 w-4 text-emerald-600" />
+                  ) : (
+                    <ClipboardCopy className="h-4 w-4" />
+                  )}
+                  {copied === template.id ? "คัดลอกแล้ว" : "คัดลอก"}
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      {selected ? (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
           role="dialog"
@@ -191,7 +144,7 @@ export default function DocumentTemplates() {
               <pre className="whitespace-pre-wrap font-sans text-sm leading-7 text-gray-700">
                 {fullText(selected)}
               </pre>
-              <div className="mt-6 flex gap-2 border-t pt-4">
+              <div className="mt-6 border-t pt-4">
                 <button
                   type="button"
                   onClick={() => void copyTemplate(selected)}
@@ -199,18 +152,11 @@ export default function DocumentTemplates() {
                 >
                   คัดลอกข้อความ
                 </button>
-                <button
-                  type="button"
-                  onClick={() => downloadTemplate(selected)}
-                  className="bg-emerald-700 px-4 py-2 text-sm font-semibold text-white"
-                >
-                  ดาวน์โหลด .txt
-                </button>
               </div>
             </div>
           </section>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

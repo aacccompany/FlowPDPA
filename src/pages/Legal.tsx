@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTheme, type Theme } from "@/hooks/useTheme";
+import { useVisiblePolling } from "@/hooks/useVisiblePolling";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -43,6 +44,7 @@ const LegalPolicyEditor = lazy(() =>
 
 type LegalView = "dashboard" | "submissions" | "changes";
 type LegalWorkType = "admin_return" | "review";
+type SortDirection = "asc" | "desc";
 type PolicyStatus =
   | "pending_review"
   | "pending_admin_review"
@@ -720,6 +722,7 @@ function Queue({
 }) {
   const [filter, setFilter] = useState<"all" | LegalWorkType>("all");
   const [query, setQuery] = useState("");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const merchantChangeSlugs = useMemo(
     () =>
       new Set(
@@ -739,13 +742,18 @@ function Queue({
       (row.status === "changes_requested_by_admin" ||
         !merchantChangeSlugs.has(row.slug)),
   );
-  const rows = actionableSubmissions.filter(
-    (row) =>
-      (filter === "all" || workTypeFor(row) === filter) &&
-      (row.websiteName + row.domain + row.ownerName)
-        .toLowerCase()
-        .includes(query.toLowerCase()),
-  );
+  const rows = actionableSubmissions
+    .filter(
+      (row) =>
+        (filter === "all" || workTypeFor(row) === filter) &&
+        (row.websiteName + row.domain + row.ownerName)
+          .toLowerCase()
+          .includes(query.toLowerCase()),
+    )
+    .sort((a, b) => {
+      const result = byUrgency(a, b);
+      return sortDirection === "asc" ? result : -result;
+    });
   const pagination = usePagination(rows, 100);
   return (
     <>
@@ -765,6 +773,15 @@ function Queue({
             {item === "all" ? "ทั้งหมด" : workTypeMeta[item].label}
           </button>
         ))}
+        <select
+          className="portal-filter"
+          value={sortDirection}
+          onChange={(event) => setSortDirection(event.target.value as SortDirection)}
+          aria-label="ลำดับการเรียงคิวตรวจสอบ"
+        >
+          <option value="asc">กำหนดส่ง: ใกล้สุดก่อน (ASC)</option>
+          <option value="desc">กำหนดส่ง: ไกลสุดก่อน (DESC)</option>
+        </select>
         <div className="relative ml-auto w-full sm:w-auto">
           <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-500" />
           <input
@@ -797,11 +814,15 @@ function Changes({
   editPolicy: (slug: string) => Promise<string | null>;
 }) {
   const [filter, setFilter] = useState<"all" | ChangeStatus>("pending_review");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const visible = rows.filter(
-    (row) => filter === "all" || row.status === filter,
-  );
+  const visible = rows
+    .filter((row) => filter === "all" || row.status === filter)
+    .sort((a, b) => {
+      const result = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      return sortDirection === "asc" ? result : -result;
+    });
   const pagination = usePagination(visible);
   const openEditor = async (row: ChangeRequest) => {
     setOpeningId(row.id);
@@ -835,6 +856,15 @@ function Changes({
             </button>
           ),
         )}
+        <select
+          className="portal-filter ml-auto"
+          value={sortDirection}
+          onChange={(event) => setSortDirection(event.target.value as SortDirection)}
+          aria-label="ลำดับการเรียงคำขอแก้ไข"
+        >
+          <option value="desc">วันที่: ใหม่สุดก่อน (DESC)</option>
+          <option value="asc">วันที่: เก่าสุดก่อน (ASC)</option>
+        </select>
       </div>
       {error && (
         <p role="alert" className="mb-4 rounded-[var(--radius-control)] border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -917,7 +947,7 @@ function Editor({
   hasNext,
   back,
   save,
-  approveChanges,
+  reviewChanges,
   changeRequests,
 }: {
   initial: Submission;
@@ -928,9 +958,11 @@ function Editor({
     decision: PolicyReviewStatus | null,
     goNext?: boolean,
   ) => Promise<string | null>;
-  approveChanges: (
+  reviewChanges: (
     row: Submission,
     requests: ChangeRequest[],
+    decision: "approved" | "rejected",
+    comment: string,
   ) => Promise<string | null>;
   changeRequests: ChangeRequest[];
 }) {
@@ -952,6 +984,7 @@ function Editor({
   const pendingChanges = changeRequests.filter(
     (request) => request.status === "pending_review",
   );
+  const isChangeRequestReview = pendingChanges.length > 0;
   const content = language === "th" ? draft.contentTh : draft.contentEn;
   const setContent = (value: string) =>
     setDraft((current) =>
@@ -970,8 +1003,13 @@ function Editor({
     }
     setSaving(true);
     setError("");
-    const message = pendingChanges.length
-      ? await approveChanges(draft, pendingChanges)
+    const message = isChangeRequestReview && decision
+      ? await reviewChanges(
+          draft,
+          pendingChanges,
+          decision,
+          draft.reviewComment.trim(),
+        )
       : await save(draft, decision, goNext);
     setSaving(false);
     if (message) setError(message);
@@ -982,7 +1020,7 @@ function Editor({
   const submitRef = useRef<() => void>(() => {});
   useEffect(() => {
     submitRef.current = () => {
-      if (!saving) void submit();
+      if (!saving && isChangeRequestReview) void submit();
     };
   });
   useEffect(() => {
@@ -1009,9 +1047,13 @@ function Editor({
       />
       <ConfirmDialog
         open={confirmApprove !== null}
-        title="อนุมัตินโยบายนี้?"
-        description="นโยบายจะถูกอนุมัติ และคำขอแก้ไขที่รอดำเนินการจะถูกปิดอัตโนมัติ"
-        confirmLabel="อนุมัติ"
+        title={isChangeRequestReview ? "อนุมัติคำขอแก้ไขนี้?" : "อนุมัตินโยบายนี้?"}
+        description={
+          isChangeRequestReview
+            ? "ฉบับแก้ไขจะถูกส่งให้ Admin ตรวจซ้ำก่อนส่งถึงลูกค้า"
+            : "นโยบายจะถูกส่งให้ Admin ตรวจซ้ำก่อนส่งถึงลูกค้า"
+        }
+        confirmLabel={isChangeRequestReview ? "อนุมัติคำขอ" : "อนุมัติ"}
         cancelLabel="ยังไม่อนุมัติ"
         onConfirm={() => {
           const goNext = confirmApprove?.goNext ?? false;
@@ -1028,6 +1070,7 @@ function Editor({
           <ArrowLeft className="w-4 h-4" />
           กลับไปยังคิว
         </button>
+        {isChangeRequestReview && (
         <div className="xl:hidden">
           <button
             className="portal-button"
@@ -1040,6 +1083,7 @@ function Editor({
             ไปที่ผลการพิจารณา
           </button>
         </div>
+        )}
       </div>
       <div className="flex flex-col xl:flex-row gap-5">
         <section className="portal-panel flex-1 min-w-0">
@@ -1098,70 +1142,79 @@ function Editor({
           </div>
         </section>
         <aside className="w-full xl:w-96 space-y-4 xl:sticky xl:top-24 xl:self-start xl:max-h-[calc(100vh-7rem)] xl:overflow-y-auto">
+          {isChangeRequestReview && (
           <section id="legal-decision" className="portal-panel p-5">
             <h2 className="text-base font-semibold">ผลการพิจารณา</h2>
-            <p className="mt-1 mb-3 text-xs leading-5 text-gray-600">
-              บันทึกการแก้ไขเป็นฉบับร่าง หรือเลือกผลการพิจารณาของนโยบายทั้งฉบับ
-            </p>
-            <div className="grid grid-cols-2 gap-2 mb-2">
-              {[
-                {
-                  id: "approved" as const,
-                  label: "อนุมัติ",
-                  Icon: ShieldCheck,
-                },
-                {
-                  id: "rejected" as const,
-                  label: "ไม่อนุมัติ",
-                  Icon: XCircle,
-                },
-              ].map(({ id, label, Icon }) => (
-                <button
-                  key={id}
-                  className="portal-filter justify-center px-1"
-                  data-active={decision === id}
-                  data-tone={id === "rejected" ? "danger" : undefined}
-                  aria-pressed={decision === id}
-                  onClick={() =>
-                    setDecision((current) => (current === id ? null : id))
-                  }
+            {isChangeRequestReview ? (
+              <>
+                <p className="mt-1 mb-3 text-xs leading-5 text-gray-600">
+                  ตรวจสอบคำขอแก้ไขจากลูกค้า แล้วเลือกอนุมัติหรือปฏิเสธคำขอ
+                </p>
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  {[
+                    {
+                      id: "approved" as const,
+                      label: "อนุมัติคำขอ",
+                      Icon: ShieldCheck,
+                    },
+                    {
+                      id: "rejected" as const,
+                      label: "ปฏิเสธคำขอ",
+                      Icon: XCircle,
+                    },
+                  ].map(({ id, label, Icon }) => (
+                    <button
+                      key={id}
+                      className="portal-filter justify-center px-1"
+                      data-active={decision === id}
+                      data-tone={id === "rejected" ? "danger" : undefined}
+                      aria-pressed={decision === id}
+                      onClick={() =>
+                        setDecision((current) => (current === id ? null : id))
+                      }
+                    >
+                      <Icon className="w-4 h-4" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p
+                  className="mb-4 text-xs leading-5 text-gray-600"
+                  aria-live="polite"
                 >
-                  <Icon className="w-4 h-4" />
-                  {label}
-                </button>
-              ))}
-            </div>
-            <p
-              className="mb-4 text-xs leading-5 text-gray-600"
-              aria-live="polite"
-            >
-              {decision === "approved"
-                ? "นโยบายจะถูกอนุมัติ และคำขอแก้ไขที่รอดำเนินการจะถูกปิดอัตโนมัติ"
-                : decision === "rejected"
-                  ? "ต้องกรอกความเห็นก่อนบันทึก"
-                  : "ยังไม่ได้เลือกผลการพิจารณา ระบบจะบันทึกเฉพาะการแก้ไขเป็นฉบับร่าง"}
-            </p>
-            <label
-              htmlFor="legal-review-comment"
-              className="text-sm font-semibold text-gray-700"
-            >
-              ความเห็นของฝ่ายกฎหมาย{" "}
-              {decision === "rejected" && (
-                <span className="text-red-600">*</span>
-              )}
-            </label>
-            <textarea
-              id="legal-review-comment"
-              className="w-full min-h-24 mt-2 border border-gray-300 rounded-[var(--radius-control)] p-3 text-sm"
-              value={draft.reviewComment}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  reviewComment: event.target.value,
-                }))
-              }
-              placeholder="เหตุผล ข้อสังเกตทางกฎหมาย หรือคำแนะนำถึงผู้ประกอบการ"
-            />
+                  {decision === "approved"
+                    ? "ฉบับแก้ไขจะถูกส่งให้ Admin ตรวจซ้ำก่อนส่งถึงลูกค้า"
+                    : decision === "rejected"
+                      ? "ต้องกรอกความเห็นก่อนปฏิเสธคำขอ"
+                      : "ยังไม่ได้เลือกผลการพิจารณา ระบบจะบันทึกเฉพาะการแก้ไขเป็นฉบับร่าง"}
+                </p>
+                <label
+                  htmlFor="legal-review-comment"
+                  className="text-sm font-semibold text-gray-700"
+                >
+                  ความเห็นของฝ่ายกฎหมาย{" "}
+                  {decision === "rejected" && (
+                    <span className="text-red-600">*</span>
+                  )}
+                </label>
+                <textarea
+                  id="legal-review-comment"
+                  className="w-full min-h-24 mt-2 border border-gray-300 rounded-[var(--radius-control)] p-3 text-sm"
+                  value={draft.reviewComment}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      reviewComment: event.target.value,
+                    }))
+                  }
+                  placeholder="เหตุผล ข้อสังเกตทางกฎหมาย หรือคำแนะนำถึงลูกค้า"
+                />
+              </>
+            ) : (
+              <p className="mt-1 mb-4 text-xs leading-5 text-gray-600">
+                ตรวจสอบและแก้ไขเอกสารให้เรียบร้อย จากนั้นอนุมัติเพื่อส่งให้ Admin ตรวจซ้ำ
+              </p>
+            )}
             {error && (
               <p role="alert" className="mt-3 text-sm text-red-700">
                 {error}
@@ -1174,10 +1227,10 @@ function Editor({
             >
               {saving
                 ? "กำลังบันทึก..."
-                : decision === "approved"
-                  ? "อนุมัตินโยบาย"
-                  : decision === "rejected"
-                    ? "ไม่อนุมัตินโยบาย"
+                : isChangeRequestReview && decision === "approved"
+                  ? "อนุมัติคำขอแก้ไข"
+                  : isChangeRequestReview && decision === "rejected"
+                    ? "ปฏิเสธคำขอแก้ไข"
                     : "บันทึกฉบับร่าง"}
             </button>
             {decision && hasNext && (
@@ -1187,14 +1240,15 @@ function Editor({
                 onClick={() => void submit(true)}
               >
                 {decision === "approved"
-                  ? "อนุมัติและไปฉบับถัดไป"
-                  : "ไม่อนุมัติและไปฉบับถัดไป"}
+                  ? "อนุมัติคำขอและไปฉบับถัดไป"
+                  : "ปฏิเสธคำขอและไปฉบับถัดไป"}
               </button>
             )}
             <p className="mt-3 text-xs text-gray-600">
               ลัด: กด Ctrl + S เพื่อบันทึก
             </p>
           </section>
+          )}
           <section className="portal-panel p-5">
             <h2 className="text-base font-semibold mb-2">รายละเอียดคำขอ</h2>
             {[
@@ -1283,6 +1337,7 @@ function Editor({
               </div>
             </section>
           )}
+          {!isChangeRequestReview && (
           <section className="portal-panel p-5">
             <h2 className="text-sm font-semibold">อนุมัติเอกสาร</h2>
             {error && <p className="mt-3 text-xs text-red-700">{error}</p>}
@@ -1290,12 +1345,16 @@ function Editor({
               type="button"
               className="portal-button primary w-full justify-center mt-4"
               disabled={saving}
-              onClick={() => void submit()}
+              onClick={() => {
+                setDecision("approved");
+                setConfirmApprove({ goNext: false });
+              }}
             >
               <ShieldCheck className="w-4 h-4" />
               {saving ? "กำลังอนุมัติ..." : "อนุมัติ"}
             </button>
           </section>
+          )}
         </aside>
       </div>
     </>
@@ -1350,6 +1409,10 @@ export default function Legal() {
       active = false;
     };
   }, []);
+  useVisiblePolling(async () => {
+    const response = await api.legal.dashboard();
+    if (response.success && response.data) setDashboard(response.data);
+  });
   useEffect(() => {
     if (!notice) return;
     const timer = window.setTimeout(() => setNotice(""), 5000);
@@ -1427,6 +1490,22 @@ export default function Legal() {
     setSubmissions((current) =>
       current.map((item) => (item.id === saved.id ? saved : item)),
     );
+    if (decision !== null) {
+      setDashboard((current) =>
+        current
+          ? {
+              ...current,
+              summary: {
+                ...current.summary,
+                pendingPolicies: Math.max(
+                  0,
+                  current.summary.pendingPolicies - 1,
+                ),
+              },
+            }
+          : current,
+      );
+    }
     if (decision === "approved") {
       const changesResponse = await api.legal.listChangeRequests();
       if (changesResponse.success && changesResponse.data)
@@ -1453,9 +1532,11 @@ export default function Legal() {
     if (nextRow) await select(nextRow);
     return null;
   };
-  const approveChanges = async (
+  const reviewChanges = async (
     row: Submission,
     requests: ChangeRequest[],
+    decision: "approved" | "rejected",
+    comment: string,
   ) => {
     const content =
       row.language === "both"
@@ -1468,20 +1549,22 @@ export default function Legal() {
             language: row.language,
             text: row.language === "th" ? row.contentTh : row.contentEn,
           };
-    const contentResponse = await api.legal.updateSubmission(row.slug, {
-      content,
-    });
-    if (!contentResponse.success)
-      return contentResponse.error?.message || "ไม่สามารถบันทึกเอกสารได้";
+    if (decision === "approved") {
+      const contentResponse = await api.legal.updateSubmission(row.slug, {
+        content,
+      });
+      if (!contentResponse.success)
+        return contentResponse.error?.message || "ไม่สามารถบันทึกเอกสารได้";
+    }
 
     const reviewedRequests: ChangeRequest[] = [];
     for (const request of requests) {
       const response = await api.legal.reviewChangeRequest(request.id, {
-        status: "resolved",
-        legalComment: "",
+        status: decision === "approved" ? "resolved" : "rejected",
+        legalComment: comment,
       });
       if (!response.success || !response.data)
-        return response.error?.message || "ไม่สามารถอนุมัติคำขอแก้ไขได้";
+        return response.error?.message || "ไม่สามารถบันทึกผลคำขอแก้ไขได้";
       reviewedRequests.push(changeFromApi(response.data));
     }
     const reviewedById = new Map(
@@ -1506,6 +1589,11 @@ export default function Legal() {
     );
     setSelectedId(null);
     setView(selectedReturnView);
+    setNotice(
+      decision === "approved"
+        ? "อนุมัติคำขอแก้ไขแล้ว"
+        : "ปฏิเสธคำขอแก้ไขแล้ว",
+    );
     return null;
   };
   return (
@@ -1576,7 +1664,7 @@ export default function Legal() {
               )}
               back={() => setSelectedId(null)}
               save={save}
-              approveChanges={approveChanges}
+              reviewChanges={reviewChanges}
               changeRequests={changes.filter(
                 (row) => row.policySlug === selected.slug,
               )}

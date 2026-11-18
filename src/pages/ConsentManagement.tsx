@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   CheckCircle2,
@@ -29,6 +29,25 @@ const consentStatusLabel: Record<ConsentRecord["status"], string> = {
   withdrawn: "ถอนความยินยอม",
 };
 
+const DEFAULT_CONSENT_FIELDS = (): ConsentField[] => [
+  {
+    id: "subject-name",
+    type: "text",
+    label: "ชื่อของคุณ",
+    placeholder: "ชื่อของคุณ (ไม่บังคับ)",
+    required: false,
+    options: [],
+  },
+  {
+    id: "subject-email",
+    type: "email",
+    label: "อีเมลของคุณ",
+    placeholder: "อีเมลของคุณ",
+    required: true,
+    options: [],
+  },
+];
+
 export default function ConsentManagement() {
   const [forms, setForms] = useState<ConsentForm[]>([]);
   const [policies, setPolicies] = useState<SavedPolicy[]>([]);
@@ -45,6 +64,7 @@ export default function ConsentManagement() {
   });
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [creating, setCreating] = useState(false);
   const [editingForm, setEditingForm] = useState<ConsentForm | null>(null);
   const [editingRecord, setEditingRecord] = useState<ConsentRecord | null>(null);
@@ -65,12 +85,15 @@ export default function ConsentManagement() {
   useEscapeKey(() => setCreating(false), creating);
   const [exporting, setExporting] = useState<"csv" | "pdf" | null>(null);
   const [draft, setDraft] = useState({
-    policyId: "",
+    policyIds: [] as string[],
     name: "",
     description: "",
-    purposes: "",
-    fields: [] as ConsentField[],
+    fields: DEFAULT_CONSENT_FIELDS(),
   });
+  const sortedRecords = useMemo(() => records.toSorted((left, right) => {
+    const result = new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+    return sortDirection === "asc" ? result : -result;
+  }), [records, sortDirection]);
 
   const loadRecords = (page = 1, nextStatus = status, nextSearch = search) =>
     void api.consents
@@ -123,25 +146,20 @@ export default function ConsentManagement() {
   }, []);
 
   const create = async () => {
-    const labels = draft.purposes
-      .split("\n")
-      .map((value) => value.trim())
-      .filter(Boolean);
-    if (!draft.policyId || !draft.name || labels.length === 0) {
-      setError(
-        "กรุณาเลือกนโยบาย ระบุชื่อแบบฟอร์ม และเพิ่มวัตถุประสงค์อย่างน้อย 1 รายการ",
-      );
+    setError("");
+    if (draft.policyIds.length === 0) {
+      setError("กรุณาเลือกนโยบายอย่างน้อย 1 ฉบับ");
+      return;
+    }
+    if (!draft.name.trim()) {
+      setError("กรุณาระบุชื่อแบบฟอร์ม");
       return;
     }
     const payload = {
-      policyId: draft.policyId,
+      policyIds: draft.policyIds,
       name: draft.name,
       description: draft.description,
-      purposes: labels.map((label, index) => ({
-        id: `purpose-${index + 1}`,
-        label,
-        required: false,
-      })),
+      purposes: [],
       fields: draft.fields,
       templateId: selectedTemplateId || undefined,
     };
@@ -168,11 +186,10 @@ export default function ConsentManagement() {
         selectedTemplateId,
       );
     setDraft({
-      policyId: "",
+      policyIds: [],
       name: "",
       description: "",
-      purposes: "",
-      fields: [],
+      fields: DEFAULT_CONSENT_FIELDS(),
     });
     setError("");
     setEditingForm(null);
@@ -188,10 +205,9 @@ export default function ConsentManagement() {
     setEditingForm(form);
     setSelectedTemplateId(form.templateId || "");
     setDraft({
-      policyId: form.policyId,
+      policyIds: form.policyIds ?? [form.policyId],
       name: form.name,
       description: form.description || "",
-      purposes: form.purposes.map((purpose) => purpose.label).join("\n"),
       fields: form.fields || [],
     });
     setCreateStep("editor");
@@ -212,11 +228,10 @@ export default function ConsentManagement() {
   const startBlank = () => {
     setSelectedTemplateId("");
     setDraft({
-      policyId: "",
+      policyIds: [],
       name: "",
       description: "",
-      purposes: "",
-      fields: [],
+      fields: DEFAULT_CONSENT_FIELDS(),
     });
     setCreateStep("editor");
   };
@@ -227,11 +242,10 @@ export default function ConsentManagement() {
       return;
     }
     setDraft({
-      policyId: "",
+      policyIds: [],
       name: template.title,
       description: template.purpose,
-      purposes: "",
-      fields: template.fields || [],
+      fields: [...DEFAULT_CONSENT_FIELDS(), ...(template.fields || [])],
     });
     setCreateStep("editor");
   };
@@ -252,7 +266,7 @@ export default function ConsentManagement() {
     setEditingRecord(record);
     setRecordDraft({
       subjectName: record.subjectName || "",
-      subjectEmail: record.subjectEmail,
+      subjectEmail: record.subjectEmail || "",
       subjectReference: record.subjectReference || "",
       fieldValues: { ...(record.fieldValues || {}) },
     });
@@ -321,7 +335,7 @@ export default function ConsentManagement() {
           สร้างแบบฟอร์มความยินยอม
         </button>
       </header>
-      {error && (
+      {error && !creating && (
         <p className="mb-4 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </p>
@@ -400,7 +414,7 @@ export default function ConsentManagement() {
                 <div>
                   <p className="text-sm font-semibold">{form.name}</p>
                   <p className="text-xs text-gray-400">
-                    {form.purposes.length} วัตถุประสงค์ · เวอร์ชัน{" "}
+                    {(form.policyIds ?? [form.policyId]).length} นโยบาย · เวอร์ชัน{" "}
                     {form.version}
                   </p>
                 </div>
@@ -457,6 +471,15 @@ export default function ConsentManagement() {
           <option value="rejected">ปฏิเสธ</option>
           <option value="withdrawn">ถอนความยินยอม</option>
         </select>
+        <select
+          value={sortDirection}
+          onChange={(event) => setSortDirection(event.target.value as "asc" | "desc")}
+          className="h-9 border border-gray-300 bg-white px-3 text-sm"
+          aria-label="ลำดับการเรียง"
+        >
+          <option value="desc">ล่าสุดก่อน (DESC)</option>
+          <option value="asc">เก่าสุดก่อน (ASC)</option>
+        </select>
         <button
           onClick={() => loadRecords(1)}
           className="h-9 border border-gray-300 px-4 text-xs font-semibold"
@@ -494,7 +517,7 @@ export default function ConsentManagement() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {records.map((record) => (
+              {sortedRecords.map((record) => (
                 <tr key={record.id}>
                   <td className="px-4 py-3">
                     <p className="font-semibold">
@@ -630,6 +653,24 @@ export default function ConsentManagement() {
                       }))}
                       className="ml-3"
                     />
+                  ) : field.type === "radio" ? (
+                    <span className="mt-2 grid gap-2 font-normal">
+                      {field.options.map((option) => (
+                        <span key={option} className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name={`record-field-${field.id}`}
+                            value={option}
+                            checked={recordDraft.fieldValues[field.id] === option}
+                            onChange={(event) => setRecordDraft((current) => ({
+                              ...current,
+                              fieldValues: { ...current.fieldValues, [field.id]: event.target.value },
+                            }))}
+                          />
+                          {option}
+                        </span>
+                      ))}
+                    </span>
                   ) : field.type === "select" ? (
                     <select
                       value={String(recordDraft.fieldValues[field.id] ?? "")}
@@ -657,7 +698,7 @@ export default function ConsentManagement() {
               ))}
               <div className="flex justify-end gap-2 border-t pt-4">
                 <button type="button" onClick={() => setEditingRecord(null)} className="border border-gray-200 px-4 py-2 text-sm">ยกเลิก</button>
-                <button type="button" disabled={recordSaving || !recordDraft.subjectEmail} onClick={() => void saveRecord()} className="btn-green px-4 py-2 text-sm disabled:opacity-50">
+                <button type="button" disabled={recordSaving} onClick={() => void saveRecord()} className="btn-green px-4 py-2 text-sm disabled:opacity-50">
                   {recordSaving ? "กำลังบันทึก..." : "บันทึกข้อมูล"}
                 </button>
               </div>
@@ -667,7 +708,7 @@ export default function ConsentManagement() {
       ) : null}
       {creating && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4">
-          <section className="max-h-[92vh] w-full max-w-2xl overflow-y-auto border border-gray-200 bg-white shadow-2xl">
+          <section className="max-h-[92vh] w-full max-w-4xl overflow-y-auto border border-gray-200 bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b px-5 py-4">
               <h2 className="text-sm font-semibold">
                 {editingForm
@@ -684,6 +725,11 @@ export default function ConsentManagement() {
                 <X className="h-4 w-4" />
               </button>
             </div>
+            {error && (
+              <p className="mx-5 mt-4 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {error}
+              </p>
+            )}
             {createStep === "choice" ? (
               <div className="space-y-4 p-5">
                 <div>
@@ -745,37 +791,53 @@ export default function ConsentManagement() {
               </div>
             ) : (
               <div className="space-y-4 p-5">
-                <label className="block text-xs font-semibold">
-                  นโยบาย
-                  <select
-                    value={draft.policyId}
-                    onChange={(event) =>
-                      setDraft((current) => ({
-                        ...current,
-                        policyId: event.target.value,
-                      }))
-                    }
-                    className="mt-1.5 h-10 w-full border px-3 text-sm"
-                  >
-                    <option value="">เลือกนโยบายของคุณ</option>
+                <fieldset className="block text-xs font-semibold">
+                  <legend>นโยบายที่แบบฟอร์มนี้ครอบคลุม</legend>
+                  <p className="mt-1 text-xs font-normal text-gray-500">
+                    เลือกได้หลายนโยบาย แต่นโยบายแต่ละฉบับใช้ได้กับแบบฟอร์มเดียวเท่านั้น
+                  </p>
+                  <div className="mt-2 max-h-48 space-y-2 overflow-y-auto border bg-gray-50 p-3">
                     {policies.map((policy) => {
                       const alreadyUsed = forms.some(
                         (form) =>
-                          form.policyId === policy.id &&
+                          (form.policyIds ?? [form.policyId]).includes(policy.id) &&
                           form.id !== editingForm?.id,
                       );
+                      const checked = draft.policyIds.includes(policy.id);
                       return (
-                        <option
+                        <label
                           key={policy.id}
-                          value={policy.id}
-                          disabled={alreadyUsed}
+                          className={`flex items-start gap-3 border bg-white p-3 ${alreadyUsed ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                         >
-                          {policy.typeName} · {policy.websiteName}
-                          {alreadyUsed ? " — มีแบบฟอร์มแล้ว" : ""}
-                        </option>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={alreadyUsed}
+                            onChange={() => {
+                              setError("");
+                              setDraft((current) => ({
+                                ...current,
+                                policyIds: checked
+                                  ? current.policyIds.filter((id) => id !== policy.id)
+                                  : [...current.policyIds, policy.id],
+                              }));
+                            }}
+                            className="mt-0.5 h-4 w-4 accent-emerald-700"
+                          />
+                          <span className="min-w-0">
+                            <span className="block text-sm text-gray-900">
+                              {policy.typeName} · {policy.websiteName}
+                            </span>
+                            {alreadyUsed && (
+                              <span className="mt-0.5 block text-xs font-normal text-amber-700">
+                                มีแบบฟอร์มความยินยอมแล้ว
+                              </span>
+                            )}
+                          </span>
+                        </label>
                       );
                     })}
-                  </select>
+                  </div>
                   {policies.length === 0 ? (
                     <span className="mt-2 block text-xs font-normal text-amber-700">
                       ยังไม่มีนโยบายในบัญชี กรุณาสร้างนโยบายก่อน
@@ -783,7 +845,7 @@ export default function ConsentManagement() {
                   ) : policies.every((policy) =>
                       forms.some(
                         (form) =>
-                          form.policyId === policy.id &&
+                          (form.policyIds ?? [form.policyId]).includes(policy.id) &&
                           form.id !== editingForm?.id,
                       ),
                     ) ? (
@@ -792,7 +854,7 @@ export default function ConsentManagement() {
                       แบบฟอร์มต่อนโยบาย
                     </span>
                   ) : null}
-                </label>
+                </fieldset>
                 <label className="block text-xs font-semibold">
                   ชื่อแบบฟอร์ม
                   <input
@@ -819,20 +881,6 @@ export default function ConsentManagement() {
                     className="mt-1.5 min-h-20 w-full border p-3 text-sm"
                   />
                 </label>
-                <label className="block text-xs font-semibold">
-                  วัตถุประสงค์เพิ่มเติม — 1 รายการต่อบรรทัด
-                  <textarea
-                    value={draft.purposes}
-                    onChange={(event) =>
-                      setDraft((current) => ({
-                        ...current,
-                        purposes: event.target.value,
-                      }))
-                    }
-                    className="mt-1.5 min-h-28 w-full border p-3 text-sm"
-                    placeholder={"รับข่าวสารทางอีเมล\nคุกกี้วิเคราะห์การใช้งาน"}
-                  />
-                </label>
                 <p className="border-l-2 border-amber-500 pl-3 text-xs text-gray-500">
                   ไม่ควรใช้ความยินยอมกับการประมวลผลที่ลูกค้าไม่สามารถปฏิเสธได้อย่างแท้จริง
                 </p>
@@ -840,10 +888,10 @@ export default function ConsentManagement() {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-xs font-semibold text-gray-700">
-                        ฟิลด์ข้อมูลเพิ่มเติม ({draft.fields.length})
+                        ฟิลด์ข้อมูล ({draft.fields.length})
                       </p>
                       <p className="mt-1 text-[11px] text-gray-400">
-                        เพิ่มหรือแก้ไขช่องกรอกข้อมูลของลูกค้า
+                        ชื่อและอีเมลถูกเพิ่มเป็นค่าเริ่มต้น และแก้ไขหรือลบได้ตามต้องการ
                       </p>
                     </div>
                     <button
@@ -914,6 +962,7 @@ export default function ConsentManagement() {
                             "email",
                             "textarea",
                             "checkbox",
+                            "radio",
                             "select",
                           ].map((value) => (
                             <option key={value}>{value}</option>
@@ -922,12 +971,12 @@ export default function ConsentManagement() {
                         <input
                           aria-label="ข้อความตัวอย่างหรือตัวเลือก"
                           value={
-                            field.type === "select"
+                            field.type === "select" || field.type === "radio"
                               ? field.options.join(", ")
                               : field.placeholder || ""
                           }
                           placeholder={
-                            field.type === "select"
+                            field.type === "select" || field.type === "radio"
                               ? "ตัวเลือก A, ตัวเลือก B"
                               : "ข้อความตัวอย่าง"
                           }
@@ -936,7 +985,7 @@ export default function ConsentManagement() {
                               ...current,
                               fields: current.fields.map((item, itemIndex) =>
                                 itemIndex === index
-                                  ? field.type === "select"
+                                  ? field.type === "select" || field.type === "radio"
                                     ? {
                                         ...item,
                                         options: event.target.value
@@ -995,7 +1044,7 @@ export default function ConsentManagement() {
                 </div>
                 <button
                   onClick={() => void create()}
-                  disabled={!draft.policyId}
+                  disabled={draft.policyIds.length === 0}
                   className="btn-green h-10 w-full text-sm disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {editingForm ? "บันทึกการแก้ไข" : "สร้างแบบฟอร์ม"}

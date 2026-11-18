@@ -95,6 +95,10 @@ export const API_ENDPOINTS = {
     legalUser: (legalUserId: string) => `/admin/legal-users/${encodeURIComponent(legalUserId)}`,
     legalUserStatus: (legalUserId: string) => `/admin/legal-users/${encodeURIComponent(legalUserId)}/status`,
     legalWorkload: '/admin/legal-workload',
+    legalWorkloadDocuments: (legalUserId: string) =>
+      `/admin/legal-workload/${encodeURIComponent(legalUserId)}/documents`,
+    legalOverdueResolution: (legalUserId: string) =>
+      `/admin/legal-workload/${encodeURIComponent(legalUserId)}/overdue-resolution`,
     legalReviews: '/admin/legal-reviews',
     adminReviewQueue: '/admin/admin-review-queue',
     adminPolicyReview: (policyId: string) =>

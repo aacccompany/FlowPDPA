@@ -48,7 +48,6 @@ export interface PolicyQuestionnaire {
 export interface PolicyDownloads {
   pdf: string | null;
   docx: string | null;
-  txt: string | null;
   html: string | null;
 }
 
@@ -91,6 +90,27 @@ export interface SavedPolicy {
   formData?: Record<string, unknown>;
   version?: number;
 }
+
+export type PolicySummary = Pick<
+  SavedPolicy,
+  | "id"
+  | "slug"
+  | "type"
+  | "typeName"
+  | "typeIcon"
+  | "websiteName"
+  | "domain"
+  | "language"
+  | "status"
+  | "createdAt"
+  | "updatedAt"
+  | "ownerEmail"
+  | "ownerName"
+  | "reviewComment"
+  | "reviewedAt"
+  | "reviewedBy"
+  | "approvedAt"
+>;
 
 export interface PolicyChangeRequestCreate {
   requesterName?: string;

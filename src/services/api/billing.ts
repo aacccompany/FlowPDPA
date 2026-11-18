@@ -56,6 +56,10 @@ export interface CheckoutVerification {
   active: boolean;
 }
 
+export interface BillingPortalSession {
+  portalUrl: string;
+}
+
 export const billingApi = {
   createCheckout: (plan: BillingPlan, billingCycle: BillingCycle) =>
     apiRequest<CheckoutSession>(API_ENDPOINTS.billing.checkoutSessions, {
@@ -75,6 +79,10 @@ export const billingApi = {
     apiRequest<SubscriptionSummary[]>(API_ENDPOINTS.billing.subscriptions),
   history: () =>
     apiRequest<MerchantBillingHistory>(API_ENDPOINTS.billing.history, { cache: false }),
+  createPortalSession: () =>
+    apiRequest<BillingPortalSession>(API_ENDPOINTS.billing.portalSessions, {
+      method: "POST",
+    }),
   cancelSubscription: (subscriptionId: string) =>
     apiRequest<SubscriptionSummary>(
       API_ENDPOINTS.billing.cancelSubscription(subscriptionId),

@@ -20,11 +20,6 @@ export default function PolicyView() {
   const [consentForm, setConsentForm] = useState<PublicConsentForm | null>(
     null,
   );
-  const [consentChoices, setConsentChoices] = useState<Record<string, boolean>>(
-    {},
-  );
-  const [subjectEmail, setSubjectEmail] = useState("");
-  const [subjectName, setSubjectName] = useState("");
   const [fieldValues, setFieldValues] = useState<
     Record<string, string | boolean>
   >({});
@@ -36,11 +31,6 @@ export default function PolicyView() {
     void api.consents.publicForPolicy(slug).then((response) => {
       if (response.success && response.data) {
         setConsentForm(response.data);
-        setConsentChoices(
-          Object.fromEntries(
-            response.data.purposes.map((purpose) => [purpose.id, false]),
-          ),
-        );
       }
     });
     const controller = new AbortController();
@@ -109,7 +99,7 @@ export default function PolicyView() {
   };
 
   const saveConsentChoices = async () => {
-    if (!consentForm || !subjectEmail || savingConsent) return;
+    if (!consentForm || savingConsent) return;
     setSavingConsent(true);
     setError("");
     const missingRequired = consentForm.fields.some(
@@ -120,9 +110,10 @@ export default function PolicyView() {
       return;
     }
     const response = await api.consents.submitPublic(consentForm.token, {
-      subjectName,
-      subjectEmail,
-      choices: consentChoices,
+      policyId: consentForm.policyId,
+      subjectName: String(fieldValues["subject-name"] || ""),
+      subjectEmail: String(fieldValues["subject-email"] || ""),
+      choices: {},
       fieldValues,
     });
     setSavingConsent(false);
@@ -256,22 +247,6 @@ export default function PolicyView() {
             {consentForm.description ||
               "เลือกว่าคุณยินยอมต่อวัตถุประสงค์การประมวลผลข้อมูลแต่ละข้อหรือไม่"}
           </p>
-          <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            <input
-              value={subjectName}
-              onChange={(event) => setSubjectName(event.target.value)}
-              className="h-10 rounded border border-gray-300 px-3 text-sm"
-              placeholder="ชื่อของคุณ (ไม่บังคับ)"
-            />
-            <input
-              required
-              type="email"
-              value={subjectEmail}
-              onChange={(event) => setSubjectEmail(event.target.value)}
-              className="h-10 rounded border border-gray-300 px-3 text-sm"
-              placeholder="อีเมลของคุณ"
-            />
-          </div>
           {consentForm.fields.length > 0 && (
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {consentForm.fields.map((field) => (
@@ -309,6 +284,26 @@ export default function PolicyView() {
                         <option key={option}>{option}</option>
                       ))}
                     </select>
+                  ) : field.type === "radio" ? (
+                    <span className="mt-2 grid gap-2 font-normal">
+                      {field.options.map((option) => (
+                        <span key={option} className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name={`consent-field-${field.id}`}
+                            value={option}
+                            checked={fieldValues[field.id] === option}
+                            onChange={(event) =>
+                              setFieldValues((current) => ({
+                                ...current,
+                                [field.id]: event.target.value,
+                              }))
+                            }
+                          />
+                          {option}
+                        </span>
+                      ))}
+                    </span>
                   ) : field.type === "checkbox" ? (
                     <span className="mt-2 flex items-center gap-2 font-normal">
                       <input
@@ -341,36 +336,6 @@ export default function PolicyView() {
               ))}
             </div>
           )}
-          <div className="mt-4 space-y-2">
-            {consentForm.purposes.map((purpose) => (
-              <label
-                key={purpose.id}
-                className="flex cursor-pointer items-start gap-3 rounded border border-gray-200 p-3"
-              >
-                <input
-                  type="checkbox"
-                  checked={Boolean(consentChoices[purpose.id])}
-                  onChange={(event) =>
-                    setConsentChoices((current) => ({
-                      ...current,
-                      [purpose.id]: event.target.checked,
-                    }))
-                  }
-                  className="mt-0.5"
-                />
-                <span>
-                  <span className="block text-sm font-semibold text-gray-800">
-                    {purpose.label}
-                  </span>
-                  {purpose.description && (
-                    <span className="mt-1 block text-xs text-gray-500">
-                      {purpose.description}
-                    </span>
-                  )}
-                </span>
-              </label>
-            ))}
-          </div>
           {error && (
             <p className="mt-3 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
               {error}
@@ -379,7 +344,7 @@ export default function PolicyView() {
           <div className="mt-4 flex justify-end">
             <button
               type="button"
-              disabled={!subjectEmail || savingConsent}
+              disabled={savingConsent}
               onClick={() => void saveConsentChoices()}
               className="flex h-10 items-center gap-2 rounded bg-emerald-700 px-5 text-xs font-semibold text-white disabled:opacity-50"
             >

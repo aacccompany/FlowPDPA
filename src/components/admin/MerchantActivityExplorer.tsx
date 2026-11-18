@@ -66,6 +66,9 @@ export function MerchantActivityExplorer() {
   const [search, setSearch] = useState(() => params.get("merchantSearch") ?? "");
   const deferredSearch = useDeferredValue(search.trim());
   const [page, setPage] = useState(() => Number(params.get("merchantPage")) || 1);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">(
+    () => params.get("merchantSort") === "asc" ? "asc" : "desc",
+  );
   const [rows, setRows] = useState<AdminMerchantActivity[]>([]);
   const [total, setTotal] = useState(0); const [pages, setPages] = useState(1);
   const [loading, setLoading] = useState(true); const [error, setError] = useState("");
@@ -77,20 +80,20 @@ export function MerchantActivityExplorer() {
 
   useEffect(() => {
     const next = new URLSearchParams(params); const put = (key: string, value: string) => value ? next.set(key, value) : next.delete(key);
-    put("merchantSearch", search); put("merchantPage", page > 1 ? String(page) : ""); put("merchantTypes", filters.types.join(",")); put("merchantKinds", filters.kinds.join(","));
+    put("merchantSearch", search); put("merchantPage", page > 1 ? String(page) : ""); put("merchantSort", sortDirection); put("merchantTypes", filters.types.join(",")); put("merchantKinds", filters.kinds.join(","));
     put("merchantOwner", filters.merchantId); put("merchantOwnerLabel", filters.merchantLabel); put("merchantPolicy", filters.policyId); put("merchantPolicyLabel", filters.policyLabel); put("merchantFrom", filters.dateFrom); put("merchantTo", filters.dateTo);
     setParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters, search, page, setParams]);
+  }, [filters, search, page, sortDirection, setParams]);
 
   useEffect(() => {
     const sequence = ++requestSequence.current; setLoading(true); setError("");
     void api.admin.listMerchantActivity({ search: deferredSearch || undefined, type: filters.types.join(",") || undefined, kind: filters.kinds.length === 1 ? filters.kinds[0] : undefined, merchantId: filters.merchantId || undefined, policyId: filters.policyId || undefined, dateFrom: filters.dateFrom || undefined, dateTo: filters.dateTo || undefined, page, limit: PAGE_SIZE }).then((response) => {
       if (sequence !== requestSequence.current) return;
-      if (response.success && response.data) { setRows(response.data.logs); setTotal(response.data.pagination.total); setPages(Math.max(1, response.data.pagination.pages ?? Math.ceil(response.data.pagination.total / PAGE_SIZE))); }
+      if (response.success && response.data) { setRows(response.data.logs.toSorted((left, right) => { const result = new Date(left.createdAt || 0).getTime() - new Date(right.createdAt || 0).getTime(); return sortDirection === "asc" ? result : -result; })); setTotal(response.data.pagination.total); setPages(Math.max(1, response.data.pagination.pages ?? Math.ceil(response.data.pagination.total / PAGE_SIZE))); }
       else setError(response.error?.message || "ไม่สามารถโหลดกิจกรรมผู้ประกอบการได้"); setLoading(false);
     });
-  }, [deferredSearch, filters, page]);
+  }, [deferredSearch, filters, page, sortDirection]);
 
   useEffect(() => { if (!open || deferredMerchantSearch.trim().length < 2) return setMerchants([]); void api.admin.listMerchants({ search: deferredMerchantSearch.trim(), limit: 10 }).then((r) => setMerchants(r.success && r.data ? r.data.merchants : [])); }, [deferredMerchantSearch, open]);
   useEffect(() => { if (!open || deferredPolicySearch.trim().length < 2) return setPolicies([]); void api.admin.listPolicies({ search: deferredPolicySearch.trim(), merchantId: draft.merchantId || undefined, limit: 10 }).then((r) => setPolicies(r.success && r.data ? r.data.policies : [])); }, [deferredPolicySearch, draft.merchantId, open]);
@@ -114,7 +117,7 @@ export function MerchantActivityExplorer() {
 
   return <>
     <header className="mb-5"><p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">ประวัติทางธุรกิจ</p><h1 className="mt-2 text-2xl font-bold text-slate-900">กิจกรรมผู้ประกอบการ</h1><p className="mt-1 text-sm text-slate-500">ติดตามการรับทราบ ความยินยอม และขั้นตอนการดำเนินงานของเอกสาร</p></header>
-    <div className="audit-toolbar"><label className="audit-search"><Search /><input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="ค้นหาผู้ประกอบการ อีเมล นโยบาย หรือรายละเอียด..." /></label><button className="audit-filter-trigger" data-active={countFilters(filters) > 0} onClick={openFilters}><Filter /> ตัวกรอง {countFilters(filters) ? <b>{countFilters(filters)}</b> : null}</button></div>
+    <div className="audit-toolbar"><label className="audit-search"><Search /><input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="ค้นหาผู้ประกอบการ อีเมล นโยบาย หรือรายละเอียด..." /></label><button className="audit-filter-trigger" data-active={countFilters(filters) > 0} onClick={openFilters}><Filter /> ตัวกรอง {countFilters(filters) ? <b>{countFilters(filters)}</b> : null}</button><select className="portal-filter h-9" value={sortDirection} onChange={(event) => { const direction = event.target.value as "asc" | "desc"; setSortDirection(direction); setRows((current) => current.toSorted((left, right) => { const result = new Date(left.createdAt || 0).getTime() - new Date(right.createdAt || 0).getTime(); return direction === "asc" ? result : -result; })); }} aria-label="ลำดับการเรียง"><option value="desc">ล่าสุดก่อน (DESC)</option><option value="asc">เก่าสุดก่อน (ASC)</option></select></div>
     {chips.length ? <div className="audit-chips">{chips.map((chip) => <button key={chip.key} onClick={chip.clear}>{chip.label}<X /></button>)}<button className="audit-clear" onClick={clearAll}>ล้างทั้งหมด</button></div> : null}
     <div className="audit-ledger-head"><div><h2>รายการกิจกรรม</h2><p>แสดง {total.toLocaleString("th-TH")} รายการที่ตรงกัน · ใหม่สุดก่อน</p></div><ExportRowsMenu filename="flowpdpa-merchant-activity" total={total} loadRows={exportRows} columns={[
       { header: "ผู้ประกอบการ", value: (row) => row.merchantName }, { header: "อีเมล", value: (row) => row.merchantEmail },

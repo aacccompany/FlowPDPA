@@ -253,7 +253,29 @@ export interface AdminLegalWorkload {
   pending: number;
   overdue: number;
   approvedThisMonth: number;
-  averageReviewHours: number;
+}
+
+export type AdminLegalWorkloadCategory =
+  | "pending"
+  | "overdue"
+  | "approved_this_month";
+
+export interface AdminLegalWorkloadDocument {
+  id: string;
+  reviewEventId: string | null;
+  slug: string;
+  websiteName: string;
+  merchantName: string;
+  merchantEmail: string;
+  status: string;
+  reviewAction: string | null;
+  createdAt: string | null;
+  deadline: string | null;
+  reviewedAt: string | null;
+  durationMinutes: number | null;
+  overdueMinutes: number | null;
+  resolutionStatus: "pending" | "cleared";
+  clearedAt: string | null;
 }
 
 export interface AdminLegalReview {

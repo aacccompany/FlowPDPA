@@ -203,16 +203,6 @@ const thirdPartyOptions = [
   { key: "none", label: "ไม่มีบุคคลที่สาม" },
 ];
 
-const retentionOptions = [
-  "1 ปี",
-  "2 ปี",
-  "3 ปี",
-  "5 ปี",
-  "7 ปี (ตามกฎหมายภาษี)",
-  "10 ปี",
-  "ตลอดระยะเวลาการใช้บริการ",
-];
-
 // ── Step labels ───────────────────────────────────────────────
 const steps = [
   { num: 1, label: "เลือกประเภท" },
@@ -744,9 +734,11 @@ function ControllerDeclarationModal({
 function Step2({
   data,
   setData,
+  onCancelCreation,
 }: {
   data: FormData;
   setData: (d: Partial<FormData>) => void;
+  onCancelCreation: () => void;
 }) {
   const isPerson = data.ownerType === "person";
   const [rdState, setRdState] = useState<
@@ -995,7 +987,7 @@ function Step2({
                 resetRd();
                 return null;
               }}
-              onDecline={() => setDeclarationMode(null)}
+              onDecline={onCancelCreation}
             />
           )}
 
@@ -1604,40 +1596,14 @@ function Step5({
           </p>
         </div>
 
-        {/* Export format */}
-        <div>
-          <SectionHeading>รูปแบบการดาวน์โหลด</SectionHeading>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {["PDF", "Word (.docx)", "TXT", "HTML Embed"].map((fmt) => (
-              <CheckboxCard
-                key={fmt}
-                label={fmt}
-                checked={data.exportFormat.includes(fmt)}
-                onChange={() =>
-                  setData({
-                    exportFormat: data.exportFormat.includes(fmt)
-                      ? data.exportFormat.filter((f) => f !== fmt)
-                      : [...data.exportFormat, fmt],
-                  })
-                }
-              />
-            ))}
-          </div>
-        </div>
-
-        <HelpNote title="DPO และระยะเวลาเก็บข้อมูลคืออะไร">
+        <HelpNote title="DPO คืออะไร">
           <p>
             <strong>DPO</strong> คือผู้ที่เจ้าของข้อมูลติดต่อเพื่อสอบถามหรือใช้สิทธิเกี่ยวกับข้อมูลของตน
             ควรใช้อีเมลที่ตรวจสอบสม่ำเสมอ
           </p>
-          <p className="mt-2">
-            <strong>ระยะเวลาเก็บ</strong> ควรเก็บเท่าที่จำเป็นตามวัตถุประสงค์
-            ข้อมูลที่เกี่ยวกับภาษีอาจต้องเก็บตามที่กฎหมายภาษีกำหนด (ตัวเลือก 7 ปี)
-            ฝ่ายกฎหมายจะตรวจสอบนโยบายก่อนเผยแพร่
-          </p>
         </HelpNote>
         {/* DPO email */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
               อีเมลเจ้าหน้าที่คุ้มครองข้อมูล (DPO){" "}
@@ -1663,28 +1629,6 @@ function Step5({
             </p>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
-              ระยะเวลาการเก็บรักษาข้อมูล <span className="text-red-500">*</span>
-            </label>
-            <select
-              required
-              value={data.retentionPeriod}
-              onChange={(e) => setData({ retentionPeriod: e.target.value })}
-              className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-800 focus:outline-none bg-white transition-colors"
-              onFocus={(e) =>
-                (e.currentTarget.style.borderColor = "var(--green)")
-              }
-              onBlur={(e) => (e.currentTarget.style.borderColor = "#e5e7eb")}
-            >
-              <option value="">เลือกระยะเวลา...</option>
-              {retentionOptions.map((o) => (
-                <option key={o} value={o}>
-                  {o}
-                </option>
-              ))}
-            </select>
-          </div>
         </div>
       </div>
     </div>
@@ -1797,11 +1741,6 @@ function Step6({ data }: { data: FormData }) {
                   ? "อังกฤษ"
                   : "ไทย"
             }
-          />
-          <ReviewRow label="ระยะเวลาเก็บ" value={data.retentionPeriod} />
-          <ReviewRow
-            label="รูปแบบดาวน์โหลด"
-            value={data.exportFormat.join(", ")}
           />
         </div>
       </div>
@@ -2051,8 +1990,8 @@ const initialData: FormData = {
   thirdParties: [],
   language: "both",
   dpoEmail: "",
-  retentionPeriod: "",
-  exportFormat: ["PDF"],
+  retentionPeriod: "the period necessary for the stated purposes",
+  exportFormat: ["PDF", "Word (.docx)", "HTML Embed"],
 };
 
 function profileAddress(profile: UserProfile) {
@@ -2116,6 +2055,16 @@ export default function CreatePolicy() {
     [],
   );
 
+  const cancelCreation = useCallback(() => {
+    setDataRaw(initialDataFromSession());
+    setStep(1);
+    setDone(false);
+    setGenerating(false);
+    setSavedSlug("");
+    setGenerationError("");
+    navigate("/dashboard", { replace: true });
+  }, [navigate]);
+
   useEffect(() => {
     const auth = storage.auth.get();
     if (!auth?.token) {
@@ -2172,11 +2121,7 @@ export default function CreatePolicy() {
     if (step === 3) return data.dataTypes.length > 0;
     if (step === 4) return data.purposes.length > 0;
     if (step === 5)
-      return (
-        data.language !== "" &&
-        isValidEmail(data.dpoEmail) &&
-        data.retentionPeriod !== ""
-      );
+      return data.language !== "" && isValidEmail(data.dpoEmail);
     return true;
   };
 
@@ -2209,7 +2154,7 @@ export default function CreatePolicy() {
     if (step === 5) {
       if (!data.language) return "เลือกภาษาของนโยบาย";
       if (!isValidEmail(data.dpoEmail)) return "กรอกอีเมลเจ้าหน้าที่คุ้มครองข้อมูล (DPO) ให้ถูกต้อง";
-      return "เลือกระยะเวลาการเก็บรักษาข้อมูล";
+      return "";
     }
     return "";
   };
@@ -2222,20 +2167,21 @@ export default function CreatePolicy() {
       setGenerationError("กรุณาเลือกประเภทนโยบายและยอมรับเงื่อนไขการใช้งาน");
       return;
     }
-    if (!isValidEmail(sourceData.dpoEmail) || !sourceData.retentionPeriod) {
+    if (!isValidEmail(sourceData.dpoEmail)) {
       setGenerating(false);
       setGenerationError(
-        "กรุณากรอกอีเมล DPO ที่ถูกต้องและเลือกระยะเวลาการเก็บรักษาข้อมูล",
+        "กรุณากรอกอีเมล DPO ที่ถูกต้อง",
       );
       return;
     }
     setDone(true);
     const payload: PolicyQuestionnaire = {
       ...sourceData,
+      exportFormat: ["PDF", "Word (.docx)", "HTML Embed"],
       websiteUrl: normalizeWebsiteUrl(sourceData.websiteUrl),
       policyType: sourceData.policyType,
       agreedToTerms: true,
-      language: data.language as PolicyQuestionnaire["language"],
+      language: sourceData.language as PolicyQuestionnaire["language"],
       templateVersion: "v1-dev",
       useAI: true,
     };
@@ -2409,7 +2355,13 @@ export default function CreatePolicy() {
               className="bg-white rounded-2xl border border-gray-100 p-6 sm:p-8 shadow-sm step-in"
             >
               {step === 1 && <Step1 data={data} setData={setData} />}
-              {step === 2 && <Step2 data={data} setData={setData} />}
+              {step === 2 && (
+                <Step2
+                  data={data}
+                  setData={setData}
+                  onCancelCreation={cancelCreation}
+                />
+              )}
               {step === 3 && <Step3 data={data} setData={setData} />}
               {step === 4 && <Step4 data={data} setData={setData} />}
               {step === 5 && <Step5 data={data} setData={setData} />}

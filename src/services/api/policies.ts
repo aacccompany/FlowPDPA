@@ -7,11 +7,14 @@ import type {
   PolicyChangeRequest,
   PolicyChangeRequestCreate,
   PolicyQuestionnaire,
+  PolicySummary,
   SavedPolicy,
 } from './policyTypes'
 
 export const policiesApi = {
   list: () => apiRequest<SavedPolicy[]>(API_ENDPOINTS.policies.root),
+  listSummary: () =>
+    apiRequest<PolicySummary[]>(`${API_ENDPOINTS.policies.root}?summary=true`),
   get: (id: string) => apiRequest<SavedPolicy>(API_ENDPOINTS.policies.byId(id)),
   acceptTerms: (policyType: PolicyQuestionnaire['policyType']) =>
     apiRequest<{ acceptedAt: string; termsVersion: string; privacyPolicyVersion: string }>(
